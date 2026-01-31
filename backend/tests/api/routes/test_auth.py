@@ -1,0 +1,252 @@
+"""Authentication API endpoint tests - TDD RED phase."""
+import pytest
+from moto import mock_aws
+import boto3
+from datetime import datetime
+
+from app.core.security import hash_password, create_access_token
+from app.repositories.user_repository import UserRepository
+from app.core.config import settings
+
+
+def _create_users_table(dynamodb_resource: any) -> any:
+    """Helper function to create users table."""
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    table = dynamodb_resource.create_table(
+        TableName=table_name,
+        KeySchema=[{"AttributeName": "userId", "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": "userId", "AttributeType": "S"},
+            {"AttributeName": "email", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "UsersByEmail",
+                "KeySchema": [{"AttributeName": "email", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+    )
+    # Wait for table to be created
+    table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
+    return table
+
+
+@pytest.fixture
+def dynamodb_table_for_auth():
+    """Create a mock DynamoDB table for auth tests."""
+    with mock_aws():
+        dynamodb = boto3.resource(
+            "dynamodb",
+            region_name=settings.dynamodb_region,
+        )
+        _create_users_table(dynamodb)
+        yield dynamodb
+
+
+@pytest.fixture
+def test_user_data():
+    """Create test user data."""
+    now = datetime.utcnow().isoformat()
+    return {
+        'id': 'user-test-001',
+        'email': 'test@example.com',
+        'hashed_password': hash_password('password123'),
+        'created_at': now,
+        'updated_at': now,
+    }
+
+
+def test_login_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data):
+    """Test successful login with correct credentials."""
+    # Create users table
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+
+    # Get the users table
+    users_table = mock_dynamodb_resource.Table(table_name)
+
+    # Add user to DynamoDB
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/login",
+        json={
+            "email": "test@example.com",
+            "password": "password123",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert isinstance(data["access_token"], str)
+    assert len(data["access_token"]) > 0
+
+
+def test_login_incorrect_email(client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data):
+    """Test login with non-existent email returns 401."""
+    # Create users table
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+
+    # Get the users table and add test user
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/login",
+        json={
+            "email": "nonexistent@example.com",
+            "password": "password123",
+        },
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data
+
+
+def test_login_incorrect_password(client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data):
+    """Test login with incorrect password returns 401."""
+    # Create users table
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+
+    # Get the users table and add test user
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/login",
+        json={
+            "email": "test@example.com",
+            "password": "wrongpassword",
+        },
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data
+
+
+def test_logout_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data):
+    """Test successful logout with valid token."""
+    # Create users table
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+
+    # Get the users table and add test user
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    # Create access token
+    token = create_access_token(data={"sub": test_user_data['id']})
+
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/logout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "message" in data
+
+
+def test_logout_without_auth(client):
+    """Test logout without authentication returns 401."""
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "detail" in data
+
+
+def test_get_me_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data):
+    """Test getting current user with valid token."""
+    # Create users table
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+
+    # Get the users table and add test user
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    # Create access token
+    token = create_access_token(data={"sub": test_user_data['id']})
+
+    response = client_with_mock_dynamodb.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == test_user_data['id']
+    assert data["email"] == test_user_data['email']
+    assert "hashed_password" not in data
+    assert "created_at" in data
+    assert "updated_at" in data
+
+
+def test_get_me_without_auth(client):
+    """Test getting current user without authentication returns 401."""
+    response = client.get("/api/auth/me")
+
+    assert response.status_code == 403
+    data = response.json()
+    assert "detail" in data
+
+
+def test_get_me_invalid_token(client):
+    """Test getting current user with invalid token returns 401."""
+    response = client.get(
+        "/api/auth/me",
+        headers={"Authorization": "Bearer invalid_token_here"},
+    )
+
+    assert response.status_code == 401
+    data = response.json()
+    assert "detail" in data

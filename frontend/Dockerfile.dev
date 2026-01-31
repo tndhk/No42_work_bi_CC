@@ -1,0 +1,13 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# 依存ライブラリインストール
+COPY package*.json ./
+RUN npm ci
+
+# アプリケーションコピー (ボリュームマウントで上書きされる)
+COPY . .
+
+# 開発サーバー起動
+CMD ["npm", "run", "dev", "--", "--host"]

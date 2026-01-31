@@ -1,9 +1,10 @@
 """Card API routes."""
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.api.deps import get_current_user, get_dynamodb_resource
+from app.api.response import api_response, paginated_response
 from app.models.card import Card, CardCreate, CardUpdate
 from app.models.user import User
 from app.repositories.card_repository import CardRepository
@@ -72,23 +73,37 @@ def _check_owner_permission(card: Card, user_id: str) -> None:
 # ============================================================================
 
 
-@router.get("", response_model=list[Card])
+@router.get("")
 async def list_cards(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> list[Card]:
+) -> dict[str, Any]:
     """List all cards owned by current user.
 
     Args:
+        limit: Maximum number of items to return (1-100, default: 50)
+        offset: Number of items to skip (default: 0)
         current_user: Authenticated user
         dynamodb: DynamoDB resource
 
     Returns:
-        List of cards
+        Paginated list of cards
     """
     repo = CardRepository()
-    cards = await repo.list_by_owner(current_user.id, dynamodb)
-    return cards
+    all_cards = await repo.list_by_owner(current_user.id, dynamodb)
+
+    # Apply pagination
+    total = len(all_cards)
+    cards = all_cards[offset:offset + limit]
+
+    return paginated_response(
+        items=[c.model_dump() for c in cards],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 # ============================================================================
@@ -96,12 +111,12 @@ async def list_cards(
 # ============================================================================
 
 
-@router.post("", response_model=Card, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_card(
     card_data: CardCreate,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Card:
+) -> dict[str, Any]:
     """Create a new card.
 
     Args:
@@ -131,7 +146,7 @@ async def create_card(
     card_dict["owner_id"] = current_user.id
 
     card = await repo.create(card_dict, dynamodb)
-    return card
+    return api_response(card.model_dump())
 
 
 # ============================================================================
@@ -139,12 +154,12 @@ async def create_card(
 # ============================================================================
 
 
-@router.get("/{card_id}", response_model=Card)
+@router.get("/{card_id}")
 async def get_card(
     card_id: str,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Card:
+) -> dict[str, Any]:
     """Get card details.
 
     Args:
@@ -167,7 +182,7 @@ async def get_card(
             detail="Card not found",
         )
 
-    return card
+    return api_response(card.model_dump())
 
 
 # ============================================================================
@@ -175,13 +190,13 @@ async def get_card(
 # ============================================================================
 
 
-@router.put("/{card_id}", response_model=Card)
+@router.put("/{card_id}")
 async def update_card(
     card_id: str,
     card_update: CardUpdate,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Card:
+) -> dict[str, Any]:
     """Update card.
 
     Args:
@@ -217,7 +232,7 @@ async def update_card(
             detail="Card not found after update",
         )
 
-    return updated_card
+    return api_response(updated_card.model_dump())
 
 
 # ============================================================================
@@ -260,13 +275,13 @@ async def delete_card(
 # ============================================================================
 
 
-@router.post("/{card_id}/preview", response_model=ExecutionResponse)
+@router.post("/{card_id}/preview")
 async def preview_card(
     card_id: str,
     preview_req: PreviewRequest,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> ExecutionResponse:
+) -> dict[str, Any]:
     """Preview card execution with filters (no cache).
 
     Args:
@@ -324,13 +339,13 @@ async def preview_card(
             cache_service=cache_service,
         )
 
-        return ExecutionResponse(
-            html=result.html,
-            used_columns=result.used_columns,
-            filter_applicable=result.filter_applicable,
-            cached=result.cached,
-            execution_time_ms=result.execution_time_ms,
-        )
+        return api_response({
+            "html": result.html,
+            "used_columns": result.used_columns,
+            "filter_applicable": result.filter_applicable,
+            "cached": result.cached,
+            "execution_time_ms": result.execution_time_ms,
+        })
 
     except RuntimeError as e:
         raise HTTPException(
@@ -344,13 +359,13 @@ async def preview_card(
 # ============================================================================
 
 
-@router.post("/{card_id}/execute", response_model=ExecutionResponse)
+@router.post("/{card_id}/execute")
 async def execute_card(
     card_id: str,
     execute_req: ExecuteRequest,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> ExecutionResponse:
+) -> dict[str, Any]:
     """Execute card with optional caching.
 
     Args:
@@ -408,13 +423,13 @@ async def execute_card(
             cache_service=cache_service,
         )
 
-        return ExecutionResponse(
-            html=result.html,
-            used_columns=result.used_columns,
-            filter_applicable=result.filter_applicable,
-            cached=result.cached,
-            execution_time_ms=result.execution_time_ms,
-        )
+        return api_response({
+            "html": result.html,
+            "used_columns": result.used_columns,
+            "filter_applicable": result.filter_applicable,
+            "cached": result.cached,
+            "execution_time_ms": result.execution_time_ms,
+        })
 
     except RuntimeError as e:
         raise HTTPException(

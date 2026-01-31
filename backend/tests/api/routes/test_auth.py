@@ -87,9 +87,15 @@ def test_login_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_u
     )
 
     assert response.status_code == 200
-    data = response.json()
+    response_data = response.json()
+    assert "data" in response_data
+    data = response_data["data"]
     assert "access_token" in data
     assert data["token_type"] == "bearer"
+    assert "expires_in" in data
+    assert "user" in data
+    assert data["user"]["user_id"] == test_user_data['id']
+    assert data["user"]["email"] == test_user_data['email']
     assert isinstance(data["access_token"], str)
     assert len(data["access_token"]) > 0
 
@@ -183,7 +189,9 @@ def test_logout_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_
     )
 
     assert response.status_code == 200
-    data = response.json()
+    response_data = response.json()
+    assert "data" in response_data
+    data = response_data["data"]
     assert "message" in data
 
 
@@ -223,12 +231,12 @@ def test_get_me_success(client_with_mock_dynamodb, mock_dynamodb_resource, test_
     )
 
     assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == test_user_data['id']
+    response_data = response.json()
+    assert "data" in response_data
+    data = response_data["data"]
+    assert data["user_id"] == test_user_data['id']
     assert data["email"] == test_user_data['email']
     assert "hashed_password" not in data
-    assert "created_at" in data
-    assert "updated_at" in data
 
 
 def test_get_me_without_auth(client):

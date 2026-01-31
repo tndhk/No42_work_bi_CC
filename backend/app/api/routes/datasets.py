@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
+from app.api.response import api_response, paginated_response
 from app.models.dataset import Dataset, DatasetUpdate
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
@@ -11,26 +12,40 @@ from app.services.dataset_service import DatasetService
 router = APIRouter()
 
 
-@router.get("", response_model=list[Dataset])
+@router.get("")
 async def list_datasets(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> list[Dataset]:
+) -> dict[str, Any]:
     """List all datasets owned by current user.
 
     Args:
+        limit: Maximum number of items to return (1-100, default: 50)
+        offset: Number of items to skip (default: 0)
         current_user: Authenticated user
         dynamodb: DynamoDB resource
 
     Returns:
-        List of datasets
+        Paginated list of datasets
     """
     repo = DatasetRepository()
-    datasets = await repo.list_by_owner(current_user.id, dynamodb)
-    return datasets
+    all_datasets = await repo.list_by_owner(current_user.id, dynamodb)
+
+    # Apply pagination
+    total = len(all_datasets)
+    datasets = all_datasets[offset:offset + limit]
+
+    return paginated_response(
+        items=[d.model_dump() for d in datasets],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.post("", response_model=Dataset, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_dataset(
     file: UploadFile = File(...),
     name: str = Form(...),
@@ -41,7 +56,7 @@ async def create_dataset(
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
     s3_client: Any = Depends(get_s3_client),
-) -> Dataset:
+) -> dict[str, Any]:
     """Create a new dataset by importing CSV file.
 
     Args:
@@ -97,15 +112,15 @@ async def create_dataset(
             detail=str(e),
         )
 
-    return dataset
+    return api_response(dataset.model_dump())
 
 
-@router.get("/{dataset_id}", response_model=Dataset)
+@router.get("/{dataset_id}")
 async def get_dataset(
     dataset_id: str,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Dataset:
+) -> dict[str, Any]:
     """Get dataset by ID.
 
     Args:
@@ -128,16 +143,16 @@ async def get_dataset(
             detail="Dataset not found",
         )
 
-    return dataset
+    return api_response(dataset.model_dump())
 
 
-@router.put("/{dataset_id}", response_model=Dataset)
+@router.put("/{dataset_id}")
 async def update_dataset(
     dataset_id: str,
     update_data: DatasetUpdate,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Dataset:
+) -> dict[str, Any]:
     """Update dataset.
 
     Args:
@@ -179,7 +194,7 @@ async def update_dataset(
             detail="Dataset not found after update",
         )
 
-    return updated_dataset
+    return api_response(updated_dataset.model_dump())
 
 
 @router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -265,4 +280,4 @@ async def get_dataset_preview(
             detail=str(e),
         )
 
-    return preview
+    return api_response(preview)

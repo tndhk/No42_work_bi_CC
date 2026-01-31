@@ -104,7 +104,10 @@ class TestListCards:
             response = authenticated_client.get("/api/cards")
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        assert "pagination" in response_data
+        data = response_data["data"]
         assert isinstance(data, list)
         assert len(data) == 1
         assert data[0]["id"] == sample_card.id
@@ -125,7 +128,10 @@ class TestListCards:
             response = authenticated_client.get("/api/cards")
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        assert "pagination" in response_data
+        data = response_data["data"]
         assert data == []
 
 
@@ -162,7 +168,9 @@ class TestCreateCard:
             )
 
         assert response.status_code == 201
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["id"] == sample_card.id
         assert data["name"] == sample_card.name
 
@@ -237,7 +245,9 @@ class TestGetCard:
             response = authenticated_client.get(f"/api/cards/{sample_card.id}")
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["id"] == sample_card.id
         assert data["name"] == sample_card.name
 
@@ -290,7 +300,9 @@ class TestUpdateCard:
             )
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["name"] == "Updated Name"
 
     def test_update_card_forbidden_not_owner(
@@ -440,7 +452,9 @@ class TestPreviewCard:
             )
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert "html" in data
         assert data["cached"] is False
 
@@ -538,7 +552,9 @@ class TestExecuteCard:
             )
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["cached"] is True
         assert "html" in data
 
@@ -580,7 +596,9 @@ class TestExecuteCard:
             )
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["cached"] is False
 
     def test_execute_card_use_cache_false(
@@ -623,5 +641,7 @@ class TestExecuteCard:
             )
 
         assert response.status_code == 200
-        data = response.json()
+        response_data = response.json()
+        assert "data" in response_data
+        data = response_data["data"]
         assert data["cached"] is False

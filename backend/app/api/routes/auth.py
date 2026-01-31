@@ -7,7 +7,9 @@ from slowapi.util import get_remote_address
 import structlog
 
 from app.api.deps import get_current_user, get_dynamodb_resource
+from app.api.response import api_response
 from app.core.security import verify_password, create_access_token
+from app.core.config import settings
 from app.repositories.user_repository import UserRepository
 from app.models.user import User
 
@@ -36,13 +38,13 @@ class MessageResponse(BaseModel):
     message: str
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")
 @limiter.limit("5/minute")
 async def login(
     request: Request,
     login_data: LoginRequest = Body(...),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> LoginResponse:
+) -> dict[str, Any]:
     """Authenticate user and return access token.
 
     Rate limit: 5 requests per minute per IP address.
@@ -53,7 +55,7 @@ async def login(
         dynamodb: DynamoDB resource
 
     Returns:
-        Access token and token type
+        Access token, token type, expires_in (seconds), and user info
 
     Raises:
         HTTPException: 401 if credentials are invalid
@@ -90,6 +92,7 @@ async def login(
 
     # Create access token
     access_token = create_access_token(data={"sub": user.id})
+    expires_in = settings.jwt_expiration_hours * 3600
 
     logger.info(
         "login_success",
@@ -98,16 +101,21 @@ async def login(
         ip=get_remote_address(request)
     )
 
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-    )
+    return api_response({
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "user": {
+            "user_id": user.id,
+            "email": user.email,
+        }
+    })
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout")
 async def logout(
     current_user: User = Depends(get_current_user),
-) -> MessageResponse:
+) -> dict[str, Any]:
     """Logout current user.
 
     Note: This is a stateless JWT-based auth system.
@@ -119,13 +127,13 @@ async def logout(
     Returns:
         Success message
     """
-    return MessageResponse(message="Successfully logged out")
+    return api_response({"message": "Successfully logged out"})
 
 
-@router.get("/me", response_model=User)
+@router.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user),
-) -> User:
+) -> dict[str, Any]:
     """Get current authenticated user information.
 
     Args:
@@ -134,4 +142,7 @@ async def get_me(
     Returns:
         User information (excludes sensitive fields)
     """
-    return current_user
+    return api_response({
+        "user_id": current_user.id,
+        "email": current_user.email,
+    })

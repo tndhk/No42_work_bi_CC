@@ -103,11 +103,19 @@ class TestListDatasets:
             response = authenticated_client.get("/api/datasets")
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            assert "pagination" in response_data
+            data = response_data["data"]
             assert isinstance(data, list)
             assert len(data) == 1
             assert data[0]["id"] == "ds_abc123456789"
             assert data[0]["name"] == "Test Dataset"
+            # Check pagination
+            pagination = response_data["pagination"]
+            assert pagination["total"] == 1
+            assert pagination["limit"] == 50
+            assert pagination["offset"] == 0
 
     def test_list_datasets_unauthenticated(self, unauthenticated_client: TestClient) -> None:
         """Test listing datasets without authentication."""
@@ -134,7 +142,9 @@ class TestCreateDataset:
             )
 
             assert response.status_code == 201
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["id"] == "ds_abc123456789"
             assert data["name"] == "Test Dataset"
             mock_import.assert_called_once()
@@ -192,7 +202,9 @@ class TestGetDataset:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["id"] == sample_dataset.id
             assert data["name"] == sample_dataset.name
 
@@ -244,7 +256,9 @@ class TestUpdateDataset:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["name"] == "Updated Name"
             assert data["description"] == "Updated description"
 
@@ -355,7 +369,9 @@ class TestGetDatasetPreview:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data['columns'] == ['id', 'name']
             assert len(data['rows']) == 2
             assert data['total_rows'] == 100
@@ -381,7 +397,9 @@ class TestGetDatasetPreview:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data['preview_rows'] == 50
 
     def test_get_preview_invalid_max_rows_too_small(

@@ -1,8 +1,9 @@
 """Dashboard API routes."""
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_user, get_dynamodb_resource
+from app.api.response import api_response, paginated_response
 from app.models.dashboard import Dashboard, DashboardCreate, DashboardUpdate
 from app.models.user import User
 from app.repositories.dashboard_repository import DashboardRepository
@@ -11,31 +12,45 @@ from app.services.dashboard_service import DashboardService
 router = APIRouter()
 
 
-@router.get("", response_model=list[Dashboard])
+@router.get("")
 async def list_dashboards(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> list[Dashboard]:
+) -> dict[str, Any]:
     """List all dashboards owned by current user.
 
     Args:
+        limit: Maximum number of items to return (1-100, default: 50)
+        offset: Number of items to skip (default: 0)
         current_user: Authenticated user
         dynamodb: DynamoDB resource
 
     Returns:
-        List of dashboards
+        Paginated list of dashboards
     """
     repo = DashboardRepository()
-    dashboards = await repo.list_by_owner(current_user.id, dynamodb)
-    return dashboards
+    all_dashboards = await repo.list_by_owner(current_user.id, dynamodb)
+
+    # Apply pagination
+    total = len(all_dashboards)
+    dashboards = all_dashboards[offset:offset + limit]
+
+    return paginated_response(
+        items=[d.model_dump() for d in dashboards],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.post("", response_model=Dashboard, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_dashboard(
     dashboard_data: DashboardCreate,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Dashboard:
+) -> dict[str, Any]:
     """Create a new dashboard.
 
     Args:
@@ -69,15 +84,15 @@ async def create_dashboard(
     repo = DashboardRepository()
     dashboard = await repo.create(create_data, dynamodb)
 
-    return dashboard
+    return api_response(dashboard.model_dump())
 
 
-@router.get("/{dashboard_id}", response_model=Dashboard)
+@router.get("/{dashboard_id}")
 async def get_dashboard(
     dashboard_id: str,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Dashboard:
+) -> dict[str, Any]:
     """Get dashboard by ID.
 
     Args:
@@ -100,16 +115,16 @@ async def get_dashboard(
             detail="Dashboard not found",
         )
 
-    return dashboard
+    return api_response(dashboard.model_dump())
 
 
-@router.put("/{dashboard_id}", response_model=Dashboard)
+@router.put("/{dashboard_id}")
 async def update_dashboard(
     dashboard_id: str,
     update_data: DashboardUpdate,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
-) -> Dashboard:
+) -> dict[str, Any]:
     """Update dashboard.
 
     Args:
@@ -151,7 +166,7 @@ async def update_dashboard(
             detail="Dashboard not found after update",
         )
 
-    return updated_dashboard
+    return api_response(updated_dashboard.model_dump())
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -190,6 +205,48 @@ async def delete_dashboard(
     await repo.delete(dashboard_id, dynamodb)
 
 
+@router.post("/{dashboard_id}/clone", status_code=status.HTTP_201_CREATED)
+async def clone_dashboard(
+    dashboard_id: str,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+) -> dict[str, Any]:
+    """Clone an existing dashboard.
+
+    Args:
+        dashboard_id: Dashboard ID to clone
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Cloned dashboard
+
+    Raises:
+        HTTPException: 404 if source dashboard not found
+    """
+    repo = DashboardRepository()
+    source_dashboard = await repo.get_by_id(dashboard_id, dynamodb)
+
+    if not source_dashboard:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dashboard not found",
+        )
+
+    # Create cloned dashboard with new name and owner
+    clone_data = {
+        'name': f"{source_dashboard.name} (Copy)",
+        'description': source_dashboard.description,
+        'layout': source_dashboard.layout,
+        'filters': source_dashboard.filters,
+        'owner_id': current_user.id,
+    }
+
+    cloned_dashboard = await repo.create(clone_data, dynamodb)
+
+    return api_response(cloned_dashboard.model_dump())
+
+
 @router.get("/{dashboard_id}/referenced-datasets")
 async def get_referenced_datasets(
     dashboard_id: str,
@@ -225,4 +282,4 @@ async def get_referenced_datasets(
         dynamodb=dynamodb
     )
 
-    return referenced_datasets
+    return api_response(referenced_datasets)

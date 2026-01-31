@@ -153,7 +153,10 @@ class TestListDashboards:
             response = authenticated_client.get("/api/dashboards")
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            assert "pagination" in response_data
+            data = response_data["data"]
             assert len(data) == 1
             assert data[0]["id"] == sample_dashboard.id
             assert data[0]["name"] == sample_dashboard.name
@@ -175,7 +178,10 @@ class TestListDashboards:
             response = authenticated_client.get("/api/dashboards")
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            assert "pagination" in response_data
+            data = response_data["data"]
             assert len(data) == 0
 
     def test_list_dashboards_unauthenticated(
@@ -221,7 +227,9 @@ class TestCreateDashboard:
             )
 
             assert response.status_code == 201
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["name"] == "New Dashboard"
             assert data["owner_id"] == mock_user.id
 
@@ -273,7 +281,9 @@ class TestCreateDashboard:
             )
 
             assert response.status_code == 201
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["name"] == "New Dashboard"
             assert len(data["layout"]) == 2
             assert len(data["filters"]) == 1
@@ -320,7 +330,9 @@ class TestGetDashboard:
             response = authenticated_client.get(f"/api/dashboards/{sample_dashboard.id}")
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["id"] == sample_dashboard.id
             assert data["name"] == sample_dashboard.name
 
@@ -392,7 +404,9 @@ class TestUpdateDashboard:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert data["name"] == "Updated Name"
 
     def test_update_dashboard_not_owner(
@@ -567,7 +581,9 @@ class TestGetReferencedDatasets:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert len(data) == 2
             assert data[0]['dataset_id'] == 'ds_1'
             assert data[1]['dataset_id'] == 'ds_2'
@@ -599,7 +615,9 @@ class TestGetReferencedDatasets:
             )
 
             assert response.status_code == 200
-            data = response.json()
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
             assert len(data) == 0
 
     def test_get_referenced_datasets_not_found(
@@ -628,5 +646,84 @@ class TestGetReferencedDatasets:
         """Test getting referenced datasets requires authentication."""
         response = unauthenticated_client.get(
             "/api/dashboards/dash_123/referenced-datasets"
+        )
+        assert response.status_code == 403
+
+
+class TestCloneDashboard:
+    """Tests for POST /api/dashboards/{dashboard_id}/clone."""
+
+    def test_clone_dashboard_success(
+        self, authenticated_client: TestClient, mock_user: User, sample_dashboard: Dashboard
+    ) -> None:
+        """Test successful dashboard cloning."""
+        cloned_dashboard = Dashboard(
+            id="dash_cloned",
+            name=f"{sample_dashboard.name} (Copy)",
+            description=sample_dashboard.description,
+            layout=sample_dashboard.layout,
+            filters=sample_dashboard.filters,
+            owner_id=mock_user.id,
+            default_filter_view_id=None,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        async def mock_get_func(self, dashboard_id, dynamodb):
+            return sample_dashboard
+
+        async def mock_create_func(self, data, dynamodb):
+            return cloned_dashboard
+
+        from app.repositories import dashboard_repository
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get_func
+        ), patch.object(
+            dashboard_repository.DashboardRepository,
+            'create',
+            mock_create_func
+        ):
+            response = authenticated_client.post(
+                f"/api/dashboards/{sample_dashboard.id}/clone"
+            )
+
+            assert response.status_code == 201
+            response_data = response.json()
+            assert "data" in response_data
+            data = response_data["data"]
+            assert data["id"] == "dash_cloned"
+            assert data["name"] == f"{sample_dashboard.name} (Copy)"
+            assert data["description"] == sample_dashboard.description
+            assert data["owner_id"] == mock_user.id
+
+    def test_clone_dashboard_not_found(
+        self, authenticated_client: TestClient
+    ) -> None:
+        """Test cloning non-existent dashboard returns 404."""
+        async def mock_get_func(self, dashboard_id, dynamodb):
+            return None
+
+        from app.repositories import dashboard_repository
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get_func
+        ):
+            response = authenticated_client.post(
+                "/api/dashboards/nonexistent/clone"
+            )
+
+            assert response.status_code == 404
+
+    def test_clone_dashboard_unauthenticated(
+        self, unauthenticated_client: TestClient
+    ) -> None:
+        """Test cloning dashboard requires authentication."""
+        response = unauthenticated_client.post(
+            "/api/dashboards/dash_123/clone"
         )
         assert response.status_code == 403

@@ -2,6 +2,7 @@
 
 **最終更新:** 2026-01-31
 **プロジェクト:** 社内BI・Pythonカード MVP
+**フェーズ:** Phase Q3 完了 (Frontend Test Expansion)
 
 ---
 
@@ -12,6 +13,16 @@
 | local | 開発 | http://localhost:3000 | http://localhost:8000 |
 | staging | 検証 | https://bi-staging.internal.company.com | 内部ALB |
 | production | 本番 | https://bi.internal.company.com | 内部ALB |
+
+**サービス構成:**
+
+| サービス | テクノロジー | ポート (local) | AWS (staging/prod) |
+|---------|------------|---------|------------------|
+| Frontend | React 18 + Vite 5 | 3000 | S3 + CloudFront |
+| API | FastAPI 0.109 + Uvicorn | 8000 | ECS Fargate |
+| Executor | Python 3.11 サンドボックス | 8080 | ECS Fargate (ネットワーク隔離) |
+| Database | DynamoDB | 8001 (DynamoDB Local) | DynamoDB (オンデマンド) |
+| Storage | S3 | 9000/9001 (MinIO) | S3 (バージョニング有効) |
 
 ---
 
@@ -40,6 +51,8 @@ docker compose down -v && docker compose up --build
 - ECR リポジトリが作成済みであること
 - ECS クラスタ、サービス、タスク定義が設定済みであること
 - 必要なシークレットが Secrets Manager に登録されていること
+  - `JWT_SECRET_KEY` (最低32文字のランダム文字列)
+  - `VERTEX_AI_PROJECT_ID`
 
 #### 2.2.2 バックエンド (API) デプロイ
 
@@ -50,14 +63,19 @@ docker build -t bi-api:latest -f backend/Dockerfile.dev backend/
 # 2. ECR にタグ付けしてプッシュ
 aws ecr get-login-password --region ap-northeast-1 | \
   docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com
-docker tag bi-api:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:latest
-docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:latest
+docker tag bi-api:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:$(git rev-parse --short HEAD)
+docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:$(git rev-parse --short HEAD)
 
 # 3. ECS サービスを更新 (新リビジョンのタスク定義でデプロイ)
 aws ecs update-service \
   --cluster bi-cluster \
   --service bi-api-service \
   --force-new-deployment
+
+# 4. デプロイ完了を待機
+aws ecs wait services-stable \
+  --cluster bi-cluster \
+  --services bi-api-service
 ```
 
 #### 2.2.3 Executor デプロイ
@@ -67,14 +85,19 @@ aws ecs update-service \
 docker build -t bi-executor:latest -f executor/Dockerfile executor/
 
 # 2. ECR にプッシュ
-docker tag bi-executor:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:latest
-docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:latest
+docker tag bi-executor:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:$(git rev-parse --short HEAD)
+docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:$(git rev-parse --short HEAD)
 
 # 3. ECS サービスを更新
 aws ecs update-service \
   --cluster bi-cluster \
   --service bi-executor-service \
   --force-new-deployment
+
+# 4. デプロイ完了を待機
+aws ecs wait services-stable \
+  --cluster bi-cluster \
+  --services bi-executor-service
 ```
 
 #### 2.2.4 フロントエンドデプロイ
@@ -106,6 +129,23 @@ python init_tables.py
 docker compose run --rm dynamodb-init
 ```
 
+作成されるテーブル (9テーブル):
+- `bi_users`, `bi_groups`, `bi_datasets`, `bi_transforms`, `bi_cards`
+- `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
+
+#### 2.2.6 デプロイ前チェックリスト
+
+| チェック項目 | コマンド | 基準 |
+|-------------|---------|------|
+| フロントエンド lint | `cd frontend && npm run lint` | エラー 0 |
+| フロントエンド typecheck | `cd frontend && npm run typecheck` | エラー 0 |
+| フロントエンド テスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 227+ tests pass |
+| バックエンド lint | `cd backend && ruff check app/` | エラー 0 |
+| バックエンド typecheck | `cd backend && mypy app/` | エラー 0 |
+| バックエンド テスト | `cd backend && pytest --cov=app` | pass |
+| Executor テスト | `cd executor && pytest --cov=app` | pass |
+| ビルド | `cd frontend && npm run build` | 成功 |
+
 ---
 
 ## 3. ヘルスチェック
@@ -132,46 +172,77 @@ for port in 8000 8080; do
 done
 ```
 
+### 3.3 依存サービス確認
+
+```bash
+# DynamoDB Local テーブル確認
+aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northeast-1
+
+# MinIO バケット確認
+curl -s http://localhost:9000/minio/health/live
+
+# MinIO Console: http://localhost:9001 (minioadmin / minioadmin)
+```
+
 ---
 
 ## 4. 監視項目
 
 ### 4.1 メトリクス (CloudWatch)
 
-| メトリクス | 閾値 | アラート |
-|-----------|------|---------|
-| API レスポンスタイム (p95) | > 5秒 | Warning |
-| API レスポンスタイム (p99) | > 10秒 | Critical |
-| API エラーレート (5xx) | > 5% | Critical |
-| Executor タイムアウト率 | > 10% | Warning |
-| ECS CPU使用率 | > 80% | Warning |
-| ECS メモリ使用率 | > 80% | Warning |
-| DynamoDB スロットリング | > 0 | Warning |
-| S3 エラーレート | > 1% | Warning |
+| メトリクス | 閾値 | アラート | 対応 |
+|-----------|------|---------|------|
+| API レスポンスタイム (p95) | > 5秒 | Warning | APIログでスロークエリを確認 |
+| API レスポンスタイム (p99) | > 10秒 | Critical | スケールアウトを検討 |
+| API エラーレート (5xx) | > 5% | Critical | エラーログを確認、ロールバック検討 |
+| Executor タイムアウト率 | > 10% | Warning | カードコードの最適化を促進 |
+| Executor タイムアウト率 | > 20% | Critical | Executorリソース増強を検討 |
+| ECS CPU使用率 | > 80% | Warning | タスク数増加を検討 |
+| ECS メモリ使用率 | > 80% | Warning | メモリリーク調査 |
+| DynamoDB スロットリング | > 0 | Warning | キャパシティ設定確認 |
+| S3 エラーレート | > 1% | Warning | VPCエンドポイント / IAMロール確認 |
 
 ### 4.2 ログ
 
 | サービス | ログ出力先 | フォーマット |
 |---------|-----------|-------------|
-| API | CloudWatch Logs | JSON (structlog) |
-| Executor | CloudWatch Logs | 標準出力 |
+| API | CloudWatch Logs (`/ecs/bi-<env>-api`) | JSON (structlog) |
+| Executor | CloudWatch Logs (`/ecs/bi-<env>-executor`) | 標準出力 |
 | フロントエンド | ブラウザコンソール | - |
 
 ログには以下の情報が含まれます:
-- リクエストID
-- ユーザID (認証済みリクエスト)
+- リクエストID (`request_id`)
+- ユーザID (`user_id`、認証済みリクエスト)
 - エンドポイント
 - レスポンスステータス
-- 処理時間
+- 処理時間 (`duration_ms`)
+
+**ログ検索コマンド:**
+
+```bash
+# CloudWatch Logs (本番)
+aws logs tail /ecs/bi-production-api --follow
+
+# エラーのみフィルタ
+aws logs filter-log-events \
+  --log-group-name /ecs/bi-production-api \
+  --start-time $(date -d '1 hour ago' +%s)000 \
+  --filter-pattern "ERROR"
+```
 
 ### 4.3 重要な監査ログ
 
-| イベント | ログフィールド |
-|---------|--------------|
-| ログイン成功/失敗 | `login_success` / `login_failed` + email, user_id, ip |
-| データセット作成 | dataset_id, owner_id |
-| カード実行 | card_id, execution_time_ms, cached |
-| ダッシュボード共有変更 | dashboard_id, shared_with, permission |
+| イベント | ログフィールド | DynamoDBテーブル |
+|---------|--------------|-----------------|
+| ログイン成功/失敗 | `login_success` / `login_failed` + email, user_id, ip | `bi_audit_logs` |
+| データセット作成 | dataset_id, owner_id | `bi_audit_logs` |
+| カード実行 | card_id, execution_time_ms, cached | `bi_audit_logs` |
+| ダッシュボード共有変更 | dashboard_id, shared_with, permission | `bi_audit_logs` |
+| Transform実行成功/失敗 | transform_id, duration_ms, status | `bi_audit_logs` |
+
+監査ログのGSI:
+- `LogsByTimestamp` -- 時系列検索
+- `LogsByTarget` -- 対象リソース別検索
 
 ---
 
@@ -217,6 +288,12 @@ done
 docker compose logs -f executor
 ```
 
+**Executor リソース設定 (環境変数):**
+- `EXECUTOR_TIMEOUT_CARD=10` (秒)
+- `EXECUTOR_TIMEOUT_TRANSFORM=300` (秒)
+- `EXECUTOR_MAX_CONCURRENT_CARDS=10`
+- `EXECUTOR_MAX_CONCURRENT_TRANSFORMS=5`
+
 ### 5.3 CSVインポートが失敗する
 
 **症状:** データセット作成APIが422エラーを返す
@@ -226,6 +303,11 @@ docker compose logs -f executor
 1. ファイルサイズ制限 (最大100MB) を超えていないか確認
 2. 文字コードが正しいか確認 (自動推定が失敗する場合は `encoding` パラメータを明示指定)
 3. 区切り文字が正しいか確認 (デフォルトはカンマ)
+
+**サポートされる文字コード:**
+- `utf-8` (デフォルト)
+- `shift_jis` / `cp932` (日本語Windows)
+- 自動推定は chardet ライブラリを使用
 
 ### 5.4 フロントエンドが API に接続できない
 
@@ -251,11 +333,14 @@ docker compose logs -f executor
 **対策:**
 ```bash
 # テーブルの存在確認
-aws dynamodb list-tables --endpoint-url http://localhost:8001
+aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northeast-1
 
 # テーブルを再作成
 docker compose run --rm dynamodb-init
 ```
+
+**作成されるべきテーブル (9テーブル):**
+`bi_users`, `bi_groups`, `bi_datasets`, `bi_transforms`, `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
 
 ### 5.6 MinIO / S3 のファイルアクセスエラー
 
@@ -277,15 +362,42 @@ docker compose run --rm dynamodb-init
    docker compose run --rm minio-init
    ```
 
+**必要なバケット:**
+- `bi-datasets` -- Parquetデータ格納
+- `bi-static` -- 静的アセット (Plotly等)
+
 ### 5.7 JWT認証エラー
 
 **症状:** 401 Unauthorized エラー
 
 **確認手順:**
 
-1. トークンの有効期限が切れていないか確認
+1. トークンの有効期限が切れていないか確認 (デフォルト24時間)
 2. `JWT_SECRET_KEY` が全サービスで同じ値か確認
 3. フロントエンドのトークンストレージを確認 (ブラウザの開発者ツール)
+
+### 5.8 フロントエンドテストの失敗
+
+**症状:** CI/CDパイプラインでテストが失敗する
+
+**確認手順:**
+
+```bash
+cd frontend
+
+# 全テスト実行 (詳細出力)
+npx vitest --reporter=verbose
+
+# 特定のテストファイルをデバッグ
+npx vitest src/__tests__/pages/LoginPage.test.tsx --reporter=verbose
+
+# UIモードで視覚的にデバッグ
+npx vitest --ui
+```
+
+**現在のテスト基準:**
+- 37テストファイル、227テストケースが全て合格すること
+- Statement coverage 83.07% 以上を維持すること
 
 ---
 
@@ -294,17 +406,36 @@ docker compose run --rm dynamodb-init
 ### 6.1 ECS サービスのロールバック
 
 ```bash
-# 1. 前のタスク定義リビジョンを確認
+# 1. 現在のタスク定義リビジョンを確認
 aws ecs describe-services \
   --cluster bi-cluster \
   --services bi-api-service \
   --query 'services[0].taskDefinition'
 
-# 2. 前のリビジョンを指定してサービスを更新
+# 2. タスク定義のリビジョン一覧を確認
+aws ecs list-task-definitions \
+  --family-prefix bi-api \
+  --sort DESC \
+  --max-items 5
+
+# 3. 前のリビジョンを指定してサービスを更新
 aws ecs update-service \
   --cluster bi-cluster \
   --service bi-api-service \
   --task-definition bi-api:<previous-revision>
+
+# 4. ロールバック完了を待機
+aws ecs wait services-stable \
+  --cluster bi-cluster \
+  --services bi-api-service
+```
+
+Executorのロールバックも同様の手順で実行:
+```bash
+aws ecs update-service \
+  --cluster bi-cluster \
+  --service bi-executor-service \
+  --task-definition bi-executor:<previous-revision>
 ```
 
 ### 6.2 フロントエンドのロールバック
@@ -321,42 +452,97 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 DynamoDB はポイントインタイムリカバリ (PITR) が有効な場合:
 
 ```bash
+# 特定時点のデータに復元
 aws dynamodb restore-table-to-point-in-time \
-  --source-table-name bi_users \
-  --target-table-name bi_users_restored \
+  --source-table-name bi_dashboards \
+  --target-table-name bi_dashboards_restored \
   --restore-date-time <timestamp>
+
+# 復元されたテーブルのデータを確認後、テーブル名を変更して本番適用
+```
+
+### 6.4 S3データのリストア
+
+S3バージョニングが有効な場合:
+
+```bash
+# 特定バージョンのオブジェクトを復元
+aws s3api get-object \
+  --bucket bi-datasets-production \
+  --key datasets/<dataset-id>/data/part-0000.parquet \
+  --version-id "<version-id>" \
+  restored-file.parquet
 ```
 
 ---
 
-## 7. 定期メンテナンス
+## 7. スケーリング
 
-### 7.1 日次
+### 7.1 ECS サービスのスケーリング
+
+```bash
+# APIサービスのタスク数を変更
+aws ecs update-service \
+  --cluster bi-cluster \
+  --service bi-api-service \
+  --desired-count 4
+
+# Executorサービスのタスク数を変更
+aws ecs update-service \
+  --cluster bi-cluster \
+  --service bi-executor-service \
+  --desired-count 4
+```
+
+### 7.2 リソースサイジング目安
+
+| 同時ユーザ数 | API タスク数 | Executor タスク数 |
+|-------------|-------------|-----------------|
+| ~10 | 2 | 2 |
+| 10-30 | 4 | 4 |
+| 30-50 | 6 | 8 |
+
+### 7.3 ECS タスクリソース設定
+
+| サービス | CPU | メモリ |
+|---------|-----|-------|
+| API | 0.5 vCPU | 1 GB |
+| Executor (Card) | 1 vCPU | 2 GB |
+| Executor (Transform) | 2 vCPU | 4 GB |
+
+---
+
+## 8. 定期メンテナンス
+
+### 8.1 日次
 
 | タスク | 方法 |
 |--------|------|
 | ログ確認 | CloudWatch Logs でエラーログを確認 |
 | ヘルスチェック | 監視アラートの確認 |
 
-### 7.2 週次
+### 8.2 週次
 
 | タスク | 方法 |
 |--------|------|
 | 依存パッケージの脆弱性確認 | `pip audit` / `npm audit` |
 | ディスク使用量確認 | S3 / DynamoDB のストレージ使用量 |
 | パフォーマンス確認 | CloudWatch メトリクスダッシュボード |
+| テストカバレッジ確認 | フロントエンド 83%+ / バックエンド pass を維持 |
 
-### 7.3 月次
+### 8.3 月次
 
 | タスク | 方法 |
 |--------|------|
 | 依存パッケージの更新検討 | Dependabot / 手動確認 |
 | セキュリティパッチの適用 | Docker ベースイメージの更新 |
 | コスト確認 | AWS Cost Explorer |
+| 監査ログレビュー | `bi_audit_logs` テーブルの確認 |
+| Executor ホワイトリストライブラリの更新確認 | pandas, plotly 等のバージョン |
 
 ---
 
-## 8. 連絡先・エスカレーション
+## 9. 連絡先・エスカレーション
 
 | 状況 | 対応 |
 |------|------|
@@ -364,22 +550,77 @@ aws dynamodb restore-table-to-point-in-time \
 | セキュリティインシデント | セキュリティチームにエスカレーション |
 | データ損失 | DBA / インフラチームに連絡 |
 
+**エスカレーション判断基準:**
+
+| 重大度 | 条件 | 対応時間 |
+|--------|------|---------|
+| Critical | API/Executor 全面停止、データ損失 | 即時 |
+| High | 5xx エラーレート 10%超、主要機能障害 | 1時間以内 |
+| Medium | パフォーマンス劣化、一部機能障害 | 営業時間内 |
+| Low | 軽微なUI問題、非重要機能の障害 | 次営業日 |
+
 ---
 
-## 9. セキュリティに関する注意事項
+## 10. セキュリティに関する注意事項
 
-### 9.1 秘匿情報の管理
+### 10.1 秘匿情報の管理
 
 - `.env` ファイルは Git にコミットしない (`.gitignore` に含まれている)
 - 本番環境の秘匿情報は AWS Secrets Manager で管理
 - `JWT_SECRET_KEY` は最低32文字のランダム文字列を使用
 - MinIO のデフォルト認証情報 (`minioadmin`) は本番環境では使用しない
+- GCPサービスアカウントキー (`GOOGLE_APPLICATION_CREDENTIALS`) は Secrets Manager で管理
 
-### 9.2 Executor のセキュリティ
+### 10.2 Executor のセキュリティ
 
 - Executor コンテナは非rootユーザ (`executor`) で実行
 - ファイルシステムは読み取り専用 (`/tmp/workdir` のみ書き込み可能)
-- ブロックされたモジュール: `os`, `sys`, `subprocess`, `socket`, `http`, `urllib` 等
+- ブロックされたモジュール: `os`, `sys`, `subprocess`, `socket`, `http`, `urllib`, `requests`, `httpx`, `ftplib`, `smtplib`, `telnetlib`, `pickle`, `shelve`, `marshal`, `ctypes`, `multiprocessing`
 - ブロックされた組み込み関数: `open`, `exec`, `eval`, `compile`, `__import__` (カスタムフック経由)
-- カード実行タイムアウト: 10秒
+- カード実行タイムアウト: 10秒 (SIGALRM)
+- Transform実行タイムアウト: 300秒
 - メモリ制限: 2048MB (Linux環境)
+- ネットワーク: S3 VPCエンドポイント経由のみ許可、外部通信完全遮断
+
+### 10.3 セキュリティチェックリスト (デプロイ前)
+
+- [ ] JWT_SECRET_KEY が32文字以上で十分にランダム
+- [ ] パスワードハッシュのワークファクターが12以上 (bcrypt)
+- [ ] CSP設定が適用されている
+- [ ] iframe sandbox属性が設定されている
+- [ ] Executorのセキュリティグループが外部通信を遮断している
+- [ ] Executorが非rootユーザで実行されている
+- [ ] 読み取り専用ファイルシステムが有効
+- [ ] 監査ログが有効
+- [ ] シークレットがSecrets Managerで管理されている
+
+---
+
+## 11. テスト品質ダッシュボード
+
+### 11.1 現在のカバレッジ (Phase Q3 完了時点)
+
+**フロントエンド (frontend/):**
+
+| メトリクス | 値 |
+|-----------|-----|
+| テストファイル | 37 |
+| テストケース | 227 |
+| Statements | 83.07% |
+| フレームワーク | Vitest 1.x + @testing-library/react 14.x |
+
+**テスト対象カバレッジ内訳:**
+
+| レイヤー | ファイル数 | テスト対象 |
+|---------|-----------|-----------|
+| Pages | 9 | 全9ページ (Login, Dashboard x3, Dataset x3, Card x2) |
+| Components | 14 | Common (8), Dashboard (4), Card (2) |
+| Hooks | 4 | use-auth, use-cards, use-dashboards, use-datasets |
+| API Layer | 4 | auth, cards, dashboards, datasets |
+| Lib/Utils | 3 | api-client, utils, layout-utils |
+| Stores | 1 | auth-store |
+| Types | 1 | type-guards |
+
+**バックエンド (backend/):**
+- テストフレームワーク: pytest 7.x + moto 5.0
+- テスト対象: API routes, core, db, models, repositories, services

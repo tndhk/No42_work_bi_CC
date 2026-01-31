@@ -2,6 +2,7 @@
 
 **最終更新:** 2026-01-31
 **プロジェクト:** 社内BI・Pythonカード MVP
+**フェーズ:** Phase Q3 完了 (Frontend Test Expansion)
 
 ---
 
@@ -32,26 +33,37 @@ work_BI_ClaudeCode/
 │   │   ├── services/    # ビジネスロジック層
 │   │   └── main.py      # アプリケーションエントリポイント
 │   ├── tests/           # pytest テスト
-│   ├── pyproject.toml   # プロジェクト設定
+│   ├── pyproject.toml   # プロジェクト設定 (ruff, mypy, pytest)
 │   ├── requirements.txt # Python依存パッケージ
 │   └── Dockerfile.dev   # 開発用Dockerfile
 ├── frontend/            # React SPA (TypeScript / Vite)
 │   ├── src/
+│   │   ├── __tests__/   # Vitest テスト (37ファイル, 227テスト)
+│   │   │   ├── components/  # コンポーネントテスト
+│   │   │   │   ├── card/        # CardEditor, CardPreview
+│   │   │   │   ├── common/      # AuthGuard, ErrorBoundary, Header, Layout 等
+│   │   │   │   └── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog 等
+│   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets
+│   │   │   ├── lib/         # api-client, utils, layout-utils, api/*.test.ts
+│   │   │   ├── pages/       # 全9ページのテスト
+│   │   │   ├── stores/      # auth-store
+│   │   │   ├── types/       # type-guards
+│   │   │   └── helpers/     # test-utils (共通テストユーティリティ)
 │   │   ├── components/  # UIコンポーネント
 │   │   │   ├── card/    # カード関連 (CardEditor, CardPreview)
-│   │   │   ├── common/  # 共通 (Header, Sidebar, Layout, AuthGuard)
-│   │   │   ├── dashboard/ # ダッシュボード関連
+│   │   │   ├── common/  # 共通 (Header, Sidebar, Layout, AuthGuard, ErrorBoundary)
+│   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor)
 │   │   │   ├── dataset/ # データセット関連
 │   │   │   └── ui/      # shadcn/ui プリミティブ
 │   │   ├── hooks/       # React Query カスタムフック
-│   │   ├── lib/         # APIクライアント、ユーティリティ
-│   │   ├── pages/       # ページコンポーネント
+│   │   ├── lib/         # APIクライアント、ユーティリティ、layout-utils
+│   │   ├── pages/       # ページコンポーネント (9ページ)
 │   │   ├── stores/      # Zustand ストア (auth-store)
 │   │   ├── types/       # TypeScript型定義
 │   │   ├── routes.tsx   # React Router ルート定義
 │   │   └── App.tsx      # アプリケーションルート
 │   ├── package.json     # Node.js依存パッケージ
-│   └── Dockerfile.dev   # 開発用Dockerfile
+│   └── vite.config.ts   # Vite設定 (パスエイリアス @/ = src/)
 ├── executor/            # Pythonコード実行サンドボックス (FastAPI)
 │   ├── app/
 │   │   ├── main.py      # Executorエントリポイント
@@ -66,16 +78,22 @@ work_BI_ClaudeCode/
 ├── scripts/             # 運用スクリプト
 │   ├── init_tables.py   # DynamoDB テーブル初期化
 │   └── Dockerfile.init  # 初期化コンテナ用Dockerfile
+├── codemaps/            # アーキテクチャマップ
+│   ├── architecture.md  # システム全体のアーキテクチャ
+│   ├── backend.md       # バックエンド構造マップ
+│   ├── frontend.md      # フロントエンド構造マップ
+│   └── data.md          # データモデルマップ
 ├── docs/                # プロジェクトドキュメント
-│   ├── requirements.md  # 要件定義書
-│   ├── design.md        # 設計書
-│   ├── tech-spec.md     # 技術仕様書
-│   ├── api-spec.md      # API仕様書
-│   ├── data-flow.md     # データフロー定義
-│   ├── security.md      # セキュリティ実装ガイド
-│   ├── deployment.md    # デプロイメントガイド
+│   ├── requirements.md  # 要件定義書 v0.2
+│   ├── design.md        # 設計書 v0.2
+│   ├── tech-spec.md     # 技術仕様書 v0.1
+│   ├── api-spec.md      # API仕様書 v0.1
+│   ├── data-flow.md     # データフロー定義 v0.1
+│   ├── security.md      # セキュリティ実装ガイド v0.1
+│   ├── deployment.md    # デプロイメントガイド v0.1
 │   ├── CONTRIB.md       # 開発者ガイド (本ドキュメント)
 │   └── RUNBOOK.md       # 運用ランブック
+├── .reports/            # テストカバレッジレポート
 ├── docker-compose.yml   # ローカル開発環境定義
 ├── .env.example         # 環境変数テンプレート
 └── .gitignore           # Git除外設定
@@ -184,7 +202,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 |--------|-------------|------|
 | `JWT_SECRET_KEY` | (テンプレート値) | JWT署名キー。**本番環境では必ず変更すること** (最低32文字) |
 | `JWT_ALGORITHM` | `HS256` | JWT署名アルゴリズム |
-| `JWT_EXPIRE_MINUTES` | `1440` | JWTトークン有効期限 (分) |
+| `JWT_EXPIRE_MINUTES` | `1440` | JWTトークン有効期限 (分。デフォルト24時間) |
 
 ### パスワードポリシー
 
@@ -225,7 +243,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 |--------|-------------|------|
 | `EXECUTOR_ENDPOINT` | `http://executor:8080` | Executorサービスのエンドポイント |
 | `EXECUTOR_TIMEOUT_CARD` | `10` | カード実行タイムアウト (秒) |
-| `EXECUTOR_TIMEOUT_TRANSFORM` | `300` | Transform実行タイムアウト (秒) |
+| `EXECUTOR_TIMEOUT_TRANSFORM` | `300` | Transform実行タイムアウト (秒。デフォルト5分) |
 | `EXECUTOR_MAX_CONCURRENT_CARDS` | `10` | カード同時実行上限 |
 | `EXECUTOR_MAX_CONCURRENT_TRANSFORMS` | `5` | Transform同時実行上限 |
 
@@ -244,15 +262,15 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 `frontend/package.json` に定義されたスクリプト。
 
-| コマンド | 説明 |
-|---------|------|
-| `npm run dev` | 開発サーバを起動 (Vite、ホットリロード有効、ポート3000) |
-| `npm run build` | TypeScript型チェック後にプロダクションビルドを生成 |
-| `npm run preview` | ビルド済みアプリケーションのプレビューサーバを起動 |
-| `npm run test` | Vitest でテストを実行 (ウォッチモード) |
-| `npm run test:coverage` | カバレッジ付きでテストを実行 |
-| `npm run lint` | ESLint による静的解析 (TypeScript/TSX対象) |
-| `npm run typecheck` | TypeScript型チェックのみ実行 (ビルドなし) |
+| コマンド | 実行内容 | 説明 |
+|---------|---------|------|
+| `npm run dev` | `vite` | 開発サーバを起動 (ホットリロード有効、ポート3000) |
+| `npm run build` | `tsc && vite build` | TypeScript型チェック後にプロダクションビルドを生成 |
+| `npm run preview` | `vite preview` | ビルド済みアプリケーションのプレビューサーバを起動 |
+| `npm run test` | `vitest` | Vitest でテストを実行 (ウォッチモード) |
+| `npm run test:coverage` | `vitest --coverage` | カバレッジ付きでテストを実行 (@vitest/coverage-v8) |
+| `npm run lint` | `eslint . --ext ts,tsx` | ESLint による静的解析 (TypeScript/TSX対象) |
+| `npm run typecheck` | `tsc --noEmit` | TypeScript型チェックのみ実行 (ビルドなし) |
 
 ### 5.2 バックエンド (Python)
 
@@ -262,11 +280,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 |---------|------|
 | `pytest` | テストを実行 |
 | `pytest --cov=app` | カバレッジ付きでテストを実行 |
-| `pytest --cov=app --cov-report=html` | HTML形式のカバレッジレポートを生成 |
-| `ruff check app/ tests/` | Ruff によるリンティング |
+| `pytest --cov=app --cov-report=html` | HTML形式のカバレッジレポートを生成 (`htmlcov/`) |
+| `pytest --cov=app --cov-report=term-missing` | 未カバー行付きでカバレッジ表示 |
+| `ruff check app/ tests/` | Ruff によるリンティング (line-length: 100) |
 | `ruff format app/ tests/` | Ruff によるコードフォーマット |
-| `mypy app/` | 型チェック |
-| `uvicorn app.main:app --reload` | 開発サーバ起動 |
+| `mypy app/` | 型チェック (strict モード) |
+| `uvicorn app.main:app --reload` | 開発サーバ起動 (ホットリロード有効) |
 
 ### 5.3 Executor (Python)
 
@@ -296,13 +315,64 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 | スクリプト | 説明 |
 |-----------|------|
-| `scripts/init_tables.py` | DynamoDB テーブル作成 (bi_users, bi_datasets, bi_cards, bi_dashboards) |
+| `scripts/init_tables.py` | DynamoDB テーブル作成 (9テーブル: bi_users, bi_groups, bi_datasets, bi_transforms, bi_cards, bi_dashboards, bi_dashboard_shares, bi_filter_views, bi_audit_logs) |
 
 ---
 
 ## 6. テスト手順
 
-### 6.1 バックエンドテスト
+### 6.1 フロントエンドテスト
+
+**現在のテスト状況 (Phase Q3 完了時点):**
+
+| メトリクス | 値 |
+|-----------|-----|
+| テストファイル数 | 37 |
+| テストケース数 | 227 |
+| Statements カバレッジ | 83.07% |
+| テストフレームワーク | Vitest 1.x + @testing-library/react 14.x |
+| テスト環境 | jsdom |
+
+```bash
+cd frontend
+
+# ウォッチモードでテスト実行
+npm run test
+
+# カバレッジ付き (単発実行)
+npm run test:coverage
+
+# 特定ファイルのみ
+npx vitest src/__tests__/stores/auth-store.test.ts
+
+# 特定ディレクトリ配下のみ
+npx vitest src/__tests__/pages/
+
+# UIモードで実行 (@vitest/ui)
+npx vitest --ui
+```
+
+テスト構成 (37ファイル):
+
+| テストカテゴリ | ファイル数 | 対象 |
+|---------------|-----------|------|
+| `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage, DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
+| `__tests__/components/common/` | 8 | AuthGuard, ErrorBoundary, ConfirmDialog, Header, Sidebar, Layout, LoadingSpinner, Pagination |
+| `__tests__/components/dashboard/` | 4 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer |
+| `__tests__/components/card/` | 2 | CardEditor, CardPreview |
+| `__tests__/hooks/` | 4 | use-auth, use-cards, use-dashboards, use-datasets |
+| `__tests__/lib/api/` | 4 | auth, cards, dashboards, datasets |
+| `__tests__/lib/` | 3 | api-client, utils, layout-utils |
+| `__tests__/stores/` | 1 | auth-store |
+| `__tests__/types/` | 1 | type-guards |
+| `__tests__/` | 1 | App.test.tsx |
+
+テストヘルパー:
+- `__tests__/helpers/test-utils.tsx` -- カスタムレンダラー (QueryClient, MemoryRouter 統合)
+- `__tests__/setup.ts` -- グローバルセットアップ (@testing-library/jest-dom マッチャー)
+- `__tests__/vitest.d.ts` -- 型拡張
+
+### 6.2 バックエンドテスト
 
 ```bash
 cd backend
@@ -320,9 +390,6 @@ pytest tests/services/test_dataset_service.py
 
 # 詳細出力
 pytest -v
-
-# 並列実行 (pytest-xdist が必要)
-pytest -n auto
 ```
 
 テスト構成:
@@ -338,32 +405,6 @@ pytest -n auto
 | `tests/services/` | サービス層 (CSV解析、データセット、カード実行、ダッシュボード等) |
 
 テストは `moto` (AWS サービスモック) と `respx` (HTTP モック) を使用しています。
-
-### 6.2 フロントエンドテスト
-
-```bash
-cd frontend
-
-# ウォッチモードでテスト実行
-npm run test
-
-# カバレッジ付き (単発実行)
-npm run test:coverage
-
-# 特定ファイルのみ
-npx vitest src/__tests__/stores/auth-store.test.ts
-```
-
-テスト構成:
-
-| テストファイル | 対象 |
-|---------------|------|
-| `src/__tests__/App.test.tsx` | アプリケーションルート |
-| `src/__tests__/stores/auth-store.test.ts` | 認証ストア |
-| `src/__tests__/types/type-guards.test.ts` | 型ガード |
-| `src/__tests__/lib/utils.test.ts` | ユーティリティ関数 |
-
-テストは `vitest` + `@testing-library/react` + `jsdom` を使用しています。
 
 ### 6.3 Executor テスト
 
@@ -388,6 +429,26 @@ pytest --cov=app
 | `tests/test_sandbox.py` | SecureExecutor サンドボックス |
 | `tests/test_resource_limiter.py` | リソース制限 |
 
+### 6.4 CI統合テスト実行
+
+全コンポーネントのテストを一括で実行するフロー:
+
+```bash
+# 1. バックエンド
+cd backend && source .venv/bin/activate && pytest --cov=app && cd ..
+
+# 2. フロントエンド
+cd frontend && npm run test:coverage && cd ..
+
+# 3. Executor
+cd executor && source venv/bin/activate && pytest --cov=app && cd ..
+```
+
+カバレッジレポートは以下に出力されます:
+- バックエンド: `backend/htmlcov/` (HTML) / ターミナル出力
+- フロントエンド: `frontend/coverage/` (lcov)
+- プロジェクト全体レポート: `.reports/`
+
 ---
 
 ## 7. アーキテクチャ概要
@@ -410,7 +471,59 @@ pytest --cov=app
                    (pandas, plotly, matplotlib)
 ```
 
-### 7.2 APIルート一覧
+### 7.2 主要依存パッケージ
+
+**フロントエンド (frontend/package.json):**
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| react | ^18.2.0 | UIフレームワーク |
+| react-router-dom | ^6.21.0 | ルーティング |
+| @tanstack/react-query | ^5.17.0 | サーバ状態管理 |
+| zustand | ^4.4.7 | クライアント状態管理 |
+| react-hook-form | ^7.71.1 | フォーム管理 |
+| zod | ^3.25.76 | バリデーション |
+| react-grid-layout | ^1.4.4 | ダッシュボードグリッドレイアウト |
+| @monaco-editor/react | ^4.6.0 | Pythonコードエディタ |
+| ky | ^1.1.3 | HTTPクライアント |
+| date-fns | ^3.0.6 | 日付操作 |
+| tailwind-merge | ^3.4.0 | Tailwind CSSクラスマージ |
+
+**フロントエンド devDependencies:**
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| vitest | ^1.1.0 | テストランナー |
+| @vitest/coverage-v8 | ^1.1.0 | カバレッジ計測 |
+| @vitest/ui | ^1.1.0 | テストUI |
+| @testing-library/react | ^14.1.2 | コンポーネントテスト |
+| @testing-library/jest-dom | ^6.1.5 | DOMマッチャー |
+| @testing-library/user-event | ^14.5.1 | ユーザインタラクションシミュレーション |
+| typescript | ^5.3.3 | 型システム |
+| vite | ^5.0.10 | ビルドツール |
+| tailwindcss | ^3.4.0 | CSSフレームワーク |
+| eslint | ^8.56.0 | リンター |
+
+**バックエンド (backend/requirements.txt):**
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| fastapi | 0.109.0 | Webフレームワーク |
+| uvicorn | 0.27.0 | ASGIサーバ |
+| pydantic | 2.5.0 | バリデーション/モデル |
+| pydantic-settings | 2.1.0 | 環境変数管理 |
+| structlog | 24.1.0 | 構造化ログ |
+| aioboto3 | 12.3.0 | 非同期AWS SDK (DynamoDB / S3) |
+| pyarrow | 15.0.0 | Parquet読み書き |
+| pandas | 2.2.0 | データ操作 |
+| chardet | 5.2.0 | 文字コード推定 |
+| python-jose | 3.3.0 | JWT実装 |
+| bcrypt | 4.1.3 | パスワードハッシュ |
+| slowapi | 0.1.9 | レート制限 |
+| pytest | 7.4.3 | テストフレームワーク |
+| moto | 5.0.0 | AWSサービスモック |
+
+### 7.3 APIルート一覧
 
 すべてのAPIルートは `/api` プレフィックス配下。
 
@@ -440,7 +553,7 @@ pytest --cov=app
 | DELETE | `/api/dashboards/{id}` | ダッシュボード削除 |
 | GET | `/api/dashboards/{id}/referenced-datasets` | 参照データセット一覧 |
 
-### 7.3 フロントエンドルート一覧
+### 7.4 フロントエンドルート一覧
 
 | パス | コンポーネント | 説明 |
 |------|---------------|------|
@@ -457,16 +570,21 @@ pytest --cov=app
 
 認証が必要なルートは `AuthGuard` コンポーネントで保護されています。
 
-### 7.4 DynamoDB テーブル構成
+### 7.5 DynamoDB テーブル構成
 
 | テーブル名 | パーティションキー | GSI |
 |-----------|-------------------|-----|
 | `bi_users` | `userId` (S) | `UsersByEmail` (email -> ALL) |
+| `bi_groups` | `groupId` (S) | `GroupMembers` (groupId + userId) |
 | `bi_datasets` | `datasetId` (S) | `DatasetsByOwner` (ownerId + createdAt) |
+| `bi_transforms` | `transformId` (S) | `TransformsByOwner` (ownerId + createdAt) |
 | `bi_cards` | `cardId` (S) | `CardsByOwner` (ownerId + createdAt) |
 | `bi_dashboards` | `dashboardId` (S) | `DashboardsByOwner` (ownerId + createdAt) |
+| `bi_dashboard_shares` | `shareId` (S) | `SharesByDashboard` (dashboardId + createdAt) |
+| `bi_filter_views` | `filterViewId` (S) | `FilterViewsByDashboard` (dashboardId + createdAt) |
+| `bi_audit_logs` | `logId` (S) | `LogsByTimestamp`, `LogsByTarget` |
 
-### 7.5 Executor サンドボックス
+### 7.6 Executor サンドボックス
 
 カードの Python コードは Executor サービス内のサンドボックスで実行されます。
 
@@ -496,19 +614,19 @@ pytest --cov=app
 ### 8.1 バックエンド (Python)
 
 - **フォーマッタ/リンタ:** Ruff (line-length: 100, target: Python 3.11)
-- **型チェック:** mypy (strict モード)
+- **型チェック:** mypy (strict モード、一部overrideあり: slowapi, pyarrow, aioboto3, botocore)
 - **テストフレームワーク:** pytest (asyncio_mode: auto)
 - **ドキュメント:** Google style docstring
 - **命名規則:** snake_case (変数/関数)、PascalCase (クラス)
 
 ### 8.2 フロントエンド (TypeScript)
 
-- **フォーマッタ/リンタ:** ESLint + TypeScript ESLint
-- **テストフレームワーク:** Vitest + Testing Library
+- **フォーマッタ/リンタ:** ESLint + TypeScript ESLint (@typescript-eslint/eslint-plugin 6.x)
+- **テストフレームワーク:** Vitest + Testing Library (@testing-library/react, @testing-library/user-event)
 - **UIライブラリ:** shadcn/ui (Radix UI + Tailwind CSS)
 - **状態管理:** TanStack Query (サーバ状態) + Zustand (クライアント状態)
 - **命名規則:** camelCase (変数/関数)、PascalCase (コンポーネント/型)
-- **パスエイリアス:** `@/` = `src/`
+- **パスエイリアス:** `@/` = `src/` (vite.config.ts で設定)
 
 ---
 
@@ -521,6 +639,7 @@ master (本番)
   └── feature/xxx  (機能開発)
   └── fix/xxx      (バグ修正)
   └── docs/xxx     (ドキュメント)
+  └── test/xxx     (テスト追加)
 ```
 
 ### 9.2 コミットメッセージ
@@ -529,6 +648,8 @@ master (本番)
 <type>: <summary>
 
 <body (optional)>
+
+Co-Authored-By: <author> (optional)
 ```
 
 type の例: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
@@ -539,6 +660,19 @@ type の例: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 2. 変更を実装しテストを追加
 3. リンタ/型チェック/テストが通ることを確認
 4. プルリクエストを作成
+
+### 9.4 CI品質ゲート
+
+PRマージ前に以下が通ることを確認:
+
+| チェック | コマンド | 基準 |
+|---------|---------|------|
+| フロントエンド lint | `npm run lint` | エラー 0 |
+| フロントエンド typecheck | `npm run typecheck` | エラー 0 |
+| フロントエンド test | `npm run test:coverage` | 83%+ statements |
+| バックエンド lint | `ruff check app/` | エラー 0 |
+| バックエンド typecheck | `mypy app/` | エラー 0 |
+| バックエンド test | `pytest --cov=app` | pass |
 
 ---
 
@@ -581,6 +715,18 @@ cd backend
 mypy app/
 ```
 
+### フロントエンドテストの失敗
+
+```bash
+cd frontend
+
+# 単一テストファイルを詳細モードで実行
+npx vitest src/__tests__/pages/LoginPage.test.tsx --reporter=verbose
+
+# UIモードでデバッグ
+npx vitest --ui
+```
+
 ### ポートが競合する
 
 docker-compose.yml で使用するポート:
@@ -600,3 +746,22 @@ docker-compose.yml で使用するポート:
 lsof -i :3000
 lsof -i :8000
 ```
+
+---
+
+## 11. 関連ドキュメント
+
+| ドキュメント | パス | 内容 |
+|-------------|------|------|
+| 要件定義書 | `docs/requirements.md` | 機能要件、非機能要件、権限モデル |
+| 設計書 | `docs/design.md` | アーキテクチャ、データモデル、API設計 |
+| 技術仕様書 | `docs/tech-spec.md` | 技術スタック、設定値、テスト戦略 |
+| API仕様書 | `docs/api-spec.md` | 全APIエンドポイントの詳細仕様 |
+| データフロー | `docs/data-flow.md` | CSV取り込み、Transform実行、カード実行フロー |
+| セキュリティ | `docs/security.md` | サンドボックス、CSP、認証・認可 |
+| デプロイメント | `docs/deployment.md` | AWS構成、CI/CD、Terraform |
+| 運用ランブック | `docs/RUNBOOK.md` | デプロイ、監視、トラブルシューティング |
+| アーキテクチャマップ | `codemaps/architecture.md` | システム全体構造の可視化 |
+| フロントエンドマップ | `codemaps/frontend.md` | フロントエンド構造の可視化 |
+| バックエンドマップ | `codemaps/backend.md` | バックエンド構造の可視化 |
+| データモデルマップ | `codemaps/data.md` | DynamoDB/S3データ構造の可視化 |

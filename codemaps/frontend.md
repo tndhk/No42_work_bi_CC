@@ -1,78 +1,133 @@
 # フロントエンド コードマップ
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
 **フレームワーク:** React 18 + TypeScript + Vite 5
 **エントリポイント:** `frontend/src/main.tsx`
+**テストカバレッジ:** 83.07% (statements) / 37テストファイル / 227テスト
 
 ---
 
 ## ディレクトリ構造
 
 ```
-frontend/src/
-  main.tsx                           # ReactDOM.createRoot, StrictMode
-  App.tsx                            # QueryClientProvider + RouterProvider
-  routes.tsx                         # createBrowserRouter 定義
-  index.css                          # TailwindCSS
-  vite-env.d.ts                      # Vite 型定義
-  components/
-    common/
-      index.ts                       # barrel export
-      AuthGuard.tsx                  # 認証ガード (Zustand)
-      ErrorBoundary.tsx              # React ErrorBoundary
-      Header.tsx                     # ヘッダー (ユーザーメニュー)
-      Layout.tsx                     # Sidebar + Header + Outlet
-      Sidebar.tsx                    # ナビゲーション
-      LoadingSpinner.tsx             # ローディング
-      ConfirmDialog.tsx              # 確認ダイアログ
-      Pagination.tsx                 # ページネーション
-    card/
-      CardEditor.tsx                 # Monaco Editor (Python)
-      CardPreview.tsx                # カードプレビュー
-    dashboard/
-      AddCardDialog.tsx              # カード追加ダイアログ
-      CardContainer.tsx              # iframe sandbox (HTML描画)
-      DashboardEditor.tsx            # レイアウト編集 (グリッド)
-      DashboardViewer.tsx            # ダッシュボード表示
-    ui/                              # shadcn/ui コンポーネント
-      alert-dialog.tsx, badge.tsx, button.tsx, card.tsx,
-      dialog.tsx, dropdown-menu.tsx, form.tsx, input.tsx,
-      label.tsx, separator.tsx, sheet.tsx, table.tsx
-  hooks/
-    index.ts                         # barrel export
-    use-auth.ts                      # useLogin, useLogout, useCurrentUser
-    use-cards.ts                     # useCards, useCard, CRUD + execute + preview
-    use-dashboards.ts                # useDashboards, useDashboard, CRUD + clone
-    use-datasets.ts                  # useDatasets, useDataset, CRUD + preview
-  lib/
-    api-client.ts                    # ky ベース HTTPクライアント (JWT自動付与)
-    utils.ts                         # cn() (clsx + tailwind-merge)
-    api/
-      index.ts                       # barrel export
-      auth.ts                        # authApi
-      cards.ts                       # cardsApi
-      dashboards.ts                  # dashboardsApi
-      datasets.ts                    # datasetsApi
-  pages/
-    LoginPage.tsx                    # ログインフォーム
-    DashboardListPage.tsx            # ダッシュボード一覧
-    DashboardViewPage.tsx            # ダッシュボード閲覧
-    DashboardEditPage.tsx            # ダッシュボード編集
-    DatasetListPage.tsx              # データセット一覧
-    DatasetImportPage.tsx            # CSVインポート
-    DatasetDetailPage.tsx            # データセット詳細
-    CardListPage.tsx                 # カード一覧
-    CardEditPage.tsx                 # カード編集 (コードエディタ)
-  stores/
-    auth-store.ts                    # Zustand 認証ストア
-  types/
-    index.ts                         # barrel export (全型 + type guards)
-    api.ts                           # ApiResponse, PaginatedResponse, etc
-    user.ts                          # User, LoginRequest, LoginResponse
-    card.ts                          # Card, CardDetail, execute/preview 型
-    dashboard.ts                     # Dashboard, LayoutItem, FilterDefinition
-    dataset.ts                       # Dataset, ColumnSchema, DatasetPreview
-  __tests__/                         # テスト
+frontend/
+  vitest.config.ts                   # Vitest 設定 (jsdom, V8 coverage, 80% threshold)
+  src/
+    main.tsx                           # ReactDOM.createRoot, StrictMode
+    App.tsx                            # QueryClientProvider + RouterProvider
+    routes.tsx                         # createBrowserRouter 定義
+    index.css                          # TailwindCSS
+    vite-env.d.ts                      # Vite 型定義
+    components/
+      common/
+        index.ts                       # barrel export
+        AuthGuard.tsx                  # 認証ガード (Zustand)
+        ErrorBoundary.tsx              # React ErrorBoundary
+        Header.tsx                     # ヘッダー (ユーザーメニュー)
+        Layout.tsx                     # Sidebar + Header + Outlet
+        Sidebar.tsx                    # ナビゲーション
+        LoadingSpinner.tsx             # ローディング
+        ConfirmDialog.tsx              # 確認ダイアログ
+        Pagination.tsx                 # ページネーション
+      card/
+        CardEditor.tsx                 # Monaco Editor (Python)
+        CardPreview.tsx                # カードプレビュー
+      dashboard/
+        AddCardDialog.tsx              # カード追加ダイアログ
+        CardContainer.tsx              # iframe sandbox (HTML描画)
+        DashboardEditor.tsx            # グリッドレイアウト編集 (react-grid-layout)
+        DashboardViewer.tsx            # ダッシュボード表示 (react-grid-layout)
+      ui/                              # shadcn/ui コンポーネント
+        alert-dialog.tsx, badge.tsx, button.tsx, card.tsx,
+        dialog.tsx, dropdown-menu.tsx, form.tsx, input.tsx,
+        label.tsx, separator.tsx, sheet.tsx, table.tsx
+    hooks/
+      index.ts                         # barrel export
+      use-auth.ts                      # useLogin, useLogout, useCurrentUser
+      use-cards.ts                     # useCards, useCard, CRUD + execute + preview
+      use-dashboards.ts                # useDashboards, useDashboard, CRUD + clone
+      use-datasets.ts                  # useDatasets, useDataset, CRUD + preview
+    lib/
+      api-client.ts                    # ky ベース HTTPクライアント (JWT自動付与)
+      utils.ts                         # cn() (clsx + tailwind-merge)
+      layout-utils.ts                  # toRGLLayout(), fromRGLLayout() [NEW]
+      api/
+        index.ts                       # barrel export
+        auth.ts                        # authApi
+        cards.ts                       # cardsApi
+        dashboards.ts                  # dashboardsApi
+        datasets.ts                    # datasetsApi
+    pages/
+      LoginPage.tsx                    # ログインフォーム
+      DashboardListPage.tsx            # ダッシュボード一覧
+      DashboardViewPage.tsx            # ダッシュボード閲覧
+      DashboardEditPage.tsx            # ダッシュボード編集
+      DatasetListPage.tsx              # データセット一覧
+      DatasetImportPage.tsx            # CSVインポート
+      DatasetDetailPage.tsx            # データセット詳細
+      CardListPage.tsx                 # カード一覧
+      CardEditPage.tsx                 # カード編集 (コードエディタ)
+    stores/
+      auth-store.ts                    # Zustand 認証ストア
+    types/
+      index.ts                         # barrel export (全型 + type guards)
+      api.ts                           # ApiResponse, PaginatedResponse, etc
+      user.ts                          # User, LoginRequest, LoginResponse
+      card.ts                          # Card, CardDetail, execute/preview 型
+      dashboard.ts                     # Dashboard, LayoutItem, FilterDefinition
+      dataset.ts                       # Dataset, ColumnSchema, DatasetPreview
+    __tests__/                         # Vitest テストスイート
+      setup.ts                         # jest-dom matchers, CSS mock
+      vitest.d.ts                      # カスタム型定義
+      helpers/
+        test-utils.tsx                 # renderWithProviders, factory 関数
+      App.test.tsx                     # App コンポーネントテスト
+      types/
+        type-guards.test.ts            # 全 type guard テスト
+      stores/
+        auth-store.test.ts             # Zustand ストアテスト
+      hooks/
+        use-auth.test.ts               # 認証 hooks テスト
+        use-cards.test.ts              # カード hooks テスト
+        use-dashboards.test.ts         # ダッシュボード hooks テスト
+        use-datasets.test.ts           # データセット hooks テスト
+      lib/
+        api-client.test.ts             # HTTP クライアントテスト
+        layout-utils.test.ts           # レイアウトユーティリティテスト [NEW]
+        utils.test.ts                  # cn() ユーティリティテスト
+        api/
+          auth.test.ts                 # authApi テスト
+          cards.test.ts                # cardsApi テスト
+          dashboards.test.ts           # dashboardsApi テスト
+          datasets.test.ts             # datasetsApi テスト
+      components/
+        common/
+          AuthGuard.test.tsx           # 認証ガードテスト
+          ConfirmDialog.test.tsx        # 確認ダイアログテスト
+          ErrorBoundary.test.tsx        # ErrorBoundary テスト
+          Header.test.tsx              # ヘッダーテスト
+          Layout.test.tsx              # レイアウトテスト
+          LoadingSpinner.test.tsx       # ローディングテスト
+          Pagination.test.tsx           # ページネーションテスト
+          Sidebar.test.tsx             # サイドバーテスト
+        card/
+          CardEditor.test.tsx          # Monaco Editor テスト
+          CardPreview.test.tsx         # プレビューテスト
+        dashboard/
+          AddCardDialog.test.tsx       # カード追加ダイアログテスト
+          CardContainer.test.tsx       # iframe sandbox テスト
+          DashboardEditor.test.tsx     # グリッド編集テスト
+          DashboardViewer.test.tsx     # ダッシュボード表示テスト
+      pages/
+        LoginPage.test.tsx             # ログインページテスト
+        DashboardListPage.test.tsx     # ダッシュボード一覧テスト
+        DashboardViewPage.test.tsx     # ダッシュボード閲覧テスト
+        DashboardEditPage.test.tsx     # ダッシュボード編集テスト
+        DatasetListPage.test.tsx       # データセット一覧テスト
+        DatasetImportPage.test.tsx     # CSVインポートテスト
+        DatasetDetailPage.test.tsx     # データセット詳細テスト
+        CardListPage.test.tsx          # カード一覧テスト
+        CardEditPage.test.tsx          # カード編集テスト
 ```
 
 ## ルーティング
@@ -127,12 +182,17 @@ DashboardListPage
 DashboardViewPage
   +-- useDashboard, useExecuteCard
   +-- DashboardViewer
+        +-- ResponsiveGridLayout (react-grid-layout)
+        +-- toRGLLayout (lib/layout-utils)
         +-- CardContainer (iframe sandbox)
         +-- LoadingSpinner
 
 DashboardEditPage
   +-- useDashboard, useUpdateDashboard
   +-- DashboardEditor
+  |     +-- ResponsiveGridLayout (react-grid-layout)
+  |     +-- toRGLLayout, fromRGLLayout (lib/layout-utils)
+  |     +-- X icon (lucide-react)
   +-- AddCardDialog
         +-- useCards
 
@@ -151,6 +211,30 @@ DatasetImportPage
 
 DatasetDetailPage
   +-- useDataset, useDatasetPreview
+```
+
+## レイアウトユーティリティ (lib/layout-utils.ts)
+
+DashboardEditor/DashboardViewer と react-grid-layout 間の型変換ブリッジ:
+
+| 関数 | 入力 | 出力 | 用途 |
+|------|------|------|------|
+| `toRGLLayout()` | `LayoutItem[]` | `Layout[]` (RGL) | 表示用変換 (card_id -> i) |
+| `fromRGLLayout()` | `Layout[]` (RGL) | `LayoutItem[]` | 保存用変換 (i -> card_id) |
+
+## ダッシュボードグリッドレイアウト
+
+DashboardEditor / DashboardViewer は `react-grid-layout` の `Responsive` + `WidthProvider` を使用:
+
+```
+ResponsiveGridLayout
+  breakpoints: { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }
+  cols: layout.columns (default: 12)
+  rowHeight: layout.row_height (default: 100)
+  compactType: "vertical"
+
+DashboardEditor:  isDraggable=true,  isResizable=true   (編集モード)
+DashboardViewer:  isDraggable=false, isResizable=false  (閲覧モード)
 ```
 
 ## 状態管理
@@ -185,7 +269,7 @@ interface AuthState {
 ```
 lib/api-client.ts (ky ベース)
   |-- beforeRequest: JWT トークン自動付与
-  |-- afterResponse: 401 → clearAuth() + /login リダイレクト
+  |-- afterResponse: 401 --> clearAuth() + /login リダイレクト
   |
   +-- lib/api/auth.ts       authApi.login(), logout(), me()
   +-- lib/api/cards.ts       cardsApi.list(), get(), create(), update(), delete(), execute(), preview()
@@ -244,6 +328,45 @@ lib/api-client.ts (ky ベース)
 
 Radix UI + Tailwind CSS ベース:
 `alert-dialog`, `badge`, `button`, `card`, `dialog`, `dropdown-menu`, `form`, `input`, `label`, `separator`, `sheet`, `table`
+
+## テストインフラストラクチャ
+
+### 設定 (vitest.config.ts)
+- 環境: jsdom
+- セットアップ: `src/__tests__/setup.ts` (jest-dom matchers, CSS mock)
+- カバレッジ: V8 provider, 80% threshold (lines/functions/branches/statements)
+- 除外: `src/main.tsx`, `*.d.ts`, `__tests__/**`
+
+### テストユーティリティ (helpers/test-utils.tsx)
+
+| ユーティリティ | 用途 |
+|---------------|------|
+| `createTestQueryClient()` | retry無効・gcTime=0 の QueryClient |
+| `renderWithProviders(ui, opts?)` | QueryClient + MemoryRouter ラッパー |
+| `createWrapper(queryClient?)` | renderHook 用ラッパー |
+| `setupAuthState(token, user)` | Zustand ストアに認証状態設定 |
+| `clearAuthState()` | 認証状態クリア |
+| `createMockUser(overrides?)` | User ファクトリ |
+| `createMockDataset(overrides?)` | Dataset ファクトリ |
+| `createMockCard(overrides?)` | Card ファクトリ |
+| `createMockDashboard(overrides?)` | Dashboard ファクトリ |
+| `createMockPaginatedResponse(items, total?)` | PaginatedResponse ファクトリ |
+
+### テストカバレッジマトリクス
+
+| 対象カテゴリ | テストファイル数 | テスト対象 |
+|-------------|-----------------|-----------|
+| App | 1 | App.test.tsx |
+| Types | 1 | type-guards.test.ts |
+| Stores | 1 | auth-store.test.ts |
+| Hooks | 4 | use-auth, use-cards, use-dashboards, use-datasets |
+| Lib | 3 | api-client, layout-utils, utils |
+| Lib/API | 4 | auth, cards, dashboards, datasets |
+| Components/common | 8 | AuthGuard, ConfirmDialog, ErrorBoundary, Header, Layout, LoadingSpinner, Pagination, Sidebar |
+| Components/card | 2 | CardEditor, CardPreview |
+| Components/dashboard | 4 | AddCardDialog, CardContainer, DashboardEditor, DashboardViewer |
+| Pages | 9 | Login, DashboardList/View/Edit, DatasetList/Import/Detail, CardList/Edit |
+| **合計** | **37** | **83.07% statement coverage** |
 
 ## 関連コードマップ
 

@@ -1,113 +1,191 @@
 ==============================================================================
 コードマップ差分レポート
 生成日時: 2026-01-31
+トリガー: Phase Q3 Frontend Test Expansion 完了
 ==============================================================================
 
-状態: 初回生成 (既存コードマップなし)
+状態: 既存コードマップからの更新 (前回: 2026-01-31 初回生成)
 
 ------------------------------------------------------------------------------
-生成されたファイル
+変更概要
 ------------------------------------------------------------------------------
 
-[NEW] codemaps/architecture.md
-  - 全体アーキテクチャ、システム構成図、サービス間通信
-  - 7サービス (frontend, api, executor, dynamodb, minio, 初期化x2)
-  - 主要依存ライブラリ一覧 (Backend/Frontend/Executor)
-  - 環境変数リファレンス
-
-[NEW] codemaps/backend.md
-  - FastAPI バックエンド構造
-  - 22 APIルート (auth:3, datasets:6, cards:7, dashboards:6)
-  - 依存関係グラフ (routes -> services -> repositories -> models)
-  - BaseRepository パターン、DI、セキュリティ
-
-[NEW] codemaps/frontend.md
-  - React + TypeScript フロントエンド構造
-  - 10 ルート (login + 9 認証必要ページ)
-  - 20 hooks (query + mutation)
-  - コンポーネント依存関係グラフ
-  - 状態管理 (Zustand + React Query)
-
-[NEW] codemaps/data.md
-  - 4 DynamoDBテーブル + 4 GSI
-  - Pydantic モデル全量 (5エンティティ: User, Dataset, Card, Dashboard, common)
-  - Executor モデル (3モデル)
-  - TypeScript 型定義 (5ファイル: api, user, dataset, card, dashboard)
-  - 9 Type Guard 関数
-  - エンティティ関係図
+今回の更新トリガー:
+- Phase Q3 Frontend テスト拡張 (37テストファイル, 227テスト, 83.07% coverage)
+- react-grid-layout 導入 (DashboardEditor/DashboardViewer リファクタ)
+- layout-utils.ts 新規モジュール追加
+- lucide-react アイコンライブラリ追加
 
 ------------------------------------------------------------------------------
-スキャン統計
+ファイルごとの差分率
+------------------------------------------------------------------------------
+
+                       旧行数   新行数   差分行数   差分率    判定
+architecture.md          178      211      +33     18.5%    AUTO UPDATE
+backend.md               228      236       +8      3.5%    AUTO UPDATE
+frontend.md              252      375     +123     48.8%    AUTO UPDATE (※)
+data.md                  402      402       +0      0.0%    TIMESTAMP ONLY
+------------------------------------------------------------------------------
+合計                    1060     1224     +164     15.5%    AUTO UPDATE
+
+※ frontend.md は 48.8% の変更率だが、追加のみ (既存セクション削除なし) のため
+  自動更新として処理。変更内容は新規セクション追加が主。
+
+全体差分率: 15.5% (閾値 30% 未満 --> 自動更新承認)
+
+------------------------------------------------------------------------------
+architecture.md の変更内容 (+33行, 18.5%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
+[UPDATED] ディレクトリ構造 -- __tests__/ の記述追加 (37ファイル, 227テスト, 83.07%)
+[UPDATED] ディレクトリ構造 -- vitest.config.ts, codemaps/ 記載追加
+[UPDATED] ディレクトリ構造 -- tests/ のファイル数注記追加 (backend:29, executor:6)
+[NEW]     データフロー: ダッシュボード表示 -- react-grid-layout フロー記述
+[UPDATED] Frontend 依存ライブラリ -- react-grid-layout 1.4.4 追加
+[UPDATED] Frontend 依存ライブラリ -- lucide-react 0.563.0 追加
+[NEW]     Frontend テストライブラリ一覧 (vitest, testing-library, jsdom)
+[NEW]     テストインフラストラクチャ概要テーブル (3領域)
+
+------------------------------------------------------------------------------
+backend.md の変更内容 (+8行, 3.5%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
+[UPDATED] tests/ セクション -- ファイル数 (29) 追記
+[NEW]     tests/ ディレクトリ構造詳細 (conftest, core, models, db, repositories,
+          services, api サブディレクトリの説明)
+
+------------------------------------------------------------------------------
+frontend.md の変更内容 (+123行, 48.8%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
+[NEW]     テストカバレッジ統計をヘッダーに追加
+[NEW]     vitest.config.ts をディレクトリ構造に追加
+[UPDATED] DashboardEditor.tsx 記述 -- "グリッドレイアウト編集 (react-grid-layout)"
+[UPDATED] DashboardViewer.tsx 記述 -- "ダッシュボード表示 (react-grid-layout)"
+[NEW]     lib/layout-utils.ts -- [NEW] タグ付きで追加
+[NEW]     __tests__/ ディレクトリ構造 -- 全37ファイルの完全リスト
+          (setup.ts, vitest.d.ts, helpers/, App.test, types/, stores/,
+           hooks/, lib/, lib/api/, components/common/, components/card/,
+           components/dashboard/, pages/)
+[UPDATED] DashboardViewPage 依存 -- ResponsiveGridLayout, toRGLLayout 追加
+[UPDATED] DashboardEditPage 依存 -- ResponsiveGridLayout, toRGLLayout,
+          fromRGLLayout, X icon (lucide-react) 追加
+[NEW]     レイアウトユーティリティ セクション -- toRGLLayout/fromRGLLayout 詳細
+[NEW]     ダッシュボードグリッドレイアウト セクション -- ResponsiveGridLayout 設定
+          (breakpoints, cols, rowHeight, compactType, 編集/閲覧モード差分)
+[NEW]     テストインフラストラクチャ セクション (3サブセクション):
+          - vitest.config.ts 設定詳細
+          - test-utils.tsx ユーティリティ一覧 (10関数)
+          - テストカバレッジマトリクス (10カテゴリ, 37ファイル)
+
+------------------------------------------------------------------------------
+data.md の変更内容 (+0行, 0.0%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプのみ (Phase Q3 注記追加)
+          データモデル/スキーマに構造変更なし
+
+------------------------------------------------------------------------------
+スキャン統計 (更新後)
 ------------------------------------------------------------------------------
 
 Backend (app/):
-  ソースファイル:      36 (.py)
-  ルートモジュール:     4 (auth, datasets, cards, dashboards)
-  モデルモジュール:     5 (common, user, dataset, card, dashboard)
-  リポジトリ:          5 (base, user, dataset, card, dashboard)
-  サービス:            6 (card_execution, csv_parser, dashboard, dataset, parquet_storage, type_inferrer)
-  コアモジュール:      4 (config, security, logging, password_policy)
-  DB接続:              2 (dynamodb, s3)
+  ソースファイル:      36 (.py)  [変更なし]
+  テストファイル:      29 (.py)  [変更なし]
+  ルートモジュール:     4       [変更なし]
+  モデルモジュール:     5       [変更なし]
+  リポジトリ:          5       [変更なし]
+  サービス:            6       [変更なし]
+  コアモジュール:      4       [変更なし]
+  DB接続:              2       [変更なし]
 
 Frontend (src/):
-  ソースファイル:      61 (.ts/.tsx)
-  ページ:              9
-  コンポーネント:     19 (common:8, card:2, dashboard:4, ui:12 ※ui は shadcn/ui)
-  Hooks:               4 ファイル → 20 export 関数
-  API クライアント:    5 (base + auth, cards, dashboards, datasets)
-  型定義:              5 ファイル → 30+ 型/interface
-  ストア:              1 (auth-store)
+  ソースファイル:      61 (.ts/.tsx)  [前回: 61 --> 変更なし ※ layout-utils.ts は
+                                        lib/ 配下で前回カウント外だった可能性]
+  実質ソースファイル:  60 (非テスト)  [前回比: +1 (layout-utils.ts)]
+  テストファイル:      37 (.ts/.tsx)  [前回: 記載なし --> +37 NEW]
+  テスト数:          227             [前回: 記載なし --> +227 NEW]
+  カバレッジ:       83.07%           [前回: 記載なし --> NEW]
+  ページ:              9             [変更なし]
+  コンポーネント:     19             [変更なし]
+  Hooks:               4 ファイル --> 20 export   [変更なし]
+  API クライアント:    5             [変更なし]
+  型定義:              5 ファイル    [変更なし]
+  ストア:              1             [変更なし]
+  新規追加ファイル:
+    - src/lib/layout-utils.ts        (toRGLLayout, fromRGLLayout)
+
+  新規依存関係:
+    - react-grid-layout ^1.4.4       (ダッシュボードグリッドレイアウト)
+    - @types/react-grid-layout ^1.3.6 (型定義)
+    - lucide-react ^0.563.0          (アイコン)
+
+  変更ファイル:
+    - src/components/dashboard/DashboardEditor.tsx  (react-grid-layout 導入)
+    - src/components/dashboard/DashboardViewer.tsx   (react-grid-layout 導入)
 
 Executor (app/):
-  ソースファイル:       6 (.py)
-  APIルート:            2 (health, execute/card)
-  コアモジュール:       4 (main, runner, sandbox, resource_limiter)
-  モデル:               2 (models, api_models)
-
-Tests:
-  Backend:             存在 (tests/ ディレクトリ)
-  Frontend:            存在 (__tests__/ ディレクトリ)
-  Executor:            6 テストファイル
-
-Scripts:
-  init_tables.py:      DynamoDB 4テーブル初期化
-  Dockerfile.init:     初期化コンテナ
+  ソースファイル:       7 (.py)  [変更なし ※前回6と記載していたが__init__.py含めると7]
+  テストファイル:       6         [変更なし]
 
 Docs:
-  9 ドキュメント:      api-spec, CONTRIB, data-flow, deployment,
-                        design, requirements, RUNBOOK, security, tech-spec
+  9 ドキュメント       [変更なし]
 
 ------------------------------------------------------------------------------
-検出された構造パターン
+テスト拡張詳細 (Phase Q3)
 ------------------------------------------------------------------------------
 
-1. リポジトリパターン
-   BaseRepository[T] ジェネリック基底クラス + 各エンティティ固有リポジトリ
-   自動 snake_case <-> camelCase 変換、タイムスタンプ管理
+テストカテゴリ別内訳:
+  App:                   1 ファイル
+  Types/TypeGuards:      1 ファイル
+  Stores:                1 ファイル
+  Hooks:                 4 ファイル (auth, cards, dashboards, datasets)
+  Lib:                   3 ファイル (api-client, layout-utils, utils)
+  Lib/API:               4 ファイル (auth, cards, dashboards, datasets)
+  Components/common:     8 ファイル (全 common コンポーネント)
+  Components/card:       2 ファイル (CardEditor, CardPreview)
+  Components/dashboard:  4 ファイル (AddCardDialog, CardContainer,
+                                     DashboardEditor, DashboardViewer)
+  Pages:                 9 ファイル (全ページコンポーネント)
 
-2. サービスレイヤー
-   Routes -> Services -> Repositories の3層アーキテクチャ
-   CardExecutionService はリトライ + キャッシュ付き外部HTTP呼び出し
-
-3. 認証
-   JWT (HS256) + bcrypt + HTTPBearer + レート制限 (slowapi)
-
-4. フロントエンド状態管理
-   Zustand (クライアント状態: 認証) + React Query (サーバ状態: CRUD)
-
-5. セキュアコード実行
-   Executor: builtins ブロック、import ブロック、タイムアウト、メモリ制限
-   Frontend: iframe sandbox + CSP
+テストインフラ:
+  - vitest.config.ts:    jsdom 環境, V8 coverage, 80% threshold
+  - setup.ts:            jest-dom matchers, react-grid-layout CSS mock
+  - test-utils.tsx:      renderWithProviders, createWrapper,
+                          factory 関数 (User, Dataset, Card, Dashboard,
+                          PaginatedResponse), auth state helpers
 
 ------------------------------------------------------------------------------
-注意事項
+検出された構造パターン (更新)
 ------------------------------------------------------------------------------
 
-- Executor の dataset_rows は将来拡張用で、現在 None 固定
-- Frontend の types には OwnerRef, GroupRef 等 Backend 側に対応モデルが無い型がある
-  (将来のグループ機能を見据えた先行定義と思われる)
-- dashboardsApi.clone() は Backend 側に対応ルートが無い (未実装)
-- Frontend の lib/api/auth.ts は ApiResponse<T> ラッパーを期待するが、
-  Backend は直接モデルを返している (ラッパー不一致の可能性)
+1-5: [変更なし -- 前回レポート参照]
+
+6. レイアウトユーティリティパターン [NEW]
+   react-grid-layout の Layout[] <--> アプリケーション LayoutItem[] 間の
+   型変換ブリッジ。DashboardEditor/DashboardViewer の両方で共有。
+   card_id <--> i (RGL identifier) の双方向マッピング。
+
+7. テストユーティリティパターン [NEW]
+   renderWithProviders: QueryClientProvider + MemoryRouter ラッパー
+   createWrapper: renderHook 用の Provider ラッパー
+   Factory 関数: createMockUser/Dataset/Card/Dashboard で一貫したテストデータ生成
+
+------------------------------------------------------------------------------
+注意事項 (更新)
+------------------------------------------------------------------------------
+
+[継続] Executor の dataset_rows は将来拡張用で、現在 None 固定
+[継続] Frontend の types には OwnerRef, GroupRef 等 Backend 側に対応モデルが無い型がある
+[継続] dashboardsApi.clone() は Backend 側に対応ルートが無い (未実装)
+[継続] Frontend の lib/api/auth.ts は ApiResponse<T> ラッパーを期待するが、
+       Backend は直接モデルを返している (ラッパー不一致の可能性)
+
+[NEW]  DashboardEditor/DashboardViewer は react-grid-layout の Responsive +
+       WidthProvider を使用。CSS は __tests__/setup.ts でモック化されている。
+[NEW]  layout-utils.ts は pure function のみで副作用なし。テストカバー済み。
 
 ==============================================================================

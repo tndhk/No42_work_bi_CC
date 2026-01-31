@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
 **データベース:** DynamoDB (NoSQL) + S3 (Parquet)
 
 ---

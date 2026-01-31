@@ -1,6 +1,6 @@
 # バックエンド コードマップ
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
 **フレームワーク:** FastAPI 0.109 / Python 3.11+
 **エントリポイント:** `backend/app/main.py`
 
@@ -54,7 +54,15 @@ backend/
       dataset_service.py             # DatasetService (CSV インポート + プレビュー)
       parquet_storage.py             # ParquetConverter, ParquetReader
       type_inferrer.py               # 型推論 (int, float, bool, date, string)
-  tests/                             # pytest テスト
+  tests/                             # pytest テスト (29ファイル)
+    conftest.py                      # 共通フィクスチャ
+    core/                            # config, security, logging, password_policy テスト
+    models/                          # common, user, dataset, card, dashboard テスト
+    db/                              # dynamodb, s3 テスト
+    repositories/                    # base, user, dataset, card, dashboard テスト
+    services/                        # csv_parser, parquet, dataset, card_execution,
+                                     # dashboard, executor_client, type_inferrer テスト
+    api/                             # health, routes テスト
   requirements.txt                   # pip 依存関係
   pyproject.toml                     # ruff, mypy, pytest 設定
 ```
@@ -203,12 +211,12 @@ class BaseRepository(Generic[T]):
 
 ```
 CardExecutionService.execute()
-  1. use_cache=true → CardCacheService.get(key)
-  2. キャッシュヒット → return CardExecutionResult(cached=true)
-  3. キャッシュミス → _execute_with_retry()
+  1. use_cache=true --> CardCacheService.get(key)
+  2. キャッシュヒット --> return CardExecutionResult(cached=true)
+  3. キャッシュミス --> _execute_with_retry()
      a. httpx.AsyncClient.post(executor_url/execute/card)
-     b. 5xx/接続エラー → 指数バックオフ (0.5s * 2^n, 最大3回)
-     c. 4xx → 即座にエラー
+     b. 5xx/接続エラー --> 指数バックオフ (0.5s * 2^n, 最大3回)
+     c. 4xx --> 即座にエラー
   4. 結果を CardCacheService.set() で保存
   5. return CardExecutionResult(cached=false)
 ```

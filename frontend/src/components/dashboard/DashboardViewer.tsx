@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Responsive, WidthProvider } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { CardContainer } from './CardContainer';
+import { toRGLLayout } from '@/lib/layout-utils';
 import type { DashboardDetail, CardExecuteResponse } from '@/types';
+
+const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface DashboardViewerProps {
   dashboard: DashboardDetail;
@@ -40,19 +46,23 @@ export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerPro
 
   const cols = dashboard.layout.columns || 12;
   const rowHeight = dashboard.layout.row_height || 100;
+  const layout = toRGLLayout(dashboard.layout.cards);
 
   return (
-    <div className="relative" style={{ minHeight: 400 }}>
+    <ResponsiveGridLayout
+      className="layout"
+      layouts={{ lg: layout }}
+      breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+      cols={{ lg: cols, md: cols, sm: cols, xs: cols, xxs: cols }}
+      rowHeight={rowHeight}
+      isDraggable={false}
+      isResizable={false}
+      compactType="vertical"
+    >
       {dashboard.layout.cards.map((item) => (
         <div
           key={item.card_id}
-          className="absolute border rounded-lg bg-card overflow-hidden"
-          style={{
-            left: `${(item.x / cols) * 100}%`,
-            top: item.y * rowHeight,
-            width: `${(item.w / cols) * 100}%`,
-            height: item.h * rowHeight,
-          }}
+          className="border rounded-lg bg-card overflow-hidden"
         >
           {loading[item.card_id] ? (
             <div className="flex items-center justify-center h-full">
@@ -63,6 +73,6 @@ export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerPro
           )}
         </div>
       ))}
-    </div>
+    </ResponsiveGridLayout>
   );
 }

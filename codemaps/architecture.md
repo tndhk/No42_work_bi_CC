@@ -1,6 +1,6 @@
 # 全体アーキテクチャ コードマップ
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
 **プロジェクト:** BI Tool (社内BI・Pythonカード MVP)
 **ステージ:** MVP
 
@@ -56,7 +56,7 @@ work_BI_ClaudeCode/
       models/          # Pydantic モデル
       repositories/    # DynamoDB リポジトリ (CRUD)
       services/        # ビジネスロジック
-    tests/             # pytest テスト
+    tests/             # pytest テスト (29ファイル)
   frontend/            # React SPA
     src/
       components/      # UI コンポーネント
@@ -65,11 +65,14 @@ work_BI_ClaudeCode/
       pages/           # ページコンポーネント
       stores/          # Zustand ストア
       types/           # TypeScript 型定義
+      __tests__/       # Vitest テスト (37ファイル, 227テスト, 83.07% coverage)
+    vitest.config.ts   # テスト設定
   executor/            # Python 実行サンドボックス
     app/               # FastAPI アプリ
-    tests/             # pytest テスト
+    tests/             # pytest テスト (6ファイル)
   scripts/             # 初期化スクリプト
-  docs/                # 設計ドキュメント
+  codemaps/            # アーキテクチャ・コードマップ
+  docs/                # 設計ドキュメント (9ファイル)
   docker-compose.yml   # ローカル開発環境
 ```
 
@@ -102,7 +105,7 @@ work_BI_ClaudeCode/
 
 ```
 1. ブラウザ: FormData で CSV アップロード
-2. Backend: CSV パース (chardet → pandas)
+2. Backend: CSV パース (chardet + pandas)
 3. Backend: 型推論 (type_inferrer)
 4. Backend: Parquet 変換 + S3 保存 (parquet_storage)
 5. Backend: メタデータを DynamoDB に保存 (dataset_repository)
@@ -113,11 +116,21 @@ work_BI_ClaudeCode/
 ```
 1. ブラウザ: POST /api/cards/:id/execute
 2. Backend: DynamoDB キャッシュ確認 (card_cache)
-3. キャッシュ無し → Backend: Executor に HTTP POST
+3. キャッシュ無し --> Backend: Executor に HTTP POST
 4. Executor: サンドボックス内で Python コード実行
 5. Executor: render() の戻り値 (HTML) を返却
 6. Backend: 結果をキャッシュ + フロントに返却
 7. ブラウザ: iframe (sandbox) で HTML 描画
+```
+
+## データフロー: ダッシュボード表示
+
+```
+1. ブラウザ: GET /api/dashboards/:id --> DashboardDetail 取得
+2. DashboardViewer: react-grid-layout で cards レイアウト構築
+3. 各 LayoutItem --> onExecuteCard(cardId) で並列実行
+4. CardContainer: iframe sandbox で HTML 描画
+5. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
 ```
 
 ## 主要依存ライブラリ
@@ -145,10 +158,22 @@ work_BI_ClaudeCode/
 | zustand | 4.4.7 | クライアント状態管理 |
 | ky | 1.1.3 | HTTP クライアント |
 | @monaco-editor/react | 4.6.0 | コードエディタ |
+| react-grid-layout | 1.4.4 | ダッシュボードグリッドレイアウト |
+| lucide-react | 0.563.0 | アイコンライブラリ |
 | zod | 3.25.76 | スキーマバリデーション |
 | react-hook-form | 7.71.1 | フォーム管理 |
 | tailwindcss | 3.4.0 | CSS |
 | Radix UI | 各種 | UIプリミティブ |
+
+### Frontend (テスト)
+| ライブラリ | バージョン | 用途 |
+|-----------|-----------|------|
+| vitest | 1.1.0 | テストランナー |
+| @vitest/coverage-v8 | 1.1.0 | カバレッジ (V8) |
+| @testing-library/react | 14.1.2 | React コンポーネントテスト |
+| @testing-library/jest-dom | 6.1.5 | DOM マッチャー |
+| @testing-library/user-event | 14.5.1 | ユーザー操作シミュレーション |
+| jsdom | 23.0.1 | ブラウザ環境エミュレーション |
 
 ### Executor (Python)
 | ライブラリ | バージョン | 用途 |
@@ -158,6 +183,14 @@ work_BI_ClaudeCode/
 | plotly | 5.18.0 | チャート生成 |
 | matplotlib | 3.8.2 | チャート生成 |
 | seaborn | 0.13.1 | 統計可視化 |
+
+## テストインフラストラクチャ
+
+| 領域 | フレームワーク | テストファイル数 | カバレッジ |
+|------|---------------|-----------------|-----------|
+| Frontend | Vitest + Testing Library | 37 | 83.07% (statements) |
+| Backend | pytest | 29 | - |
+| Executor | pytest | 6 | - |
 
 ## 環境変数 (.env.example)
 

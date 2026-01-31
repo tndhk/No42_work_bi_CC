@@ -1,9 +1,9 @@
 # フロントエンド コードマップ
 
-**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
 **フレームワーク:** React 18 + TypeScript + Vite 5
 **エントリポイント:** `frontend/src/main.tsx`
-**テストカバレッジ:** 83.07% (statements) / 37テストファイル / 227テスト
+**テストカバレッジ:** 83.07% (statements) / 37テストファイル / 227テスト (Unit) + 3スペック / 12テスト (E2E)
 
 ---
 
@@ -11,7 +11,18 @@
 
 ```
 frontend/
-  vitest.config.ts                   # Vitest 設定 (jsdom, V8 coverage, 80% threshold)
+  playwright.config.ts                 # Playwright E2E テスト設定 [NEW]
+  vitest.config.ts                     # Vitest 設定 (jsdom, V8 coverage, 80% threshold)
+  e2e/                                 # Playwright E2E テスト [NEW]
+    global-setup.ts                    # バックエンド起動待機 (ヘルスチェック)
+    auth.spec.ts                       # 認証フロー E2E (5テスト)
+    dataset.spec.ts                    # データセット E2E (3テスト)
+    card-dashboard.spec.ts             # カード+ダッシュボード E2E (4テスト)
+    helpers/
+      login-helper.ts                  # loginViaUI() ヘルパー
+      api-helper.ts                    # テストデータ CRUD ヘルパー
+    sample-data/
+      test-sales.csv                   # テスト用 CSV (5行, 4列)
   src/
     main.tsx                           # ReactDOM.createRoot, StrictMode
     App.tsx                            # QueryClientProvider + RouterProvider
@@ -50,7 +61,7 @@ frontend/
     lib/
       api-client.ts                    # ky ベース HTTPクライアント (JWT自動付与)
       utils.ts                         # cn() (clsx + tailwind-merge)
-      layout-utils.ts                  # toRGLLayout(), fromRGLLayout() [NEW]
+      layout-utils.ts                  # toRGLLayout(), fromRGLLayout()
       api/
         index.ts                       # barrel export
         auth.ts                        # authApi
@@ -93,7 +104,7 @@ frontend/
         use-datasets.test.ts           # データセット hooks テスト
       lib/
         api-client.test.ts             # HTTP クライアントテスト
-        layout-utils.test.ts           # レイアウトユーティリティテスト [NEW]
+        layout-utils.test.ts           # レイアウトユーティリティテスト
         utils.test.ts                  # cn() ユーティリティテスト
         api/
           auth.test.ts                 # authApi テスト
@@ -329,7 +340,47 @@ lib/api-client.ts (ky ベース)
 Radix UI + Tailwind CSS ベース:
 `alert-dialog`, `badge`, `button`, `card`, `dialog`, `dropdown-menu`, `form`, `input`, `label`, `separator`, `sheet`, `table`
 
-## テストインフラストラクチャ
+## E2E テスト (Playwright) [NEW]
+
+### 構成
+
+| ファイル | テスト数 | 対象 |
+|---------|---------|------|
+| `auth.spec.ts` | 5 | 未認証リダイレクト、バリデーション、認証失敗、ログイン/ログアウト、ログイン済リダイレクト |
+| `dataset.spec.ts` | 3 | CSVインポート+詳細確認、一覧+削除、プレビュー表示 |
+| `card-dashboard.spec.ts` | 4 | カード作成、ダッシュボード作成+閲覧、一覧閲覧、カード削除 |
+
+### テストヘルパー
+
+| ヘルパー | ファイル | 用途 |
+|---------|---------|------|
+| `loginViaUI(page, email, password)` | login-helper.ts | UI 経由でログインして /dashboards へ遷移 |
+| `getAccessToken(email, password)` | api-helper.ts | API 経由でアクセストークン取得 |
+| `createDataset(token, name, csv)` | api-helper.ts | API 経由でデータセット作成 |
+| `createCard(token, name, datasetId, code?)` | api-helper.ts | API 経由でカード作成 |
+| `createDashboard(token, name, cardIds?)` | api-helper.ts | API 経由でダッシュボード作成 |
+| `deleteDataset/Card/Dashboard(token, id)` | api-helper.ts | API 経由で各リソース削除 |
+| `cleanupTestData(token, cleanup)` | api-helper.ts | テストデータ一括削除 (Dashboard->Card->Dataset順) |
+
+### テストデータ管理
+
+- テストユーザ: `e2e@example.com` / `Test@1234` (`scripts/seed_test_user.py` で作成)
+- `beforeEach`: loginViaUI() でログイン + cleanup トラッキング初期化
+- `afterEach`: cleanupTestData() で作成したリソースを逆順削除
+- サンプルCSV: `e2e/sample-data/test-sales.csv` (date, product, amount, quantity)
+
+### Playwright 設定
+
+- `testDir`: `./e2e`
+- `baseURL`: `http://localhost:3000`
+- `workers`: 1 (DynamoDB Local 共有のため)
+- `fullyParallel`: false
+- `timeout`: 60s (Docker 環境考慮)
+- `globalSetup`: バックエンド /api/health ポーリング (最大30回, 2秒間隔)
+- ブラウザ: Chromium のみ
+- 失敗時: screenshot, video (retain-on-failure), trace (on-first-retry)
+
+## ユニットテストインフラストラクチャ
 
 ### 設定 (vitest.config.ts)
 - 環境: jsdom
@@ -366,7 +417,7 @@ Radix UI + Tailwind CSS ベース:
 | Components/card | 2 | CardEditor, CardPreview |
 | Components/dashboard | 4 | AddCardDialog, CardContainer, DashboardEditor, DashboardViewer |
 | Pages | 9 | Login, DashboardList/View/Edit, DatasetList/Import/Detail, CardList/Edit |
-| **合計** | **37** | **83.07% statement coverage** |
+| **合計 (Unit)** | **37** | **83.07% statement coverage** |
 
 ## 関連コードマップ
 

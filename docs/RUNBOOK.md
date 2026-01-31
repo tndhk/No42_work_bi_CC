@@ -1,8 +1,8 @@
 # 運用ランブック (RUNBOOK)
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-02-01
 **プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q3 完了 (Frontend Test Expansion)
+**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) 完了
 
 ---
 
@@ -139,7 +139,8 @@ docker compose run --rm dynamodb-init
 |-------------|---------|------|
 | フロントエンド lint | `cd frontend && npm run lint` | エラー 0 |
 | フロントエンド typecheck | `cd frontend && npm run typecheck` | エラー 0 |
-| フロントエンド テスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 227+ tests pass |
+| フロントエンド ユニットテスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 227+ tests pass |
+| フロントエンド E2Eテスト | `cd frontend && npm run e2e` | 全テスト pass (Auth: 5, Dataset: 3, Card/Dashboard: 5) |
 | バックエンド lint | `cd backend && ruff check app/` | エラー 0 |
 | バックエンド typecheck | `cd backend && mypy app/` | エラー 0 |
 | バックエンド テスト | `cd backend && pytest --cov=app` | pass |
@@ -598,9 +599,9 @@ aws ecs update-service \
 
 ## 11. テスト品質ダッシュボード
 
-### 11.1 現在のカバレッジ (Phase Q3 完了時点)
+### 11.1 現在のカバレッジ (Phase Q4 + Q5 完了時点)
 
-**フロントエンド (frontend/):**
+**フロントエンド ユニットテスト (frontend/):**
 
 | メトリクス | 値 |
 |-----------|-----|
@@ -608,6 +609,15 @@ aws ecs update-service \
 | テストケース | 227 |
 | Statements | 83.07% |
 | フレームワーク | Vitest 1.x + @testing-library/react 14.x |
+
+**フロントエンド E2Eテスト (frontend/e2e/):**
+
+| メトリクス | 値 |
+|-----------|-----|
+| テストスイート | 3 (auth.spec.ts, dataset.spec.ts, card-dashboard.spec.ts) |
+| テストケース | 13 (Auth: 5, Dataset: 3, Card/Dashboard: 5) |
+| フレームワーク | Playwright 1.58+ (Chromium) |
+| テストユーザ | e2e@example.com (scripts/seed_test_user.py でSeed) |
 
 **テスト対象カバレッジ内訳:**
 

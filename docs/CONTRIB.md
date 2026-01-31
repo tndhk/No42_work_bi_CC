@@ -1,8 +1,8 @@
 # 開発者ガイド (CONTRIB)
 
-**最終更新:** 2026-01-31
+**最終更新:** 2026-02-01
 **プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q3 完了 (Frontend Test Expansion)
+**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) 完了
 
 ---
 
@@ -271,6 +271,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 | `npm run test:coverage` | `vitest --coverage` | カバレッジ付きでテストを実行 (@vitest/coverage-v8) |
 | `npm run lint` | `eslint . --ext ts,tsx` | ESLint による静的解析 (TypeScript/TSX対象) |
 | `npm run typecheck` | `tsc --noEmit` | TypeScript型チェックのみ実行 (ビルドなし) |
+| `npm run e2e` | `playwright test` | Playwright E2Eテストを実行 (ヘッドレスモード) |
+| `npm run e2e:ui` | `playwright test --ui` | Playwright UIモードでE2Eテストを実行 |
+| `npm run e2e:headed` | `playwright test --headed` | ブラウザを表示してE2Eテストを実行 (デバッグ用) |
+| `npm run e2e:report` | `playwright show-report` | 最後に実行したE2EテストのHTMLレポートを表示 |
 
 ### 5.2 バックエンド (Python)
 
@@ -316,6 +320,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 | スクリプト | 説明 |
 |-----------|------|
 | `scripts/init_tables.py` | DynamoDB テーブル作成 (9テーブル: bi_users, bi_groups, bi_datasets, bi_transforms, bi_cards, bi_dashboards, bi_dashboard_shares, bi_filter_views, bi_audit_logs) |
+| `scripts/seed_test_user.py` | E2Eテスト用ユーザ作成 (e2e@example.com / Test@1234) - DynamoDB Localに直接挿入 |
 
 ---
 
@@ -429,7 +434,52 @@ pytest --cov=app
 | `tests/test_sandbox.py` | SecureExecutor サンドボックス |
 | `tests/test_resource_limiter.py` | リソース制限 |
 
-### 6.4 CI統合テスト実行
+### 6.4 E2Eテスト (Playwright)
+
+**前提条件:**
+- Docker Compose で全サービスが起動していること
+- テストユーザがDynamoDB Localに登録されていること
+
+```bash
+# 1. Docker Compose で全サービスを起動
+docker-compose up -d --build
+
+# 2. テストユーザをSeed
+python scripts/seed_test_user.py
+
+# 3. E2Eテストを実行
+cd frontend
+npm run e2e
+
+# UIモードで実行 (テストを視覚的に確認)
+npm run e2e:ui
+
+# ブラウザを表示して実行 (デバッグ用)
+npm run e2e:headed
+
+# テストレポートを表示
+npm run e2e:report
+```
+
+**E2Eテスト構成:**
+
+| テストスイート | テストケース | 対象 |
+|---------------|------------|------|
+| `e2e/auth.spec.ts` | 5 | ログイン/ログアウト、未認証リダイレクト、バリデーション、認証失敗 |
+| `e2e/dataset.spec.ts` | 3 | CSVインポート、一覧表示・削除、プレビュー |
+| `e2e/card-dashboard.spec.ts` | 5 | Card作成、Dashboard作成・閲覧、削除 |
+
+**テストユーザ情報:**
+- Email: `e2e@example.com`
+- Password: `Test@1234`
+- User ID: `e2e-test-user-001`
+
+**注意事項:**
+- E2Eテストは`workers: 1`でシングルワーカー実行 (DynamoDB Localの共有のため)
+- テストはグローバルセットアップでAPIヘルスチェックを実行してから開始
+- 各テストはクリーンアップ処理で作成したデータを自動削除
+
+### 6.5 CI統合テスト実行
 
 全コンポーネントのテストを一括で実行するフロー:
 
@@ -486,7 +536,6 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | react-grid-layout | ^1.4.4 | ダッシュボードグリッドレイアウト |
 | @monaco-editor/react | ^4.6.0 | Pythonコードエディタ |
 | ky | ^1.1.3 | HTTPクライアント |
-| date-fns | ^3.0.6 | 日付操作 |
 | tailwind-merge | ^3.4.0 | Tailwind CSSクラスマージ |
 
 **フロントエンド devDependencies:**
@@ -496,9 +545,11 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | vitest | ^1.1.0 | テストランナー |
 | @vitest/coverage-v8 | ^1.1.0 | カバレッジ計測 |
 | @vitest/ui | ^1.1.0 | テストUI |
+| @playwright/test | ^1.58.1 | E2Eテストフレームワーク |
 | @testing-library/react | ^14.1.2 | コンポーネントテスト |
 | @testing-library/jest-dom | ^6.1.5 | DOMマッチャー |
 | @testing-library/user-event | ^14.5.1 | ユーザインタラクションシミュレーション |
+| @types/react-grid-layout | ^1.3.6 | react-grid-layout型定義 |
 | typescript | ^5.3.3 | 型システム |
 | vite | ^5.0.10 | ビルドツール |
 | tailwindcss | ^3.4.0 | CSSフレームワーク |
@@ -551,6 +602,7 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | GET | `/api/dashboards/{id}` | ダッシュボード詳細取得 |
 | PUT | `/api/dashboards/{id}` | ダッシュボード更新 |
 | DELETE | `/api/dashboards/{id}` | ダッシュボード削除 |
+| POST | `/api/dashboards/{id}/clone` | ダッシュボードをクローン (名前に「(Copy)」を付加) |
 | GET | `/api/dashboards/{id}/referenced-datasets` | 参照データセット一覧 |
 
 ### 7.4 フロントエンドルート一覧

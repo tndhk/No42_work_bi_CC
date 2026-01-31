@@ -1,6 +1,6 @@
 # バックエンド コードマップ
 
-**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
 **フレームワーク:** FastAPI 0.109 / Python 3.11+
 **エントリポイント:** `backend/app/main.py`
 
@@ -16,12 +16,13 @@ backend/
     api/
       __init__.py                    # (空)
       deps.py                        # DI: DynamoDB, S3, 認証
+      response.py                    # api_response(), paginated_response() [NEW]
       routes/
         __init__.py                  # api_router 組み立て
-        auth.py                      # 認証 API
-        cards.py                     # カード CRUD + 実行
-        dashboards.py                # ダッシュボード CRUD
-        datasets.py                  # データセット CRUD + CSV インポート
+        auth.py                      # 認証 API (api_response ラップ済) [UPDATED]
+        cards.py                     # カード CRUD + 実行 (paginated, api_response) [UPDATED]
+        dashboards.py                # ダッシュボード CRUD + clone (paginated, api_response) [UPDATED]
+        datasets.py                  # データセット CRUD + CSV インポート (paginated, api_response) [UPDATED]
     core/
       __init__.py
       config.py                      # Settings (pydantic-settings)
@@ -54,7 +55,7 @@ backend/
       dataset_service.py             # DatasetService (CSV インポート + プレビュー)
       parquet_storage.py             # ParquetConverter, ParquetReader
       type_inferrer.py               # 型推論 (int, float, bool, date, string)
-  tests/                             # pytest テスト (29ファイル)
+  tests/                             # pytest テスト (37ファイル)
     conftest.py                      # 共通フィクスチャ
     core/                            # config, security, logging, password_policy テスト
     models/                          # common, user, dataset, card, dashboard テスト
@@ -63,37 +64,63 @@ backend/
     services/                        # csv_parser, parquet, dataset, card_execution,
                                      # dashboard, executor_client, type_inferrer テスト
     api/                             # health, routes テスト
+      routes/                        # auth, cards, dashboards, datasets テスト
   requirements.txt                   # pip 依存関係
   pyproject.toml                     # ruff, mypy, pytest 設定
 ```
 
+## APIレスポンスヘルパー (api/response.py) [NEW]
+
+```python
+def api_response(data: Any) -> dict:
+    """単体レスポンス: { "data": T }"""
+
+def paginated_response(items, total, limit, offset) -> dict:
+    """一覧レスポンス: { "data": [...], "pagination": { total, limit, offset, has_next } }"""
+```
+
+全ルートハンドラがこれらのヘルパーを使用してレスポンスをラップ。
+Frontend の `ApiResponse<T>` / `PaginatedResponse<T>` 型と整合。
+
 ## API ルート
 
-| メソッド | パス | ハンドラ | 説明 |
-|----------|------|---------|------|
-| GET | /api/health | main.health | ヘルスチェック |
-| POST | /api/auth/login | auth.login | ログイン (レート制限 5/min) |
-| POST | /api/auth/logout | auth.logout | ログアウト |
-| GET | /api/auth/me | auth.get_me | 現在ユーザー取得 |
-| GET | /api/datasets | datasets.list_datasets | データセット一覧 |
-| POST | /api/datasets | datasets.create_dataset | CSV インポート (multipart) |
-| GET | /api/datasets/:id | datasets.get_dataset | データセット詳細 |
-| PUT | /api/datasets/:id | datasets.update_dataset | データセット更新 |
-| DELETE | /api/datasets/:id | datasets.delete_dataset | データセット削除 |
-| GET | /api/datasets/:id/preview | datasets.get_dataset_preview | データプレビュー |
-| GET | /api/cards | cards.list_cards | カード一覧 |
-| POST | /api/cards | cards.create_card | カード作成 |
-| GET | /api/cards/:id | cards.get_card | カード詳細 |
-| PUT | /api/cards/:id | cards.update_card | カード更新 |
-| DELETE | /api/cards/:id | cards.delete_card | カード削除 |
-| POST | /api/cards/:id/preview | cards.preview_card | プレビュー実行 (キャッシュ無し) |
-| POST | /api/cards/:id/execute | cards.execute_card | カード実行 (キャッシュ有) |
-| GET | /api/dashboards | dashboards.list_dashboards | ダッシュボード一覧 |
-| POST | /api/dashboards | dashboards.create_dashboard | ダッシュボード作成 |
-| GET | /api/dashboards/:id | dashboards.get_dashboard | ダッシュボード詳細 |
-| PUT | /api/dashboards/:id | dashboards.update_dashboard | ダッシュボード更新 |
-| DELETE | /api/dashboards/:id | dashboards.delete_dashboard | ダッシュボード削除 |
-| GET | /api/dashboards/:id/referenced-datasets | dashboards.get_referenced_datasets | 参照データセット |
+| メソッド | パス | ハンドラ | 説明 | レスポンス形式 |
+|----------|------|---------|------|---------------|
+| GET | /api/health | main.health | ヘルスチェック | `{ status }` |
+| POST | /api/auth/login | auth.login | ログイン (5/min) | api_response |
+| POST | /api/auth/logout | auth.logout | ログアウト | api_response |
+| GET | /api/auth/me | auth.get_me | 現在ユーザー | api_response |
+| GET | /api/datasets | datasets.list_datasets | データセット一覧 | paginated_response |
+| POST | /api/datasets | datasets.create_dataset | CSV インポート | api_response |
+| GET | /api/datasets/:id | datasets.get_dataset | データセット詳細 | api_response |
+| PUT | /api/datasets/:id | datasets.update_dataset | データセット更新 | api_response |
+| DELETE | /api/datasets/:id | datasets.delete_dataset | データセット削除 | 204 No Content |
+| GET | /api/datasets/:id/preview | datasets.get_dataset_preview | データプレビュー | api_response |
+| GET | /api/cards | cards.list_cards | カード一覧 | paginated_response |
+| POST | /api/cards | cards.create_card | カード作成 | api_response |
+| GET | /api/cards/:id | cards.get_card | カード詳細 | api_response |
+| PUT | /api/cards/:id | cards.update_card | カード更新 | api_response |
+| DELETE | /api/cards/:id | cards.delete_card | カード削除 | 204 No Content |
+| POST | /api/cards/:id/preview | cards.preview_card | プレビュー実行 | api_response |
+| POST | /api/cards/:id/execute | cards.execute_card | カード実行 | api_response |
+| GET | /api/dashboards | dashboards.list_dashboards | ダッシュボード一覧 | paginated_response |
+| POST | /api/dashboards | dashboards.create_dashboard | ダッシュボード作成 | api_response |
+| GET | /api/dashboards/:id | dashboards.get_dashboard | ダッシュボード詳細 | api_response |
+| PUT | /api/dashboards/:id | dashboards.update_dashboard | ダッシュボード更新 | api_response |
+| DELETE | /api/dashboards/:id | dashboards.delete_dashboard | ダッシュボード削除 | 204 No Content |
+| POST | /api/dashboards/:id/clone | dashboards.clone_dashboard | ダッシュボード複製 [NEW] | api_response |
+| GET | /api/dashboards/:id/referenced-datasets | dashboards.get_referenced_datasets | 参照データセット | api_response |
+
+### ページネーション仕様 [NEW]
+
+一覧エンドポイント (datasets, cards, dashboards) は共通のページネーションパラメータを受け付ける:
+
+| パラメータ | 型 | デフォルト | 制約 |
+|-----------|-----|----------|------|
+| `limit` | int | 50 | 1-100 |
+| `offset` | int | 0 | >= 0 |
+
+レスポンス: `{ data: [...], pagination: { total, limit, offset, has_next } }`
 
 ## 依存関係グラフ
 
@@ -104,22 +131,26 @@ main.py
   +-- api/routes/__init__.py (api_router)
         +-- routes/auth.py
         |     +-- api/deps.py
+        |     +-- api/response.py (api_response) [NEW]
         |     +-- core/security.py
         |     +-- repositories/user_repository.py
         |     +-- models/user.py
         +-- routes/cards.py
         |     +-- api/deps.py
+        |     +-- api/response.py (api_response, paginated_response) [NEW]
         |     +-- models/card.py, user.py
         |     +-- repositories/card_repository.py, dataset_repository.py
         |     +-- services/card_execution_service.py
         |     +-- core/config.py
         +-- routes/dashboards.py
         |     +-- api/deps.py
+        |     +-- api/response.py (api_response, paginated_response) [NEW]
         |     +-- models/dashboard.py, user.py
         |     +-- repositories/dashboard_repository.py
         |     +-- services/dashboard_service.py
         +-- routes/datasets.py
               +-- api/deps.py
+              +-- api/response.py (api_response, paginated_response) [NEW]
               +-- models/dataset.py, user.py
               +-- repositories/dataset_repository.py
               +-- services/dataset_service.py
@@ -207,6 +238,15 @@ class BaseRepository(Generic[T]):
 - `DashboardRepository.list_by_owner()` - GSI `DashboardsByOwner`
 - `DatasetRepository.list_by_owner()` - GSI `DatasetsByOwner`
 
+## ダッシュボードクローン [NEW]
+
+`POST /api/dashboards/:id/clone`:
+1. ソースダッシュボードを取得
+2. 名前に " (Copy)" を追加
+3. layout, filters, description をコピー
+4. owner_id を現在ユーザーに設定
+5. 新規ダッシュボードとして作成
+
 ## カード実行フロー詳細
 
 ```
@@ -220,6 +260,14 @@ CardExecutionService.execute()
   4. 結果を CardCacheService.set() で保存
   5. return CardExecutionResult(cached=false)
 ```
+
+## ルート内ヘルパー関数
+
+| 関数 | ファイル | 用途 |
+|------|---------|------|
+| `_check_owner_permission(card, user_id)` | routes/cards.py | カードオーナー権限チェック (403) |
+
+dashboards.py, datasets.py はインラインで owner_id チェックを実施。
 
 ## セキュリティ
 

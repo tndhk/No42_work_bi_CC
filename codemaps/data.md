@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-**最終更新:** 2026-01-31 (Phase Q3 Frontend Test Expansion 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
 **データベース:** DynamoDB (NoSQL) + S3 (Parquet)
 
 ---
@@ -259,6 +259,22 @@ class Dashboard(TimestampMixin):
 
 ---
 
+## APIレスポンスヘルパー (Backend) [NEW]
+
+```python
+# api/response.py
+def api_response(data: Any) -> Dict[str, Any]:
+    """{ "data": T }"""
+
+def paginated_response(items, total, limit, offset) -> Dict[str, Any]:
+    """{ "data": [...], "pagination": { "total", "limit", "offset", "has_next" } }"""
+```
+
+全ルートの返却値をこれらのヘルパーでラップし、
+Frontend の `ApiResponse<T>` / `PaginatedResponse<T>` 型と構造を統一。
+
+---
+
 ## Executor モデル
 
 ### api_models.py
@@ -386,6 +402,7 @@ interface DashboardUpdateRequest { name?: string; layout?: DashboardLayout; filt
                     |
                     +-- layout[].card_id --> Card
                     +-- filters[] --> FilterDefinition
+                    +-- clone --> new Dashboard (owner=current_user) [NEW]
 ```
 
 ## DynamoDB キーパターン (camelCase)
@@ -394,6 +411,17 @@ BaseRepository で自動変換:
 - Python: `snake_case` (created_at) <--> DynamoDB: `camelCase` (createdAt)
 - Python: `id` <--> DynamoDB: テーブル固有PK名 (userId, datasetId, etc.)
 - Python: `datetime` <--> DynamoDB: `Number` (UNIX timestamp)
+
+## Backend <--> Frontend レスポンスマッピング [NEW]
+
+| Backend レスポンス | Frontend 型 | 備考 |
+|-------------------|------------|------|
+| `api_response(data)` | `ApiResponse<T>` | `{ data: T }` |
+| `paginated_response(...)` | `PaginatedResponse<T>` | `{ data: T[], pagination: Pagination }` |
+| HTTPException 4xx/5xx | `ApiErrorResponse` | `{ error: { code, message } }` |
+
+一覧 API (GET /datasets, /cards, /dashboards) は全て `paginated_response()` を使用し、
+`limit` / `offset` クエリパラメータを受け付ける (デフォルト: limit=50, offset=0)。
 
 ## 関連コードマップ
 

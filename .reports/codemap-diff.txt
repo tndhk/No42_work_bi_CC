@@ -1,178 +1,212 @@
 ==============================================================================
 コードマップ差分レポート
-生成日時: 2026-01-31
-トリガー: Phase Q3 Frontend Test Expansion 完了
+生成日時: 2026-02-01
+トリガー: Phase Q4 (E2E テスト) + Phase Q5 (クリーンアップ) 完了
 ==============================================================================
 
-状態: 既存コードマップからの更新 (前回: 2026-01-31 初回生成)
+状態: 既存コードマップからの更新 (前回: 2026-01-31 Phase Q3 完了後)
 
 ------------------------------------------------------------------------------
 変更概要
 ------------------------------------------------------------------------------
 
 今回の更新トリガー:
-- Phase Q3 Frontend テスト拡張 (37テストファイル, 227テスト, 83.07% coverage)
-- react-grid-layout 導入 (DashboardEditor/DashboardViewer リファクタ)
-- layout-utils.ts 新規モジュール追加
-- lucide-react アイコンライブラリ追加
+- backend/app/api/response.py 追加 (APIレスポンス標準化)
+- backend/app/api/routes/*.py 更新 (api_response/paginated_response ラップ、clone追加)
+- frontend/e2e/ ディレクトリ追加 (Playwright E2E テスト 3スペック, 12テスト)
+- frontend/playwright.config.ts 追加
+- scripts/seed_test_user.py 追加 (E2E テスト用ユーザSeed)
+- docker-compose.yml 更新 (全サービスにヘルスチェック追加)
+- package.json 更新 (@playwright/test 追加、e2e スクリプト追加)
 
 ------------------------------------------------------------------------------
 ファイルごとの差分率
 ------------------------------------------------------------------------------
 
                        旧行数   新行数   差分行数   差分率    判定
-architecture.md          178      211      +33     18.5%    AUTO UPDATE
-backend.md               228      236       +8      3.5%    AUTO UPDATE
-frontend.md              252      375     +123     48.8%    AUTO UPDATE (※)
-data.md                  402      402       +0      0.0%    TIMESTAMP ONLY
+architecture.md          211      263      +52     24.6%    AUTO UPDATE
+backend.md               236      284      +48     20.3%    AUTO UPDATE
+frontend.md              375      426      +51     13.6%    AUTO UPDATE
+data.md                  402      430      +28      7.0%    AUTO UPDATE
 ------------------------------------------------------------------------------
-合計                    1060     1224     +164     15.5%    AUTO UPDATE
+合計                    1224     1403     +179     14.6%    AUTO UPDATE
 
-※ frontend.md は 48.8% の変更率だが、追加のみ (既存セクション削除なし) のため
-  自動更新として処理。変更内容は新規セクション追加が主。
-
-全体差分率: 15.5% (閾値 30% 未満 --> 自動更新承認)
+全体差分率: 14.6% (閾値 30% 未満 --> 自動更新承認)
 
 ------------------------------------------------------------------------------
-architecture.md の変更内容 (+33行, 18.5%)
+architecture.md の変更内容 (+52行, 24.6%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
-[UPDATED] ディレクトリ構造 -- __tests__/ の記述追加 (37ファイル, 227テスト, 83.07%)
-[UPDATED] ディレクトリ構造 -- vitest.config.ts, codemaps/ 記載追加
-[UPDATED] ディレクトリ構造 -- tests/ のファイル数注記追加 (backend:29, executor:6)
-[NEW]     データフロー: ダッシュボード表示 -- react-grid-layout フロー記述
-[UPDATED] Frontend 依存ライブラリ -- react-grid-layout 1.4.4 追加
-[UPDATED] Frontend 依存ライブラリ -- lucide-react 0.563.0 追加
-[NEW]     Frontend テストライブラリ一覧 (vitest, testing-library, jsdom)
-[NEW]     テストインフラストラクチャ概要テーブル (3領域)
+[UPDATED] 最終更新タイムスタンプ (Phase Q4 E2E + Q5 クリーンアップ 注記)
+[UPDATED] サービス一覧テーブル -- ヘルスチェック列追加
+[NEW]     docker-compose サービス起動順序 セクション
+          (healthcheck + depends_on: condition: service_healthy の説明)
+[UPDATED] ディレクトリ構造 -- api/ 記述に "レスポンスヘルパー" 追加
+[UPDATED] ディレクトリ構造 -- tests/ ファイル数更新 (29 -> 37)
+[NEW]     ディレクトリ構造 -- e2e/ ディレクトリ記述追加
+[NEW]     ディレクトリ構造 -- playwright.config.ts 記述追加
+[NEW]     ディレクトリ構造 -- scripts/seed_test_user.py 記述追加
+[UPDATED] サービス間通信 -- clone ルート追加
+[UPDATED] 認証フロー -- api_response() ラップ記述追加
+[UPDATED] データフロー: CSV インポート -- api_response() ステップ追加
+[UPDATED] データフロー: カード実行 -- api_response() ステップ追加
+[NEW]     APIレスポンス標準化 セクション (api_response, paginated_response 説明)
+[UPDATED] Frontend テストライブラリ -- @playwright/test 1.58.1 追加
+[UPDATED] テストインフラストラクチャ -- E2E 行追加、Backend ファイル数修正
+[NEW]     E2E テスト構成 セクション (ディレクトリ構造 + Playwright 設定説明)
 
 ------------------------------------------------------------------------------
-backend.md の変更内容 (+8行, 3.5%)
+backend.md の変更内容 (+48行, 20.3%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
-[UPDATED] tests/ セクション -- ファイル数 (29) 追記
-[NEW]     tests/ ディレクトリ構造詳細 (conftest, core, models, db, repositories,
-          services, api サブディレクトリの説明)
+[UPDATED] 最終更新タイムスタンプ (Phase Q4 E2E + Q5 クリーンアップ 注記)
+[NEW]     ディレクトリ構造 -- response.py [NEW] 記述追加
+[UPDATED] ディレクトリ構造 -- routes/*.py に [UPDATED] タグ (api_response/paginated)
+[UPDATED] ディレクトリ構造 -- tests/ ファイル数更新 (29 -> 37)
+[NEW]     APIレスポンスヘルパー セクション (api_response, paginated_response)
+[UPDATED] API ルートテーブル -- レスポンス形式列追加 (api_response/paginated_response)
+[NEW]     API ルートテーブル -- POST /dashboards/:id/clone 追加
+[NEW]     ページネーション仕様 セクション (limit/offset パラメータ)
+[UPDATED] 依存関係グラフ -- 全 routes に api/response.py への依存追加
+[NEW]     ダッシュボードクローン セクション (clone フロー説明)
+[NEW]     ルート内ヘルパー関数 テーブル (_check_owner_permission)
 
 ------------------------------------------------------------------------------
-frontend.md の変更内容 (+123行, 48.8%)
+frontend.md の変更内容 (+51行, 13.6%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (Phase Q3 注記追加)
-[NEW]     テストカバレッジ統計をヘッダーに追加
-[NEW]     vitest.config.ts をディレクトリ構造に追加
-[UPDATED] DashboardEditor.tsx 記述 -- "グリッドレイアウト編集 (react-grid-layout)"
-[UPDATED] DashboardViewer.tsx 記述 -- "ダッシュボード表示 (react-grid-layout)"
-[NEW]     lib/layout-utils.ts -- [NEW] タグ付きで追加
-[NEW]     __tests__/ ディレクトリ構造 -- 全37ファイルの完全リスト
-          (setup.ts, vitest.d.ts, helpers/, App.test, types/, stores/,
-           hooks/, lib/, lib/api/, components/common/, components/card/,
-           components/dashboard/, pages/)
-[UPDATED] DashboardViewPage 依存 -- ResponsiveGridLayout, toRGLLayout 追加
-[UPDATED] DashboardEditPage 依存 -- ResponsiveGridLayout, toRGLLayout,
-          fromRGLLayout, X icon (lucide-react) 追加
-[NEW]     レイアウトユーティリティ セクション -- toRGLLayout/fromRGLLayout 詳細
-[NEW]     ダッシュボードグリッドレイアウト セクション -- ResponsiveGridLayout 設定
-          (breakpoints, cols, rowHeight, compactType, 編集/閲覧モード差分)
-[NEW]     テストインフラストラクチャ セクション (3サブセクション):
-          - vitest.config.ts 設定詳細
-          - test-utils.tsx ユーティリティ一覧 (10関数)
-          - テストカバレッジマトリクス (10カテゴリ, 37ファイル)
+[UPDATED] 最終更新タイムスタンプ (Phase Q4 E2E + Q5 クリーンアップ 注記)
+[UPDATED] ヘッダー テストカバレッジ -- E2E 統計追加
+[NEW]     ディレクトリ構造 -- playwright.config.ts 記述
+[NEW]     ディレクトリ構造 -- e2e/ 全ファイル記述 (6ファイル + 2サブディレクトリ)
+[NEW]     E2E テスト (Playwright) セクション:
+          - 構成テーブル (3スペック, 12テスト)
+          - テストヘルパーテーブル (7関数)
+          - テストデータ管理 (テストユーザ、beforeEach/afterEach パターン)
+          - Playwright 設定詳細
+[UPDATED] テストインフラストラクチャ --> "ユニットテストインフラストラクチャ" にリネーム
 
 ------------------------------------------------------------------------------
-data.md の変更内容 (+0行, 0.0%)
+data.md の変更内容 (+28行, 7.0%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプのみ (Phase Q3 注記追加)
-          データモデル/スキーマに構造変更なし
+[UPDATED] 最終更新タイムスタンプ (Phase Q4 E2E + Q5 クリーンアップ 注記)
+[NEW]     APIレスポンスヘルパー (Backend) セクション
+          (api_response, paginated_response のコードとFrontend型との対応)
+[UPDATED] エンティティ関係図 -- clone --> new Dashboard 追加
+[NEW]     Backend <--> Frontend レスポンスマッピング テーブル
+          (api_response -> ApiResponse, paginated_response -> PaginatedResponse,
+           HTTPException -> ApiErrorResponse)
 
 ------------------------------------------------------------------------------
 スキャン統計 (更新後)
 ------------------------------------------------------------------------------
 
 Backend (app/):
-  ソースファイル:      36 (.py)  [変更なし]
-  テストファイル:      29 (.py)  [変更なし]
+  ソースファイル:      37 (.py)  [前回: 36 --> +1 (response.py)]
+  テストファイル:      37 (.py)  [前回: 29 --> +8 (routes テスト追加)]
   ルートモジュール:     4       [変更なし]
   モデルモジュール:     5       [変更なし]
   リポジトリ:          5       [変更なし]
   サービス:            6       [変更なし]
   コアモジュール:      4       [変更なし]
   DB接続:              2       [変更なし]
+  APIヘルパー:         1       [NEW: response.py]
 
 Frontend (src/):
-  ソースファイル:      61 (.ts/.tsx)  [前回: 61 --> 変更なし ※ layout-utils.ts は
-                                        lib/ 配下で前回カウント外だった可能性]
-  実質ソースファイル:  60 (非テスト)  [前回比: +1 (layout-utils.ts)]
-  テストファイル:      37 (.ts/.tsx)  [前回: 記載なし --> +37 NEW]
-  テスト数:          227             [前回: 記載なし --> +227 NEW]
-  カバレッジ:       83.07%           [前回: 記載なし --> NEW]
+  ソースファイル:     100 (.ts/.tsx)  [前回: 100 (含テスト) --> 変更なし]
+  実質ソースファイル:  60 (非テスト)  [変更なし]
+  テストファイル:      40 (.ts/.tsx)  [前回: 37 --> +3 (vitest.d.ts等カウント差)]
+  テスト数:          227             [変更なし (Unit)]
+  カバレッジ:       83.07%           [変更なし]
   ページ:              9             [変更なし]
   コンポーネント:     19             [変更なし]
   Hooks:               4 ファイル --> 20 export   [変更なし]
   API クライアント:    5             [変更なし]
   型定義:              5 ファイル    [変更なし]
   ストア:              1             [変更なし]
-  新規追加ファイル:
-    - src/lib/layout-utils.ts        (toRGLLayout, fromRGLLayout)
 
-  新規依存関係:
-    - react-grid-layout ^1.4.4       (ダッシュボードグリッドレイアウト)
-    - @types/react-grid-layout ^1.3.6 (型定義)
-    - lucide-react ^0.563.0          (アイコン)
+Frontend (e2e/) [NEW]:
+  E2E テストファイル:   6 (.ts)
+    - 3 spec ファイル (auth, dataset, card-dashboard)
+    - 1 global-setup.ts
+    - 2 helper ファイル (login-helper, api-helper)
+  テスト数:           12
+  サンプルデータ:      1 (test-sales.csv)
 
-  変更ファイル:
-    - src/components/dashboard/DashboardEditor.tsx  (react-grid-layout 導入)
-    - src/components/dashboard/DashboardViewer.tsx   (react-grid-layout 導入)
+Scripts:
+  スクリプトファイル:   2 (.py)  [前回: 1 --> +1 (seed_test_user.py)]
 
 Executor (app/):
-  ソースファイル:       7 (.py)  [変更なし ※前回6と記載していたが__init__.py含めると7]
-  テストファイル:       6         [変更なし]
+  ソースファイル:       7 (.py)  [変更なし]
+  テストファイル:       7         [変更なし]
 
 Docs:
   9 ドキュメント       [変更なし]
 
 ------------------------------------------------------------------------------
-テスト拡張詳細 (Phase Q3)
+新規ファイル一覧
 ------------------------------------------------------------------------------
 
-テストカテゴリ別内訳:
-  App:                   1 ファイル
-  Types/TypeGuards:      1 ファイル
-  Stores:                1 ファイル
-  Hooks:                 4 ファイル (auth, cards, dashboards, datasets)
-  Lib:                   3 ファイル (api-client, layout-utils, utils)
-  Lib/API:               4 ファイル (auth, cards, dashboards, datasets)
-  Components/common:     8 ファイル (全 common コンポーネント)
-  Components/card:       2 ファイル (CardEditor, CardPreview)
-  Components/dashboard:  4 ファイル (AddCardDialog, CardContainer,
-                                     DashboardEditor, DashboardViewer)
-  Pages:                 9 ファイル (全ページコンポーネント)
+Backend:
+  + backend/app/api/response.py           (api_response, paginated_response)
 
-テストインフラ:
-  - vitest.config.ts:    jsdom 環境, V8 coverage, 80% threshold
-  - setup.ts:            jest-dom matchers, react-grid-layout CSS mock
-  - test-utils.tsx:      renderWithProviders, createWrapper,
-                          factory 関数 (User, Dataset, Card, Dashboard,
-                          PaginatedResponse), auth state helpers
+Frontend:
+  + frontend/playwright.config.ts          (E2E テスト設定)
+  + frontend/e2e/global-setup.ts           (バックエンド起動待機)
+  + frontend/e2e/auth.spec.ts              (認証 E2E テスト)
+  + frontend/e2e/dataset.spec.ts           (データセット E2E テスト)
+  + frontend/e2e/card-dashboard.spec.ts    (カード+ダッシュボード E2E テスト)
+  + frontend/e2e/helpers/login-helper.ts   (UI ログインヘルパー)
+  + frontend/e2e/helpers/api-helper.ts     (テストデータ CRUD ヘルパー)
+  + frontend/e2e/sample-data/test-sales.csv (サンプル CSV)
+
+Scripts:
+  + scripts/seed_test_user.py              (E2E テストユーザ作成)
+
+------------------------------------------------------------------------------
+変更ファイル一覧
+------------------------------------------------------------------------------
+
+Backend:
+  ~ backend/app/api/routes/auth.py         (api_response ラップ適用)
+  ~ backend/app/api/routes/cards.py        (api_response/paginated_response, ページネーション)
+  ~ backend/app/api/routes/dashboards.py   (api_response/paginated_response, clone 追加)
+  ~ backend/app/api/routes/datasets.py     (api_response/paginated_response, ページネーション)
+
+Infrastructure:
+  ~ docker-compose.yml                     (全サービス healthcheck 追加)
+  ~ frontend/package.json                  (@playwright/test 追加, e2e スクリプト追加)
 
 ------------------------------------------------------------------------------
 検出された構造パターン (更新)
 ------------------------------------------------------------------------------
 
-1-5: [変更なし -- 前回レポート参照]
+1-7: [変更なし -- 前回レポート参照]
 
-6. レイアウトユーティリティパターン [NEW]
-   react-grid-layout の Layout[] <--> アプリケーション LayoutItem[] 間の
-   型変換ブリッジ。DashboardEditor/DashboardViewer の両方で共有。
-   card_id <--> i (RGL identifier) の双方向マッピング。
+8. APIレスポンス標準化パターン [NEW]
+   全ルートハンドラが api/response.py のヘルパー関数を使用して
+   レスポンスをラップ。Frontend の ApiResponse<T> / PaginatedResponse<T>
+   型と構造的に整合。ラッパー不一致の問題は解消済み。
 
-7. テストユーティリティパターン [NEW]
-   renderWithProviders: QueryClientProvider + MemoryRouter ラッパー
-   createWrapper: renderHook 用の Provider ラッパー
-   Factory 関数: createMockUser/Dataset/Card/Dashboard で一貫したテストデータ生成
+9. サーバサイドページネーションパターン [NEW]
+   一覧 API (datasets, cards, dashboards) が limit/offset クエリパラメータ
+   を受け付け、paginated_response() で { data, pagination } 形式を返却。
+   全リポジトリの list_by_owner() で全件取得後、Python 側でスライスする
+   アプリケーションレベルページネーション。
+
+10. ダッシュボードクローンパターン [NEW]
+    POST /dashboards/:id/clone でソースダッシュボードの layout/filters を
+    コピーし、新しい owner_id とサフィックス名で新規作成。
+
+11. E2E テストパターン [NEW]
+    Playwright + global-setup (ヘルスチェック) + helpers (loginViaUI, API direct)。
+    beforeEach で UI ログイン、afterEach で API 経由のデータクリーンアップ。
+    テストデータは逆依存順 (Dashboard -> Card -> Dataset) で削除。
+
+12. テストユーザSeedパターン [NEW]
+    scripts/seed_test_user.py で DynamoDB Local に冪等にテストユーザを挿入。
+    E2E テストの前提条件として使用。
 
 ------------------------------------------------------------------------------
 注意事項 (更新)
@@ -180,12 +214,23 @@ Docs:
 
 [継続] Executor の dataset_rows は将来拡張用で、現在 None 固定
 [継続] Frontend の types には OwnerRef, GroupRef 等 Backend 側に対応モデルが無い型がある
-[継続] dashboardsApi.clone() は Backend 側に対応ルートが無い (未実装)
-[継続] Frontend の lib/api/auth.ts は ApiResponse<T> ラッパーを期待するが、
-       Backend は直接モデルを返している (ラッパー不一致の可能性)
 
-[NEW]  DashboardEditor/DashboardViewer は react-grid-layout の Responsive +
+[解消] dashboardsApi.clone() は Backend 側に対応ルートが無い (未実装)
+       --> POST /api/dashboards/:id/clone が実装された
+
+[解消] Frontend の lib/api/auth.ts は ApiResponse<T> ラッパーを期待するが、
+       Backend は直接モデルを返している (ラッパー不一致の可能性)
+       --> 全ルートが api_response() でラップされ、整合性が確保された
+
+[継続] DashboardEditor/DashboardViewer は react-grid-layout の Responsive +
        WidthProvider を使用。CSS は __tests__/setup.ts でモック化されている。
-[NEW]  layout-utils.ts は pure function のみで副作用なし。テストカバー済み。
+[継続] layout-utils.ts は pure function のみで副作用なし。テストカバー済み。
+
+[NEW]  Backend の一覧ページネーションは全件取得後 Python スライスで実装。
+       大量データ時はパフォーマンス懸念あり。DynamoDB の LastEvaluatedKey
+       ベースのページネーションへの移行を検討。
+
+[NEW]  E2E テストは workers:1 (シングルスレッド) で実行。DynamoDB Local が
+       共有データベースのため、並列実行時にテスト間干渉の可能性あり。
 
 ==============================================================================

@@ -15,6 +15,7 @@ class FilterDefinition(BaseModel):
     column: str
     label: str
     multi_select: bool = False
+    options: Optional[list[str]] = None
 
 
 class LayoutItem(BaseModel):

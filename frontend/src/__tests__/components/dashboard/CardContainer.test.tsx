@@ -45,4 +45,16 @@ describe('CardContainer', () => {
     expect(srcDoc).toContain('Content-Security-Policy');
     expect(srcDoc).toContain("default-src 'none'");
   });
+
+  it('filterAppliedがfalseの場合はBadgeを表示しない', () => {
+    render(<CardContainer cardId="test-card" html="<div>Test</div>" filterApplied={false} />);
+
+    expect(screen.queryByText('filtered')).not.toBeInTheDocument();
+  });
+
+  it('filterAppliedがtrueの場合はBadgeを表示する', () => {
+    render(<CardContainer cardId="test-card" html="<div>Test</div>" filterApplied={true} />);
+
+    expect(screen.getByText('filtered')).toBeInTheDocument();
+  });
 });

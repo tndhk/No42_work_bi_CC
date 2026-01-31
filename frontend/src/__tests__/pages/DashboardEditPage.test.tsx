@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DashboardEditPage } from '@/pages/DashboardEditPage';
 import { createWrapper, createMockDashboard } from '@/__tests__/helpers/test-utils';
@@ -28,6 +29,18 @@ vi.mock('@/components/dashboard/DashboardEditor', () => ({
 
 vi.mock('@/components/dashboard/AddCardDialog', () => ({
   AddCardDialog: () => <div data-testid="add-card-dialog">Add Card Dialog</div>,
+}));
+
+vi.mock('@/components/dashboard/FilterConfigPanel', () => ({
+  FilterConfigPanel: ({ filters }: any) => (
+    <div data-testid="filter-config-panel">{filters.length} filters configured</div>
+  ),
+}));
+
+vi.mock('@/lib/api', () => ({
+  dashboardsApi: {
+    getReferencedDatasets: vi.fn(() => Promise.resolve([])),
+  },
 }));
 
 import { useDashboard } from '@/hooks';
@@ -79,7 +92,7 @@ describe('DashboardEditPage', () => {
     });
 
     mockUseDashboard.mockReturnValue({
-      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 } },
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
       isLoading: false,
     } as any);
 
@@ -103,7 +116,7 @@ describe('DashboardEditPage', () => {
     });
 
     mockUseDashboard.mockReturnValue({
-      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 } },
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
       isLoading: false,
     } as any);
 
@@ -126,7 +139,7 @@ describe('DashboardEditPage', () => {
     });
 
     mockUseDashboard.mockReturnValue({
-      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 } },
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
       isLoading: false,
     } as any);
 
@@ -149,7 +162,7 @@ describe('DashboardEditPage', () => {
     });
 
     mockUseDashboard.mockReturnValue({
-      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 } },
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
       isLoading: false,
     } as any);
 
@@ -163,5 +176,89 @@ describe('DashboardEditPage', () => {
     );
 
     expect(screen.getByTestId('dashboard-editor')).toBeInTheDocument();
+  });
+
+  it('フィルタ設定ボタンがある', () => {
+    const dashboard = createMockDashboard({
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+    });
+
+    mockUseDashboard.mockReturnValue({
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+      isLoading: false,
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+        <Routes>
+          <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByRole('button', { name: /フィルタ設定/ })).toBeInTheDocument();
+  });
+
+  it('フィルタ設定ボタンクリックでFilterConfigPanelを表示する', async () => {
+    const user = userEvent.setup();
+    const dashboard = createMockDashboard({
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+    });
+
+    mockUseDashboard.mockReturnValue({
+      data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+      isLoading: false,
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+        <Routes>
+          <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+      { wrapper: createWrapper() }
+    );
+
+    // Initially hidden
+    expect(screen.queryByTestId('filter-config-panel')).not.toBeInTheDocument();
+
+    // Show
+    await user.click(screen.getByRole('button', { name: /フィルタ設定/ }));
+    expect(screen.getByTestId('filter-config-panel')).toBeInTheDocument();
+  });
+
+  it('ダッシュボードの既存フィルタをFilterConfigPanelに渡す', async () => {
+    const user = userEvent.setup();
+    const dashboard = createMockDashboard({
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+    });
+
+    mockUseDashboard.mockReturnValue({
+      data: {
+        ...dashboard,
+        layout: { cards: [], columns: 12, row_height: 100 },
+        filters: [
+          { id: 'f1', type: 'category', column: 'region', label: 'Region' },
+          { id: 'f2', type: 'date_range', column: 'date', label: 'Date' },
+        ],
+      },
+      isLoading: false,
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+        <Routes>
+          <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+        </Routes>
+      </MemoryRouter>,
+      { wrapper: createWrapper() }
+    );
+
+    await user.click(screen.getByRole('button', { name: /フィルタ設定/ }));
+    expect(screen.getByText('2 filters configured')).toBeInTheDocument();
   });
 });

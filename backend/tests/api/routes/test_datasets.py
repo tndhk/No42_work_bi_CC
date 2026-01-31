@@ -440,3 +440,64 @@ class TestGetDatasetPreview:
             )
 
             assert response.status_code == 404
+
+
+class TestGetColumnValues:
+    """Tests for GET /api/datasets/{dataset_id}/columns/{column_name}/values."""
+
+    def test_get_column_values_success(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test getting column values."""
+        values = ["East", "North", "West"]
+
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.get_column_values') as mock_values:
+            mock_get.return_value = sample_dataset
+            mock_values.return_value = values
+
+            response = authenticated_client.get(
+                f"/api/datasets/{sample_dataset.id}/columns/name/values",
+            )
+
+            assert response.status_code == 200
+            response_data = response.json()
+            assert "data" in response_data
+            assert response_data["data"] == ["East", "North", "West"]
+
+    def test_get_column_values_dataset_not_found(
+        self, authenticated_client: TestClient, mock_user: User
+    ) -> None:
+        """Test column values for non-existent dataset."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = None
+
+            response = authenticated_client.get(
+                "/api/datasets/nonexistent/columns/name/values",
+            )
+
+            assert response.status_code == 404
+
+    def test_get_column_values_invalid_column(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test column values for non-existent column."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.get_column_values') as mock_values:
+            mock_get.return_value = sample_dataset
+            mock_values.side_effect = ValueError("Column 'nonexistent' not found in dataset")
+
+            response = authenticated_client.get(
+                f"/api/datasets/{sample_dataset.id}/columns/nonexistent/values",
+            )
+
+            assert response.status_code == 422
+
+    def test_get_column_values_unauthenticated(
+        self, unauthenticated_client: TestClient
+    ) -> None:
+        """Test column values without authentication."""
+        response = unauthenticated_client.get(
+            "/api/datasets/ds_abc123456789/columns/name/values",
+        )
+        assert response.status_code == 403

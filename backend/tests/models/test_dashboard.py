@@ -237,6 +237,33 @@ class TestFilterDefinition:
 
         assert filter_def.multi_select is True
 
+    def test_filter_definition_with_options(self):
+        """Test FilterDefinition with options field."""
+        from app.models.dashboard import FilterDefinition
+
+        filter_def = FilterDefinition(
+            id="filter-3",
+            type="category",
+            column="region",
+            label="Region",
+            options=["East", "West", "North"]
+        )
+
+        assert filter_def.options == ["East", "West", "North"]
+
+    def test_filter_definition_options_default_none(self):
+        """Test FilterDefinition options defaults to None."""
+        from app.models.dashboard import FilterDefinition
+
+        filter_def = FilterDefinition(
+            id="filter-4",
+            type="category",
+            column="region",
+            label="Region"
+        )
+
+        assert filter_def.options is None
+
     def test_filter_definition_missing_required_fields(self):
         """Test FilterDefinition validation fails without required fields."""
         from app.models.dashboard import FilterDefinition

@@ -15,8 +15,10 @@ vi.mock('@/components/common/LoadingSpinner', () => ({
 }));
 
 vi.mock('@/components/dashboard/CardContainer', () => ({
-  CardContainer: ({ cardId, html }: { cardId: string; html: string }) => (
-    <div data-testid={`card-container-${cardId}`}>{html}</div>
+  CardContainer: ({ cardId, html, filterApplied }: { cardId: string; html: string; filterApplied?: boolean }) => (
+    <div data-testid={`card-container-${cardId}`} data-filter-applied={filterApplied}>
+      {html}
+    </div>
   ),
 }));
 
@@ -98,8 +100,8 @@ describe('DashboardViewer', () => {
 
     render(<DashboardViewer dashboard={dashboard} onExecuteCard={mockExecute} />);
 
-    expect(mockExecute).toHaveBeenCalledWith('card-1');
-    expect(mockExecute).toHaveBeenCalledWith('card-2');
+    expect(mockExecute).toHaveBeenCalledWith('card-1', undefined);
+    expect(mockExecute).toHaveBeenCalledWith('card-2', undefined);
   });
 
   it('実行成功後にCardContainerを表示する', async () => {
@@ -162,6 +164,105 @@ describe('DashboardViewer', () => {
     await waitFor(() => {
       const container = screen.getByTestId('card-container-card-1');
       expect(container).toHaveTextContent('読み込みエラー');
+    });
+  });
+
+  it('filtersが渡された場合はonExecuteCardにfiltersを渡す', () => {
+    const dashboard: DashboardDetail = {
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+      card_count: 1,
+      owner: { user_id: 'user-1', name: 'Test User' },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      cards: [],
+      layout: {
+        columns: 12,
+        row_height: 100,
+        cards: [
+          { card_id: 'card-1', x: 0, y: 0, w: 6, h: 4 },
+        ],
+      },
+    };
+
+    const filters = { f1: 'East' };
+    const mockExecute = vi.fn(() => Promise.resolve({
+      card_id: 'card-1',
+      html: '<div>Result</div>',
+      cached: false,
+      execution_time_ms: 100,
+    }));
+
+    render(<DashboardViewer dashboard={dashboard} filters={filters} onExecuteCard={mockExecute} />);
+
+    expect(mockExecute).toHaveBeenCalledWith('card-1', filters);
+  });
+
+  it('filtersがある場合はCardContainerにfilterApplied=trueを渡す', async () => {
+    const dashboard: DashboardDetail = {
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+      card_count: 1,
+      owner: { user_id: 'user-1', name: 'Test User' },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      cards: [],
+      layout: {
+        columns: 12,
+        row_height: 100,
+        cards: [
+          { card_id: 'card-1', x: 0, y: 0, w: 6, h: 4 },
+        ],
+      },
+    };
+
+    const mockExecute = vi.fn(() => Promise.resolve({
+      card_id: 'card-1',
+      html: '<div>Result</div>',
+      cached: false,
+      execution_time_ms: 100,
+    }));
+
+    render(
+      <DashboardViewer dashboard={dashboard} filters={{ f1: 'East' }} onExecuteCard={mockExecute} />
+    );
+
+    await waitFor(() => {
+      const container = screen.getByTestId('card-container-card-1');
+      expect(container).toHaveAttribute('data-filter-applied', 'true');
+    });
+  });
+
+  it('filtersが空の場合はCardContainerにfilterApplied=falseを渡す', async () => {
+    const dashboard: DashboardDetail = {
+      dashboard_id: 'dashboard-1',
+      name: 'Test Dashboard',
+      card_count: 1,
+      owner: { user_id: 'user-1', name: 'Test User' },
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      cards: [],
+      layout: {
+        columns: 12,
+        row_height: 100,
+        cards: [
+          { card_id: 'card-1', x: 0, y: 0, w: 6, h: 4 },
+        ],
+      },
+    };
+
+    const mockExecute = vi.fn(() => Promise.resolve({
+      card_id: 'card-1',
+      html: '<div>Result</div>',
+      cached: false,
+      execution_time_ms: 100,
+    }));
+
+    render(<DashboardViewer dashboard={dashboard} filters={{}} onExecuteCard={mockExecute} />);
+
+    await waitFor(() => {
+      const container = screen.getByTestId('card-container-card-1');
+      expect(container).toHaveAttribute('data-filter-applied', 'false');
     });
   });
 });

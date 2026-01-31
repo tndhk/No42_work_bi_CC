@@ -14,6 +14,7 @@ export interface FilterDefinition {
   column: string;
   label: string;
   multi_select?: boolean;
+  options?: string[];
 }
 
 export interface DashboardLayout {

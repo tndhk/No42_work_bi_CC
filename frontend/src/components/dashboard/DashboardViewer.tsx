@@ -11,19 +11,23 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 
 interface DashboardViewerProps {
   dashboard: DashboardDetail;
+  filters?: Record<string, unknown>;
   onExecuteCard: (cardId: string, filters?: Record<string, unknown>) => Promise<CardExecuteResponse>;
 }
 
-export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerProps) {
+export function DashboardViewer({ dashboard, filters, onExecuteCard }: DashboardViewerProps) {
   const [cardResults, setCardResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const filtersJson = JSON.stringify(filters || {});
 
   useEffect(() => {
     if (!dashboard.layout?.cards) return;
 
+    const currentFilters = filters && Object.keys(filters).length > 0 ? filters : undefined;
+
     dashboard.layout.cards.forEach((item) => {
       setLoading((prev) => ({ ...prev, [item.card_id]: true }));
-      onExecuteCard(item.card_id)
+      onExecuteCard(item.card_id, currentFilters)
         .then((result) => {
           setCardResults((prev) => ({ ...prev, [item.card_id]: result.html }));
         })
@@ -34,7 +38,8 @@ export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerPro
           setLoading((prev) => ({ ...prev, [item.card_id]: false }));
         });
     });
-  }, [dashboard.layout?.cards, onExecuteCard]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboard.layout?.cards, filtersJson]);
 
   if (!dashboard.layout?.cards?.length) {
     return (
@@ -47,6 +52,7 @@ export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerPro
   const cols = dashboard.layout.columns || 12;
   const rowHeight = dashboard.layout.row_height || 100;
   const layout = toRGLLayout(dashboard.layout.cards);
+  const hasActiveFilters = filters && Object.keys(filters).length > 0;
 
   return (
     <ResponsiveGridLayout
@@ -69,7 +75,11 @@ export function DashboardViewer({ dashboard, onExecuteCard }: DashboardViewerPro
               <LoadingSpinner />
             </div>
           ) : (
-            <CardContainer cardId={item.card_id} html={cardResults[item.card_id] || ''} />
+            <CardContainer
+              cardId={item.card_id}
+              html={cardResults[item.card_id] || ''}
+              filterApplied={hasActiveFilters}
+            />
           )}
         </div>
       ))}

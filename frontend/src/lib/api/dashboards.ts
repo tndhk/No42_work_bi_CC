@@ -41,4 +41,9 @@ export const dashboardsApi = {
     const response = await apiClient.post(`dashboards/${dashboardId}/clone`, { json: { name } }).json<ApiResponse<DashboardDetail>>();
     return response.data;
   },
+
+  getReferencedDatasets: async (dashboardId: string): Promise<Array<{ dataset_id: string; name: string }>> => {
+    const response = await apiClient.get(`dashboards/${dashboardId}/referenced-datasets`).json<ApiResponse<Array<{ dataset_id: string; name: string }>>>();
+    return response.data;
+  },
 };

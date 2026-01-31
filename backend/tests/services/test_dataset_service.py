@@ -501,3 +501,183 @@ class TestDatasetServiceGetPreview:
         assert original_dataset.id == original_id
         assert original_dataset.name == original_name
         assert original_dataset.row_count == original_row_count
+
+
+class TestDatasetServiceGetColumnValues:
+    """Tests for get_column_values method."""
+
+    @pytest.mark.asyncio
+    async def test_get_column_values_success(
+        self,
+        mock_s3_client: Any,
+    ) -> None:
+        """Test get_column_values returns sorted unique values."""
+        service = DatasetService()
+        dataset = Dataset(
+            id='ds_123456789abc',
+            name='Test Dataset',
+            source_type='csv',
+            schema=[
+                ColumnSchema(name='region', data_type='string', nullable=False),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            row_count=5,
+            column_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        sample_df = pd.DataFrame({
+            'region': ['East', 'West', 'East', 'North', 'West'],
+        })
+
+        with patch('app.services.dataset_service.ParquetReader') as mock_reader:
+            mock_reader_instance = MagicMock()
+            mock_reader.return_value = mock_reader_instance
+            mock_reader_instance.read_full.return_value = sample_df
+
+            result = await service.get_column_values(
+                dataset=dataset,
+                column_name='region',
+                s3_client=mock_s3_client,
+            )
+
+        assert result == ['East', 'North', 'West']
+
+    @pytest.mark.asyncio
+    async def test_get_column_values_with_nulls(
+        self,
+        mock_s3_client: Any,
+    ) -> None:
+        """Test get_column_values excludes null values."""
+        service = DatasetService()
+        dataset = Dataset(
+            id='ds_123456789abc',
+            name='Test Dataset',
+            source_type='csv',
+            schema=[
+                ColumnSchema(name='category', data_type='string', nullable=True),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            row_count=4,
+            column_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        sample_df = pd.DataFrame({
+            'category': ['A', None, 'B', None],
+        })
+
+        with patch('app.services.dataset_service.ParquetReader') as mock_reader:
+            mock_reader_instance = MagicMock()
+            mock_reader.return_value = mock_reader_instance
+            mock_reader_instance.read_full.return_value = sample_df
+
+            result = await service.get_column_values(
+                dataset=dataset,
+                column_name='category',
+                s3_client=mock_s3_client,
+            )
+
+        assert result == ['A', 'B']
+
+    @pytest.mark.asyncio
+    async def test_get_column_values_max_limit(
+        self,
+        mock_s3_client: Any,
+    ) -> None:
+        """Test get_column_values respects max_values limit."""
+        service = DatasetService()
+        dataset = Dataset(
+            id='ds_123456789abc',
+            name='Test Dataset',
+            source_type='csv',
+            schema=[
+                ColumnSchema(name='id', data_type='int64', nullable=False),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            row_count=1000,
+            column_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        sample_df = pd.DataFrame({
+            'id': list(range(1000)),
+        })
+
+        with patch('app.services.dataset_service.ParquetReader') as mock_reader:
+            mock_reader_instance = MagicMock()
+            mock_reader.return_value = mock_reader_instance
+            mock_reader_instance.read_full.return_value = sample_df
+
+            result = await service.get_column_values(
+                dataset=dataset,
+                column_name='id',
+                s3_client=mock_s3_client,
+                max_values=10,
+            )
+
+        assert len(result) == 10
+
+    @pytest.mark.asyncio
+    async def test_get_column_values_no_s3_path(
+        self,
+        mock_s3_client: Any,
+    ) -> None:
+        """Test get_column_values raises error when dataset has no data."""
+        service = DatasetService()
+        dataset = Dataset(
+            id='ds_123456789abc',
+            name='Test Dataset',
+            source_type='csv',
+            schema=[],
+            s3_path=None,
+            row_count=0,
+            column_count=0,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        with pytest.raises(ValueError, match="Dataset has no data"):
+            await service.get_column_values(
+                dataset=dataset,
+                column_name='region',
+                s3_client=mock_s3_client,
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_column_values_invalid_column(
+        self,
+        mock_s3_client: Any,
+    ) -> None:
+        """Test get_column_values raises error for non-existent column."""
+        service = DatasetService()
+        dataset = Dataset(
+            id='ds_123456789abc',
+            name='Test Dataset',
+            source_type='csv',
+            schema=[
+                ColumnSchema(name='name', data_type='string', nullable=False),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            row_count=3,
+            column_count=1,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        sample_df = pd.DataFrame({'name': ['Alice', 'Bob']})
+
+        with patch('app.services.dataset_service.ParquetReader') as mock_reader:
+            mock_reader_instance = MagicMock()
+            mock_reader.return_value = mock_reader_instance
+            mock_reader_instance.read_full.return_value = sample_df
+
+            with pytest.raises(ValueError, match="Column 'nonexistent' not found"):
+                await service.get_column_values(
+                    dataset=dataset,
+                    column_name='nonexistent',
+                    s3_client=mock_s3_client,
+                )

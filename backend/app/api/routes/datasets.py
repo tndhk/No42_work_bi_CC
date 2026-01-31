@@ -233,6 +233,55 @@ async def delete_dataset(
     await repo.delete(dataset_id, dynamodb)
 
 
+@router.get("/{dataset_id}/columns/{column_name}/values")
+async def get_column_values(
+    dataset_id: str,
+    column_name: str,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Get unique values for a specific column.
+
+    Args:
+        dataset_id: Dataset ID
+        column_name: Column name
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client
+
+    Returns:
+        List of unique values for the column
+
+    Raises:
+        HTTPException: 404 if not found, 422 if column doesn't exist
+    """
+    repo = DatasetRepository()
+    dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    service = DatasetService()
+
+    try:
+        values = await service.get_column_values(
+            dataset=dataset,
+            column_name=column_name,
+            s3_client=s3_client,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return api_response(values)
+
+
 @router.get("/{dataset_id}/preview")
 async def get_dataset_preview(
     dataset_id: str,

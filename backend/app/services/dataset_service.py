@@ -80,6 +80,44 @@ class DatasetService:
 
         return dataset
 
+    async def get_column_values(
+        self,
+        dataset: Dataset,
+        column_name: str,
+        s3_client: Any,
+        max_values: int = 500,
+    ) -> list[str]:
+        """Get unique values for a specific column from a dataset.
+
+        Args:
+            dataset: Dataset instance
+            column_name: Column name to get values for
+            s3_client: S3 client
+            max_values: Maximum number of unique values to return
+
+        Returns:
+            Sorted list of unique string values
+
+        Raises:
+            ValueError: If column doesn't exist or dataset has no data
+        """
+        if not dataset.s3_path:
+            raise ValueError("Dataset has no data")
+
+        reader = ParquetReader(
+            s3_client=s3_client,
+            bucket=settings.s3_bucket_datasets,
+        )
+        df = reader.read_full(dataset.s3_path)
+
+        if column_name not in df.columns:
+            raise ValueError(f"Column '{column_name}' not found in dataset")
+
+        values = df[column_name].dropna().unique()
+        str_values = sorted([str(v) for v in values])
+
+        return str_values[:max_values]
+
     async def get_preview(
         self,
         dataset: Dataset,

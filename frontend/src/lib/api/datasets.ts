@@ -43,4 +43,9 @@ export const datasetsApi = {
     const response = await apiClient.get(`datasets/${datasetId}/preview`, { searchParams }).json<ApiResponse<DatasetPreview>>();
     return response.data;
   },
+
+  getColumnValues: async (datasetId: string, columnName: string): Promise<string[]> => {
+    const response = await apiClient.get(`datasets/${datasetId}/columns/${columnName}/values`).json<ApiResponse<string[]>>();
+    return response.data;
+  },
 };

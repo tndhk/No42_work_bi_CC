@@ -1,13 +1,15 @@
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Save, ArrowLeft, Plus } from 'lucide-react';
+import { Save, ArrowLeft, Plus, SlidersHorizontal } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useDashboard, useUpdateDashboard } from '@/hooks';
 import { DashboardEditor } from '@/components/dashboard/DashboardEditor';
 import { AddCardDialog } from '@/components/dashboard/AddCardDialog';
-import type { DashboardLayout, LayoutItem } from '@/types';
+import { FilterConfigPanel } from '@/components/dashboard/FilterConfigPanel';
+import { dashboardsApi } from '@/lib/api';
+import type { DashboardLayout, LayoutItem, FilterDefinition } from '@/types';
 
 export function DashboardEditPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,18 +19,31 @@ export function DashboardEditPage() {
   const [addCardOpen, setAddCardOpen] = useState(false);
   const [name, setName] = useState('');
   const [layout, setLayout] = useState<DashboardLayout | null>(null);
+  const [filters, setFilters] = useState<FilterDefinition[]>([]);
+  const [filterPanelVisible, setFilterPanelVisible] = useState(false);
+  const [datasetIds, setDatasetIds] = useState<string[]>([]);
 
-  // Initialize state from data
-  if (dashboard && !layout) {
+  useEffect(() => {
+    if (!dashboard || layout) return;
     setName(dashboard.name);
     setLayout(dashboard.layout || { cards: [], columns: 12, row_height: 100 });
-  }
+    setFilters(dashboard.filters || []);
+  }, [dashboard, layout]);
+
+  useEffect(() => {
+    if (!id) return;
+    dashboardsApi.getReferencedDatasets(id).then((datasets) => {
+      setDatasetIds(datasets.map((d) => d.dataset_id));
+    }).catch(() => {
+      // ignore - dataset list will be empty
+    });
+  }, [id]);
 
   const handleSave = () => {
     if (!id || !layout) return;
     updateMutation.mutate({
       dashboardId: id,
-      data: { name, layout },
+      data: { name, layout, filters },
     }, {
       onSuccess: () => navigate(`/dashboards/${id}`),
     });
@@ -71,6 +86,13 @@ export function DashboardEditPage() {
           className="text-lg font-bold max-w-md"
         />
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setFilterPanelVisible(!filterPanelVisible)}
+          >
+            <SlidersHorizontal className="h-4 w-4 mr-2" />
+            フィルタ設定
+          </Button>
           <Button variant="outline" onClick={() => setAddCardOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             カード追加
@@ -81,6 +103,14 @@ export function DashboardEditPage() {
           </Button>
         </div>
       </div>
+
+      {filterPanelVisible && (
+        <FilterConfigPanel
+          filters={filters}
+          onFiltersChange={setFilters}
+          datasetIds={datasetIds}
+        />
+      )}
 
       {layout && (
         <DashboardEditor

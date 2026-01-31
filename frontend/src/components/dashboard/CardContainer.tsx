@@ -1,6 +1,9 @@
+import { Badge } from '@/components/ui/badge';
+
 interface CardContainerProps {
   cardId: string;
   html: string;
+  filterApplied?: boolean;
 }
 
 function getCSP(): string {
@@ -12,7 +15,7 @@ function getCSP(): string {
   ].join('; ');
 }
 
-export function CardContainer({ cardId, html }: CardContainerProps) {
+export function CardContainer({ cardId, html, filterApplied }: CardContainerProps) {
   const srcDoc = `
     <!DOCTYPE html>
     <html>
@@ -30,15 +33,25 @@ export function CardContainer({ cardId, html }: CardContainerProps) {
   `;
 
   return (
-    <iframe
-      title={`card-${cardId}`}
-      sandbox="allow-scripts"
-      srcDoc={srcDoc}
-      style={{
-        width: '100%',
-        height: '100%',
-        border: 'none',
-      }}
-    />
+    <div className="relative h-full">
+      {filterApplied && (
+        <Badge
+          variant="secondary"
+          className="absolute top-1 left-1 z-10 text-[10px] px-1.5 py-0"
+        >
+          filtered
+        </Badge>
+      )}
+      <iframe
+        title={`card-${cardId}`}
+        sandbox="allow-scripts"
+        srcDoc={srcDoc}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+        }}
+      />
+    </div>
   );
 }

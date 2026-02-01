@@ -1,6 +1,6 @@
 # バックエンド コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
 **フレームワーク:** FastAPI 0.109 / Python 3.11+
 **エントリポイント:** `backend/app/main.py`
 
@@ -37,7 +37,7 @@ backend/
       __init__.py
       common.py                      # BaseResponse, TimestampMixin
       card.py                        # Card, CardCreate, CardUpdate
-      dashboard.py                   # Dashboard, LayoutItem, FilterDefinition
+      dashboard.py                   # Dashboard, LayoutItem, FilterDefinition (options付き)
       dataset.py                     # Dataset, ColumnSchema
       user.py                        # User, UserInDB, UserCreate
     repositories/
@@ -96,6 +96,7 @@ Frontend の `ApiResponse<T>` / `PaginatedResponse<T>` 型と整合。
 | PUT | /api/datasets/:id | datasets.update_dataset | データセット更新 | api_response |
 | DELETE | /api/datasets/:id | datasets.delete_dataset | データセット削除 | 204 No Content |
 | GET | /api/datasets/:id/preview | datasets.get_dataset_preview | データプレビュー | api_response |
+| GET | /api/datasets/:id/columns/:col/values | datasets.get_column_values | カラムユニーク値 | api_response |
 | GET | /api/cards | cards.list_cards | カード一覧 | paginated_response |
 | POST | /api/cards | cards.create_card | カード作成 | api_response |
 | GET | /api/cards/:id | cards.get_card | カード詳細 | api_response |
@@ -191,7 +192,7 @@ services/card_execution_service.py
 
 services/dataset_service.py
   +-- services/csv_parser.py
-  +-- services/parquet_storage.py
+  +-- services/parquet_storage.py (get_column_values 含む)
   +-- services/type_inferrer.py
   +-- repositories/dataset_repository.py
   +-- core/config.py

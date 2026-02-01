@@ -1,6 +1,6 @@
 # 全体アーキテクチャ コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
 **プロジェクト:** BI Tool (社内BI・Pythonカード MVP)
 **ステージ:** MVP
 
@@ -80,7 +80,7 @@ work_BI_ClaudeCode/
       pages/           # ページコンポーネント
       stores/          # Zustand ストア
       types/           # TypeScript 型定義
-      __tests__/       # Vitest テスト (37ファイル, 227テスト, 83.07% coverage)
+      __tests__/       # Vitest テスト (42ファイル, 262テスト, 83.07% coverage)
     e2e/               # Playwright E2E テスト (3スペック, 12テスト) [NEW]
     playwright.config.ts  # E2E テスト設定 [NEW]
     vitest.config.ts   # ユニットテスト設定
@@ -102,6 +102,7 @@ work_BI_ClaudeCode/
     |
     +--> GET/POST /api/auth/*      --> [Backend :8000] --> [DynamoDB]
     +--> GET/POST /api/datasets/*  --> [Backend :8000] --> [DynamoDB] + [S3/MinIO]
+    +--> GET /api/datasets/:id/columns/:col/values --> [Backend :8000] --> [S3/MinIO]
     +--> GET/POST /api/cards/*     --> [Backend :8000] --> [DynamoDB]
     +--> POST /api/cards/:id/execute --> [Backend :8000]
     |                                       |
@@ -148,11 +149,12 @@ work_BI_ClaudeCode/
 ## データフロー: ダッシュボード表示
 
 ```
-1. ブラウザ: GET /api/dashboards/:id --> DashboardDetail 取得
-2. DashboardViewer: react-grid-layout で cards レイアウト構築
-3. 各 LayoutItem --> onExecuteCard(cardId) で並列実行
-4. CardContainer: iframe sandbox で HTML 描画
-5. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
+1. ブラウザ: GET /api/dashboards/:id --> DashboardDetail 取得 (filters 含む)
+2. FilterBar: フィルタ定義からフィルタUIを描画
+3. DashboardViewer: react-grid-layout で cards レイアウト構築
+4. 各 LayoutItem --> onExecuteCard(cardId, filterValues) で並列実行
+5. CardContainer: iframe sandbox で HTML 描画
+6. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
 ```
 
 ## APIレスポンス標準化 [NEW]
@@ -195,6 +197,8 @@ work_BI_ClaudeCode/
 | lucide-react | 0.563.0 | アイコンライブラリ |
 | zod | 3.25.76 | スキーマバリデーション |
 | react-hook-form | 7.71.1 | フォーム管理 |
+| date-fns | 4.1.0 | 日付フォーマット |
+| react-day-picker | 9.13.0 | カレンダーUI |
 | tailwindcss | 3.4.0 | CSS |
 | Radix UI | 各種 | UIプリミティブ |
 
@@ -222,7 +226,7 @@ work_BI_ClaudeCode/
 
 | 領域 | フレームワーク | テストファイル数 | テスト数 | カバレッジ |
 |------|---------------|-----------------|---------|-----------|
-| Frontend (Unit) | Vitest + Testing Library | 37 | 227 | 83.07% (statements) |
+| Frontend (Unit) | Vitest + Testing Library | 42 | 262 | 83.07% (statements) |
 | Frontend (E2E) | Playwright | 3 specs | 12 | - |
 | Backend | pytest | 37 | - | - |
 | Executor | pytest | 7 | - | - |

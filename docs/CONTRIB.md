@@ -2,7 +2,9 @@
 
 **最終更新:** 2026-02-01
 **プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) 完了
+**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + フィルタ機能 実装中
+
+> **実装進捗:** 全機能の実装ステータスは [PROGRESS.md](./PROGRESS.md) を参照
 
 ---
 
@@ -38,11 +40,12 @@ work_BI_ClaudeCode/
 │   └── Dockerfile.dev   # 開発用Dockerfile
 ├── frontend/            # React SPA (TypeScript / Vite)
 │   ├── src/
-│   │   ├── __tests__/   # Vitest テスト (37ファイル, 227テスト)
+│   │   ├── __tests__/   # Vitest テスト (42ファイル, 262テスト)
 │   │   │   ├── components/  # コンポーネントテスト
 │   │   │   │   ├── card/        # CardEditor, CardPreview
 │   │   │   │   ├── common/      # AuthGuard, ErrorBoundary, Header, Layout 等
-│   │   │   │   └── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog 等
+│   │   │   │   ├── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm 等
+│   │   │   │   └── filters/ # CategoryFilter, DateRangeFilter
 │   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets
 │   │   │   ├── lib/         # api-client, utils, layout-utils, api/*.test.ts
 │   │   │   ├── pages/       # 全9ページのテスト
@@ -52,9 +55,10 @@ work_BI_ClaudeCode/
 │   │   ├── components/  # UIコンポーネント
 │   │   │   ├── card/    # カード関連 (CardEditor, CardPreview)
 │   │   │   ├── common/  # 共通 (Header, Sidebar, Layout, AuthGuard, ErrorBoundary)
-│   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor)
+│   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor, FilterBar, FilterConfigPanel, FilterDefinitionForm)
+│   │   │   │   └── filters/ # フィルタUI (CategoryFilter, DateRangeFilter)
 │   │   │   ├── dataset/ # データセット関連
-│   │   │   └── ui/      # shadcn/ui プリミティブ
+│   │   │   └── ui/      # shadcn/ui プリミティブ (button, input, label, dialog, calendar, checkbox, popover, select 等)
 │   │   ├── hooks/       # React Query カスタムフック
 │   │   ├── lib/         # APIクライアント、ユーティリティ、layout-utils
 │   │   ├── pages/       # ページコンポーネント (9ページ)
@@ -332,8 +336,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 | メトリクス | 値 |
 |-----------|-----|
-| テストファイル数 | 37 |
-| テストケース数 | 227 |
+| テストファイル数 | 42 |
+| テストケース数 | 262 |
 | Statements カバレッジ | 83.07% |
 | テストフレームワーク | Vitest 1.x + @testing-library/react 14.x |
 | テスト環境 | jsdom |
@@ -357,13 +361,14 @@ npx vitest src/__tests__/pages/
 npx vitest --ui
 ```
 
-テスト構成 (37ファイル):
+テスト構成 (42ファイル):
 
 | テストカテゴリ | ファイル数 | 対象 |
 |---------------|-----------|------|
 | `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage, DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
 | `__tests__/components/common/` | 8 | AuthGuard, ErrorBoundary, ConfirmDialog, Header, Sidebar, Layout, LoadingSpinner, Pagination |
-| `__tests__/components/dashboard/` | 4 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer |
+| `__tests__/components/dashboard/` | 7 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, FilterBar, FilterConfigPanel, FilterDefinitionForm |
+| `__tests__/components/dashboard/filters/` | 2 | CategoryFilter, DateRangeFilter |
 | `__tests__/components/card/` | 2 | CardEditor, CardPreview |
 | `__tests__/hooks/` | 4 | use-auth, use-cards, use-dashboards, use-datasets |
 | `__tests__/lib/api/` | 4 | auth, cards, dashboards, datasets |
@@ -536,6 +541,11 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | react-grid-layout | ^1.4.4 | ダッシュボードグリッドレイアウト |
 | @monaco-editor/react | ^4.6.0 | Pythonコードエディタ |
 | ky | ^1.1.3 | HTTPクライアント |
+| @radix-ui/react-checkbox | ^1.3.3 | チェックボックスUI |
+| @radix-ui/react-popover | ^1.1.15 | ポップオーバーUI |
+| @radix-ui/react-select | ^2.2.6 | セレクトドロップダウン |
+| date-fns | ^4.1.0 | 日付フォーマット/パース |
+| react-day-picker | ^9.13.0 | カレンダーUI |
 | tailwind-merge | ^3.4.0 | Tailwind CSSクラスマージ |
 
 **フロントエンド devDependencies:**
@@ -590,6 +600,7 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | PUT | `/api/datasets/{id}` | データセット更新 |
 | DELETE | `/api/datasets/{id}` | データセット削除 |
 | GET | `/api/datasets/{id}/preview` | データセットプレビュー (最大1000行) |
+| GET | `/api/datasets/{id}/columns/{column_name}/values` | カラムのユニーク値取得 (フィルタ用) |
 | GET | `/api/cards` | カード一覧 |
 | POST | `/api/cards` | カード作成 |
 | GET | `/api/cards/{id}` | カード詳細取得 |

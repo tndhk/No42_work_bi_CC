@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
 **データベース:** DynamoDB (NoSQL) + S3 (Parquet)
 
 ---
@@ -227,6 +227,7 @@ class FilterDefinition:
     column: str
     label: str
     multi_select: bool = False
+    options: list[str] | None = None    # カテゴリフィルタ選択肢
 
 class LayoutItem:
     card_id: str
@@ -361,7 +362,7 @@ interface CardPreviewResponse { card_id: string; html: string; execution_time_ms
 
 ```typescript
 interface LayoutItem { card_id: string; x: number; y: number; w: number; h: number }
-interface FilterDefinition { id: string; type: 'category' | 'date_range'; column: string; label: string; multi_select?: boolean }
+interface FilterDefinition { id: string; type: 'category' | 'date_range'; column: string; label: string; multi_select?: boolean; options?: string[] }
 interface DashboardLayout { cards: LayoutItem[]; columns: number; row_height: number }
 interface Dashboard { dashboard_id: string; name: string; card_count: number; owner: OwnerRef; my_permission?: string; created_at: string; updated_at: string }
 interface DashboardDetail extends Omit<Dashboard, 'card_count'> { layout: DashboardLayout; filters: FilterDefinition[]; default_filter_view_id?: string; description?: string }
@@ -401,8 +402,8 @@ interface DashboardUpdateRequest { name?: string; layout?: DashboardLayout; filt
     +--< owns >-- Dashboard (bi_dashboards)
                     |
                     +-- layout[].card_id --> Card
-                    +-- filters[] --> FilterDefinition
-                    +-- clone --> new Dashboard (owner=current_user) [NEW]
+                    +-- filters[] --> FilterDefinition (options --> Dataset column values)
+                    +-- clone --> new Dashboard (owner=current_user)
 ```
 
 ## DynamoDB キーパターン (camelCase)

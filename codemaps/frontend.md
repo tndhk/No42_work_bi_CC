@@ -1,9 +1,9 @@
 # フロントエンド コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 クリーンアップ 完了後)
+**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
 **フレームワーク:** React 18 + TypeScript + Vite 5
 **エントリポイント:** `frontend/src/main.tsx`
-**テストカバレッジ:** 83.07% (statements) / 37テストファイル / 227テスト (Unit) + 3スペック / 12テスト (E2E)
+**テストカバレッジ:** 83.07% (statements) / 42テストファイル / 262テスト (Unit) + 3スペック / 12テスト (E2E)
 
 ---
 
@@ -48,10 +48,17 @@ frontend/
         CardContainer.tsx              # iframe sandbox (HTML描画)
         DashboardEditor.tsx            # グリッドレイアウト編集 (react-grid-layout)
         DashboardViewer.tsx            # ダッシュボード表示 (react-grid-layout)
+        FilterBar.tsx                  # フィルタバー (閲覧モード)
+        FilterConfigPanel.tsx          # フィルタ設定パネル (編集モード)
+        FilterDefinitionForm.tsx       # フィルタ定義フォーム
+        filters/
+          CategoryFilter.tsx           # カテゴリフィルタ (単一/複数選択)
+          DateRangeFilter.tsx          # 日付範囲フィルタ (カレンダー)
       ui/                              # shadcn/ui コンポーネント
-        alert-dialog.tsx, badge.tsx, button.tsx, card.tsx,
-        dialog.tsx, dropdown-menu.tsx, form.tsx, input.tsx,
-        label.tsx, separator.tsx, sheet.tsx, table.tsx
+        alert-dialog.tsx, badge.tsx, button.tsx, calendar.tsx,
+        card.tsx, checkbox.tsx, dialog.tsx, dropdown-menu.tsx,
+        form.tsx, input.tsx, label.tsx, popover.tsx,
+        select.tsx, separator.tsx, sheet.tsx, table.tsx
     hooks/
       index.ts                         # barrel export
       use-auth.ts                      # useLogin, useLogout, useCurrentUser
@@ -129,6 +136,12 @@ frontend/
           CardContainer.test.tsx       # iframe sandbox テスト
           DashboardEditor.test.tsx     # グリッド編集テスト
           DashboardViewer.test.tsx     # ダッシュボード表示テスト
+          FilterBar.test.tsx           # フィルタバーテスト (7テスト)
+          FilterConfigPanel.test.tsx   # フィルタ設定テスト (6テスト)
+          FilterDefinitionForm.test.tsx # フィルタ定義フォームテスト (6テスト)
+          filters/
+            CategoryFilter.test.tsx    # カテゴリフィルタテスト (10テスト)
+            DateRangeFilter.test.tsx   # 日付範囲フィルタテスト (6テスト)
       pages/
         LoginPage.test.tsx             # ログインページテスト
         DashboardListPage.test.tsx     # ダッシュボード一覧テスト
@@ -192,10 +205,13 @@ DashboardListPage
 
 DashboardViewPage
   +-- useDashboard, useExecuteCard
-  +-- DashboardViewer
+  +-- FilterBar (フィルタ適用 UI)
+  |     +-- CategoryFilter (filters/)
+  |     +-- DateRangeFilter (filters/)
+  +-- DashboardViewer (filterValues 対応)
         +-- ResponsiveGridLayout (react-grid-layout)
         +-- toRGLLayout (lib/layout-utils)
-        +-- CardContainer (iframe sandbox)
+        +-- CardContainer (iframe sandbox, filterApplied)
         +-- LoadingSpinner
 
 DashboardEditPage
@@ -205,7 +221,11 @@ DashboardEditPage
   |     +-- toRGLLayout, fromRGLLayout (lib/layout-utils)
   |     +-- X icon (lucide-react)
   +-- AddCardDialog
-        +-- useCards
+  |     +-- useCards
+  +-- FilterConfigPanel (フィルタ定義管理)
+        +-- FilterDefinitionForm
+        +-- dashboardsApi.getReferencedDatasets()
+        +-- datasetsApi.getColumnValues()
 
 CardEditPage
   +-- useCard, useCreateCard, useUpdateCard, usePreviewCard, useDatasets
@@ -284,8 +304,8 @@ lib/api-client.ts (ky ベース)
   |
   +-- lib/api/auth.ts       authApi.login(), logout(), me()
   +-- lib/api/cards.ts       cardsApi.list(), get(), create(), update(), delete(), execute(), preview()
-  +-- lib/api/dashboards.ts  dashboardsApi.list(), get(), create(), update(), delete(), clone()
-  +-- lib/api/datasets.ts    datasetsApi.list(), get(), create(FormData), update(), delete(), preview()
+  +-- lib/api/dashboards.ts  dashboardsApi.list(), get(), create(), update(), delete(), clone(), getReferencedDatasets()
+  +-- lib/api/datasets.ts    datasetsApi.list(), get(), create(FormData), update(), delete(), preview(), getColumnValues()
 ```
 
 ## hooks 一覧
@@ -338,7 +358,7 @@ lib/api-client.ts (ky ベース)
 ## UI コンポーネント (shadcn/ui)
 
 Radix UI + Tailwind CSS ベース:
-`alert-dialog`, `badge`, `button`, `card`, `dialog`, `dropdown-menu`, `form`, `input`, `label`, `separator`, `sheet`, `table`
+`alert-dialog`, `badge`, `button`, `calendar`, `card`, `checkbox`, `dialog`, `dropdown-menu`, `form`, `input`, `label`, `popover`, `select`, `separator`, `sheet`, `table`
 
 ## E2E テスト (Playwright) [NEW]
 
@@ -415,9 +435,10 @@ Radix UI + Tailwind CSS ベース:
 | Lib/API | 4 | auth, cards, dashboards, datasets |
 | Components/common | 8 | AuthGuard, ConfirmDialog, ErrorBoundary, Header, Layout, LoadingSpinner, Pagination, Sidebar |
 | Components/card | 2 | CardEditor, CardPreview |
-| Components/dashboard | 4 | AddCardDialog, CardContainer, DashboardEditor, DashboardViewer |
+| Components/dashboard | 7 | AddCardDialog, CardContainer, DashboardEditor, DashboardViewer, FilterBar, FilterConfigPanel, FilterDefinitionForm |
+| Components/dashboard/filters | 2 | CategoryFilter, DateRangeFilter |
 | Pages | 9 | Login, DashboardList/View/Edit, DatasetList/Import/Detail, CardList/Edit |
-| **合計 (Unit)** | **37** | **83.07% statement coverage** |
+| **合計 (Unit)** | **42** | **83.07% statement coverage** |
 
 ## 関連コードマップ
 

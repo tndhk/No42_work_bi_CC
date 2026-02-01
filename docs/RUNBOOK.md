@@ -2,7 +2,7 @@
 
 **最終更新:** 2026-02-01
 **プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) 完了
+**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + フィルタ機能 実装中
 
 ---
 
@@ -139,7 +139,7 @@ docker compose run --rm dynamodb-init
 |-------------|---------|------|
 | フロントエンド lint | `cd frontend && npm run lint` | エラー 0 |
 | フロントエンド typecheck | `cd frontend && npm run typecheck` | エラー 0 |
-| フロントエンド ユニットテスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 227+ tests pass |
+| フロントエンド ユニットテスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 262+ tests pass |
 | フロントエンド E2Eテスト | `cd frontend && npm run e2e` | 全テスト pass (Auth: 5, Dataset: 3, Card/Dashboard: 5) |
 | バックエンド lint | `cd backend && ruff check app/` | エラー 0 |
 | バックエンド typecheck | `cd backend && mypy app/` | エラー 0 |
@@ -397,7 +397,7 @@ npx vitest --ui
 ```
 
 **現在のテスト基準:**
-- 37テストファイル、227テストケースが全て合格すること
+- 42テストファイル、262テストケースが全て合格すること
 - Statement coverage 83.07% 以上を維持すること
 
 ---
@@ -605,8 +605,8 @@ aws ecs update-service \
 
 | メトリクス | 値 |
 |-----------|-----|
-| テストファイル | 37 |
-| テストケース | 227 |
+| テストファイル | 42 |
+| テストケース | 262 |
 | Statements | 83.07% |
 | フレームワーク | Vitest 1.x + @testing-library/react 14.x |
 
@@ -624,7 +624,7 @@ aws ecs update-service \
 | レイヤー | ファイル数 | テスト対象 |
 |---------|-----------|-----------|
 | Pages | 9 | 全9ページ (Login, Dashboard x3, Dataset x3, Card x2) |
-| Components | 14 | Common (8), Dashboard (4), Card (2) |
+| Components | 19 | Common (8), Dashboard (7), Dashboard/filters (2), Card (2) |
 | Hooks | 4 | use-auth, use-cards, use-dashboards, use-datasets |
 | API Layer | 4 | auth, cards, dashboards, datasets |
 | Lib/Utils | 3 | api-client, utils, layout-utils |

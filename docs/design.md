@@ -548,12 +548,14 @@ src/
       DashboardViewer.tsx      # 閲覧モード
       DashboardEditor.tsx      # 編集モード
       FilterBar.tsx            # フィルタバー
+      FilterViewSelector.tsx   # FilterView選択・保存
       CardContainer.tsx        # カードコンテナ（iframe）
       ChatbotPanel.tsx         # Chatbotパネル
     Dataset/
       DatasetList.tsx
       DatasetImport.tsx
       DatasetPreview.tsx
+      S3ImportForm.tsx          # S3 CSV取り込みフォーム
     Transform/
       TransformList.tsx
       TransformEditor.tsx

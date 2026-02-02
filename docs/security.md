@@ -11,6 +11,8 @@
 | 不正アクセス | データ漏洩 | 認証・認可 |
 | 権限昇格 | 不正操作 | 権限チェック |
 | データ露出 | 意図しないデータ共有 | Dataset可視化、監査ログ |
+| S3バケット不正アクセス | S3 Import機能で意図しない外部バケットにアクセス | IAMポリシーによるバケット制限、バケット名バリデーション |
+| CSVインジェクション | S3経由で悪意あるCSVデータを取り込み | CSVパース時のサニタイズ、ファイルサイズ制限 |
 
 ### 1.2 セキュリティ原則
 
@@ -322,6 +324,45 @@ class ResourceLimiter:
             resource.setrlimit(resource.RLIMIT_AS, old_mem_limit)
             resource.setrlimit(resource.RLIMIT_FSIZE, old_fsize_limit)
 ```
+
+### 2.8 S3 Import セキュリティ考慮事項
+
+**S3バケットアクセス制御:**
+- IAMポリシーで許可バケットを明示的に制限
+- ワイルドカードによる全バケットアクセスを禁止
+- 本番環境では許可バケットリストを環境変数で管理
+
+**S3キーのパストラバーサル防止:**
+```python
+import re
+
+def validate_s3_key(s3_key: str) -> bool:
+    """S3キーのバリデーション"""
+    # パストラバーサル防止
+    if '..' in s3_key:
+        return False
+    # 許可される文字パターン
+    if not re.match(r'^[a-zA-Z0-9\-_./]+$', s3_key):
+        return False
+    # 先頭スラッシュ禁止
+    if s3_key.startswith('/'):
+        return False
+    return True
+```
+
+**CSVインジェクション対策:**
+- 既存のCSV解析処理 (`CsvParser`) でサニタイズ
+- 数式プレフィックス (`=`, `+`, `-`, `@`) の検出と無害化
+- ファイルサイズ上限の適用 (デフォルト: 100MB)
+
+**ファイルサイズ制限:**
+- S3 Import時のファイルサイズ上限: 100MB (設定可能)
+- `Content-Length` ヘッダまたは `HeadObject` で事前チェック
+- 上限超過時は 400 `VALIDATION_ERROR` を返却
+
+**監査ログ:**
+- S3 Import操作は `DATASET_IMPORTED` イベントとして記録
+- `source_type: "s3_csv"` と `source_config` (バケット名、キー) を `details` に含む
 
 ---
 

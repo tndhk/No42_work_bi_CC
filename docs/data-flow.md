@@ -1,4 +1,4 @@
-# 社内BI・Pythonカード データフロー詳細仕様書 v0.1
+# 社内BI・Pythonカード データフロー詳細仕様書 v0.2
 
 ## 1. データフロー概要
 
@@ -350,6 +350,57 @@ class ParquetConverter:
             'partitions': partitions,
         }
 ```
+
+### 2.5 S3 CSV取り込みフロー
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant API
+    participant S3Source as S3 (ソース)
+    participant S3Storage as S3 (データセット)
+    participant DynamoDB
+
+    Frontend->>API: POST /api/datasets/s3-import (s3_bucket, s3_key, name等)
+    API->>S3Source: GetObject (ソースCSV取得)
+
+    alt NoSuchKey / アクセスエラー
+        S3Source-->>API: エラー返却
+        API-->>Frontend: 400/404 エラー
+    end
+
+    S3Source->>API: CSVデータ
+    API->>API: CSV解析 (pandas, delimiter/encoding指定)
+
+    alt 空ファイル / 空CSV
+        API-->>Frontend: 400 VALIDATION_ERROR
+    end
+
+    API->>API: スキーマ推定 (TypeInferrer共有)
+    API->>API: Parquet変換 (ParquetConverter共有)
+    API->>S3Storage: Parquetアップロード
+    API->>DynamoDB: メタデータ保存 (source_type: "s3_csv", source_config含む)
+    API->>Frontend: 201 Created (dataset情報)
+```
+
+**処理ステップ:**
+
+1. フロントエンドから `S3ImportRequest` を送信 (`s3_bucket`, `s3_key`, `name`, `delimiter`, `encoding` 等)
+2. API が source S3 バケットから CSV ファイルを `GetObject` で取得
+3. CSV を pandas で解析 (delimiter/encoding はリクエストで指定可能、未指定時は自動判定)
+4. スキーマ推定 (Section 2.3 の `TypeInferrer` を共有利用)
+5. Parquet 変換して データセット用 S3 バケットに保存 (Section 2.4 の `ParquetConverter` を共有利用)
+6. DynamoDB にメタデータ保存 (`source_type: "s3_csv"`, `source_config` に元バケット/キー情報を格納)
+
+**エラーハンドリング:**
+
+| エラー | 条件 | レスポンス |
+|--------|------|-----------|
+| NoSuchKey | 指定S3キーが存在しない | 404 NOT_FOUND |
+| AccessDenied | バケットへのアクセス権限なし | 403 FORBIDDEN |
+| 空ファイル | ファイルサイズが0バイト | 400 VALIDATION_ERROR |
+| 空CSV | ヘッダのみでデータ行なし | 400 VALIDATION_ERROR |
+| パース失敗 | CSV形式不正 | 400 VALIDATION_ERROR |
 
 ---
 
@@ -848,6 +899,62 @@ class CardCache:
         if keys:
             await self.redis.delete(*keys)
 ```
+
+### 4.5 FilterView保存・復元フロー
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant API
+    participant DynamoDB
+
+    Note over User, DynamoDB: フィルタ状態保存フロー
+    User->>Frontend: フィルタを設定
+    User->>Frontend: FilterViewSelectorで「保存」クリック
+    Frontend->>API: POST /api/dashboards/{id}/filter-views
+    Note right of Frontend: {name, filter_state, is_shared}
+    API->>DynamoDB: bi_filter_views テーブルに格納
+    API->>Frontend: 201 Created (FilterView情報)
+    Frontend->>User: 保存完了表示
+
+    Note over User, DynamoDB: フィルタ状態復元フロー
+    User->>Frontend: ダッシュボード表示
+    Frontend->>API: GET /api/dashboards/{id}/filter-views
+    API->>DynamoDB: FilterView一覧取得
+    API->>Frontend: FilterView一覧返却
+    User->>Frontend: FilterViewを選択
+    Frontend->>Frontend: filter_stateをカードフィルタに一括適用
+    Frontend->>User: フィルタ適用済みダッシュボード表示
+```
+
+**フィルタ状態保存フロー:**
+
+1. ユーザがダッシュボード上でフィルタ (カテゴリ / 日付範囲) を設定
+2. `FilterViewSelector` コンポーネントで「保存」をクリック
+3. `POST /api/dashboards/{id}/filter-views` で `filter_state` を送信
+4. DynamoDB `bi_filter_views` テーブルにレコード格納
+
+**フィルタ状態復元フロー:**
+
+1. ダッシュボード表示時に `GET /api/dashboards/{id}/filter-views` で一覧取得
+2. ユーザが `FilterViewSelector` でビューを選択
+3. 選択されたビューの `filter_state` をカードフィルタに一括適用
+4. 各カードが更新されたフィルタで再実行
+
+**FilterView データモデル:**
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| filterViewId | String | FilterView ID (PK) |
+| dashboard_id | String | 所属ダッシュボードID |
+| name | String | ビュー名 |
+| filter_state | Map | フィルタ状態 (各フィルタIDと値のマップ) |
+| is_shared | Boolean | 他ユーザに共有されるか |
+| is_default | Boolean | デフォルトビューか |
+| owner_id | String | 作成者ユーザID |
+| created_at | Number | 作成日時 (Unix timestamp) |
+| updated_at | Number | 更新日時 |
 
 ---
 

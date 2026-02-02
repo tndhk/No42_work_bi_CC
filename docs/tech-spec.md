@@ -1,4 +1,4 @@
-# 社内BI・Pythonカード 技術仕様書 v0.1
+# 社内BI・Pythonカード 技術仕様書 v0.2
 
 ## 1. 技術スタック
 
@@ -117,6 +117,7 @@ work_BI/
 │   │   │   │   ├── cards.py
 │   │   │   │   ├── dashboards.py
 │   │   │   │   ├── filter_views.py
+│   │   │   │   ├── filter_view_detail.py
 │   │   │   │   └── chatbot.py
 │   │   │   └── deps.py           # 依存性注入
 │   │   ├── core/
@@ -141,6 +142,10 @@ work_BI/
 │   │   │   ├── dashboard_service.py
 │   │   │   ├── executor_service.py
 │   │   │   └── chatbot_service.py
+│   │   ├── repositories/          # データアクセス層
+│   │   │   ├── dataset_repository.py
+│   │   │   ├── dashboard_repository.py
+│   │   │   └── filter_view_repository.py
 │   │   └── main.py               # エントリポイント
 │   ├── tests/
 │   ├── requirements.txt

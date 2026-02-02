@@ -9,7 +9,7 @@
 ### FR-1: Dataset取り込み
 
 - [x] FR-1.1 Local CSV Import (ファイルアップロード、プレビュー、スキーマ推定、Parquet変換)
-- [ ] FR-1.2 S3 CSV Import (バケット/プレフィックス選択、認証管理)
+- [x] FR-1.2 S3 CSV Import (バケット/キー指定、S3ImportForm UI、Parquet変換)
 - [ ] FR-1.3 Dataset再取り込み (スキーマ変化検知・警告、中止/続行選択)
 
 ### FR-2: Transform (PythonベースETL)
@@ -39,7 +39,7 @@
 
 ### FR-6: FilterView (フィルタ状態の保存)
 
-- [ ] FR-6.1 FilterView操作 (CRUD API、バックエンド・フロントエンド)
+- [x] FR-6.1 FilterView操作 (CRUD API、FilterViewRepository、FilterViewSelector UI)
 - [ ] FR-6.2 FilterView共有 (個人用/共有ビュー、デフォルトビュー)
 
 ### FR-7: 共有/権限 (Dashboardのみ)
@@ -91,7 +91,7 @@
 
 ## 品質・テスト (完了済み)
 
-- [x] フロントエンドテスト 83.07% カバレッジ (262+ テスト)
+- [x] フロントエンドテスト 83%+ カバレッジ (290+ テスト)
 - [x] バックエンドテスト充実 (29モジュール、7,644行)
 - [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard)
 - [x] Docker Compose ヘルスチェック
@@ -108,14 +108,15 @@
 | Phase Q4 | Playwright E2E + API標準化 | 701aa1e | 2026-01-31 |
 | Phase Q5 | クリーンアップ・依存整理 | 701aa1e | 2026-01-31 |
 | Docs | コードマップ・開発ガイド更新 | 5c728e8 | 2026-01-31 |
+| FR-5/6 + FR-1.2 | フィルタUI + FilterView CRUD + S3 Import | (WIP) | 2026-02-02 |
 
 ## 次期フェーズ候補
 
 | 優先度 | 機能群 | 依存関係 | 複雑度 |
 |--------|--------|----------|--------|
-| 高 | FilterView (フィルタ状態保存) | フィルタUI実装完了 | 小 |
+| 高 | FilterView共有機能 (FR-6.2) | FR-6.1完了 | 小 |
 | 高 | Transform (ETL) | Executor基盤あり | 大 |
 | 中 | Dashboard共有/権限 + グループ管理 | グループ → 共有の順 | 大 |
-| 中 | S3 CSV Import | S3クライアント基盤あり | 小 |
+| 中 | S3 CSV Import 再取り込み (FR-1.3) | FR-1.2完了 | 小 |
 | 低 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
 | 低 | 監査ログ | 他機能に依存しない | 中 |

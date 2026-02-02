@@ -1,8 +1,8 @@
 # 開発者ガイド (CONTRIB)
 
-**最終更新:** 2026-02-01
+**最終更新:** 2026-02-02
 **プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + フィルタ機能 実装中
+**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import 実装中
 
 > **実装進捗:** 全機能の実装ステータスは [PROGRESS.md](./PROGRESS.md) を参照
 
@@ -27,7 +27,7 @@
 work_BI_ClaudeCode/
 ├── backend/             # FastAPI バックエンド (Python 3.11)
 │   ├── app/
-│   │   ├── api/         # APIルート定義 (auth, datasets, cards, dashboards)
+│   │   ├── api/         # APIルート定義 (auth, datasets, cards, dashboards, filter_views)
 │   │   ├── core/        # 設定、セキュリティ、ロギング
 │   │   ├── db/          # DynamoDB / S3 クライアント
 │   │   ├── models/      # Pydantic モデル
@@ -40,14 +40,14 @@ work_BI_ClaudeCode/
 │   └── Dockerfile.dev   # 開発用Dockerfile
 ├── frontend/            # React SPA (TypeScript / Vite)
 │   ├── src/
-│   │   ├── __tests__/   # Vitest テスト (42ファイル, 262テスト)
+│   │   ├── __tests__/   # Vitest テスト (46ファイル, 290+テスト)
 │   │   │   ├── components/  # コンポーネントテスト
 │   │   │   │   ├── card/        # CardEditor, CardPreview
 │   │   │   │   ├── common/      # AuthGuard, ErrorBoundary, Header, Layout 等
 │   │   │   │   ├── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm 等
 │   │   │   │   └── filters/ # CategoryFilter, DateRangeFilter
-│   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets
-│   │   │   ├── lib/         # api-client, utils, layout-utils, api/*.test.ts
+│   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets, use-filter-views
+│   │   │   ├── lib/         # api-client, utils, layout-utils, api/*.test.ts (auth, cards, dashboards, datasets, filter-views)
 │   │   │   ├── pages/       # 全9ページのテスト
 │   │   │   ├── stores/      # auth-store
 │   │   │   ├── types/       # type-guards
@@ -57,9 +57,9 @@ work_BI_ClaudeCode/
 │   │   │   ├── common/  # 共通 (Header, Sidebar, Layout, AuthGuard, ErrorBoundary)
 │   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor, FilterBar, FilterConfigPanel, FilterDefinitionForm)
 │   │   │   │   └── filters/ # フィルタUI (CategoryFilter, DateRangeFilter)
-│   │   │   ├── dataset/ # データセット関連
+│   │   │   ├── dataset/ # データセット関連 (S3ImportForm)
 │   │   │   └── ui/      # shadcn/ui プリミティブ (button, input, label, dialog, calendar, checkbox, popover, select 等)
-│   │   ├── hooks/       # React Query カスタムフック
+│   │   ├── hooks/       # React Query カスタムフック (5ファイル)
 │   │   ├── lib/         # APIクライアント、ユーティリティ、layout-utils
 │   │   ├── pages/       # ページコンポーネント (9ページ)
 │   │   ├── stores/      # Zustand ストア (auth-store)
@@ -336,8 +336,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 | メトリクス | 値 |
 |-----------|-----|
-| テストファイル数 | 42 |
-| テストケース数 | 262 |
+| テストファイル数 | 46 |
+| テストケース数 | 290+ |
 | Statements カバレッジ | 83.07% |
 | テストフレームワーク | Vitest 1.x + @testing-library/react 14.x |
 | テスト環境 | jsdom |
@@ -361,17 +361,18 @@ npx vitest src/__tests__/pages/
 npx vitest --ui
 ```
 
-テスト構成 (42ファイル):
+テスト構成 (46ファイル):
 
 | テストカテゴリ | ファイル数 | 対象 |
 |---------------|-----------|------|
 | `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage, DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
 | `__tests__/components/common/` | 8 | AuthGuard, ErrorBoundary, ConfirmDialog, Header, Sidebar, Layout, LoadingSpinner, Pagination |
-| `__tests__/components/dashboard/` | 7 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, FilterBar, FilterConfigPanel, FilterDefinitionForm |
+| `__tests__/components/dashboard/` | 8 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector |
 | `__tests__/components/dashboard/filters/` | 2 | CategoryFilter, DateRangeFilter |
+| `__tests__/components/dataset/` | 1 | S3ImportForm |
 | `__tests__/components/card/` | 2 | CardEditor, CardPreview |
-| `__tests__/hooks/` | 4 | use-auth, use-cards, use-dashboards, use-datasets |
-| `__tests__/lib/api/` | 4 | auth, cards, dashboards, datasets |
+| `__tests__/hooks/` | 5 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views |
+| `__tests__/lib/api/` | 5 | auth, cards, dashboards, datasets, filter-views |
 | `__tests__/lib/` | 3 | api-client, utils, layout-utils |
 | `__tests__/stores/` | 1 | auth-store |
 | `__tests__/types/` | 1 | type-guards |
@@ -406,7 +407,7 @@ pytest -v
 
 | テストディレクトリ | 対象 |
 |-------------------|------|
-| `tests/api/routes/` | APIエンドポイント (test_auth, test_cards, test_dashboards, test_datasets) |
+| `tests/api/routes/` | APIエンドポイント (test_auth, test_cards, test_dashboards, test_datasets, test_filter_views, test_s3_import) |
 | `tests/api/` | ヘルスチェック |
 | `tests/core/` | 設定、ロギング、パスワードポリシー、セキュリティ |
 | `tests/db/` | DynamoDB / S3 クライアント |
@@ -615,6 +616,12 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | DELETE | `/api/dashboards/{id}` | ダッシュボード削除 |
 | POST | `/api/dashboards/{id}/clone` | ダッシュボードをクローン (名前に「(Copy)」を付加) |
 | GET | `/api/dashboards/{id}/referenced-datasets` | 参照データセット一覧 |
+| POST | `/api/datasets/s3-import` | S3からCSVを取り込みデータセット作成 |
+| GET | `/api/dashboards/{id}/filter-views` | フィルタビュー一覧取得 |
+| POST | `/api/dashboards/{id}/filter-views` | フィルタビュー作成 |
+| GET | `/api/filter-views/{id}` | フィルタビュー詳細取得 |
+| PUT | `/api/filter-views/{id}` | フィルタビュー更新 |
+| DELETE | `/api/filter-views/{id}` | フィルタビュー削除 |
 
 ### 7.4 フロントエンドルート一覧
 

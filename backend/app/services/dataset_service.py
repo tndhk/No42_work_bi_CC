@@ -80,6 +80,99 @@ class DatasetService:
 
         return dataset
 
+    async def import_s3_csv(
+        self,
+        name: str,
+        s3_bucket: str,
+        s3_key: str,
+        owner_id: str,
+        dynamodb: Any,
+        s3_client: Any,
+        source_s3_client: Any,
+        has_header: bool = True,
+        encoding: str | None = None,
+        delimiter: str = ",",
+        partition_column: str | None = None,
+    ) -> Dataset:
+        """Import CSV file from S3 and save as Parquet.
+
+        Args:
+            name: Dataset name
+            s3_bucket: Source S3 bucket name
+            s3_key: Source S3 object key
+            owner_id: Owner user ID
+            dynamodb: DynamoDB resource
+            s3_client: S3 client for Parquet storage
+            source_s3_client: S3 client for source CSV retrieval
+            has_header: Whether CSV has header row
+            encoding: Optional encoding (auto-detected if None)
+            delimiter: Column delimiter (default: comma)
+            partition_column: Optional column to partition by
+
+        Returns:
+            Created Dataset instance
+
+        Raises:
+            ValueError: If inputs are invalid, S3 key not found, or CSV is empty
+        """
+        # Validate inputs
+        if not name or not name.strip():
+            raise ValueError("name cannot be empty")
+        if not owner_id or not owner_id.strip():
+            raise ValueError("owner_id cannot be empty")
+
+        # Fetch CSV from S3
+        try:
+            response = await source_s3_client.get_object(
+                Bucket=s3_bucket, Key=s3_key
+            )
+            file_bytes = await response["Body"].read()
+        except Exception as e:
+            error_str = str(e)
+            if "NoSuchKey" in error_str or "Not Found" in error_str or "404" in error_str:
+                raise ValueError(f"S3 object not found: s3://{s3_bucket}/{s3_key}")
+            raise ValueError(f"S3 error retrieving s3://{s3_bucket}/{s3_key}: {error_str}")
+
+        if not file_bytes:
+            raise ValueError("S3 CSV file is empty")
+
+        # Generate dataset ID
+        dataset_id = self._generate_dataset_id()
+
+        # Parse CSV
+        csv_options = self._build_csv_options(encoding, delimiter)
+        df = parse_full(file_bytes, csv_options)
+
+        if df.empty:
+            raise ValueError("CSV file is empty or could not be parsed")
+
+        # Infer schema
+        schema = infer_schema(df)
+
+        # Convert and save to S3
+        storage_result = self._save_to_s3(
+            df, dataset_id, s3_client, partition_column
+        )
+
+        # Save metadata to DynamoDB with S3 source config
+        dataset = await self._save_metadata(
+            dataset_id=dataset_id,
+            name=name.strip(),
+            owner_id=owner_id,
+            df=df,
+            schema=schema,
+            storage_result=storage_result,
+            partition_column=partition_column,
+            dynamodb=dynamodb,
+            source_type='s3_csv',
+            source_config={
+                's3_bucket': s3_bucket,
+                's3_key': s3_key,
+            },
+        )
+
+        return dataset
+
     async def get_column_values(
         self,
         dataset: Dataset,
@@ -248,6 +341,8 @@ class DatasetService:
         storage_result: Any,
         partition_column: str | None,
         dynamodb: Any,
+        source_type: str = 'csv',
+        source_config: dict[str, Any] | None = None,
     ) -> Dataset:
         """Save dataset metadata to DynamoDB.
 
@@ -260,6 +355,8 @@ class DatasetService:
             storage_result: S3 storage result
             partition_column: Optional partition column
             dynamodb: DynamoDB resource
+            source_type: Source type identifier (default: 'csv')
+            source_config: Optional source configuration dict
 
         Returns:
             Created Dataset instance
@@ -270,13 +367,13 @@ class DatasetService:
             'id': dataset_id,
             'name': name,
             'description': None,
-            'source_type': 'csv',
+            'source_type': source_type,
             'row_count': len(df),
             'schema': [col.model_dump() for col in schema],
             'owner_id': owner_id,
             's3_path': storage_result.s3_path,
             'partition_column': partition_column,
-            'source_config': None,
+            'source_config': source_config,
             'column_count': len(df.columns),
             'last_import_at': now,
             'last_import_by': owner_id,

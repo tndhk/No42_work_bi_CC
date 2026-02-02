@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { datasetsApi } from '@/lib/api';
-import type { DatasetUpdateRequest, PaginationParams } from '@/types';
+import type { DatasetUpdateRequest, PaginationParams, S3ImportRequest } from '@/types';
 
 export function useDatasets(params?: PaginationParams & { owner?: string }) {
   return useQuery({
@@ -54,6 +54,17 @@ export function useDeleteDataset() {
 
   return useMutation({
     mutationFn: (datasetId: string) => datasetsApi.delete(datasetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['datasets'] });
+    },
+  });
+}
+
+export function useS3ImportDataset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: S3ImportRequest) => datasetsApi.s3Import(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['datasets'] });
     },

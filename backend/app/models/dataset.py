@@ -53,6 +53,28 @@ class DatasetUpdate(BaseModel):
         return v
 
 
+class S3ImportRequest(BaseModel):
+    """S3 CSV import request model."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(min_length=1)
+    s3_bucket: str = Field(min_length=1)
+    s3_key: str = Field(min_length=1)
+    has_header: bool = True
+    delimiter: str = ","
+    encoding: Optional[str] = None
+    partition_column: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate name is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Name cannot be empty")
+        return v
+
+
 class Dataset(TimestampMixin, BaseModel):
     """Dataset model."""
 

@@ -43,6 +43,16 @@ export interface DatasetUpdateRequest {
   partition_column?: string;
 }
 
+export interface S3ImportRequest {
+  name: string;
+  s3_bucket: string;
+  s3_key: string;
+  has_header?: boolean;
+  delimiter?: string;
+  encoding?: string;
+  partition_column?: string;
+}
+
 export interface DatasetPreview {
   columns: string[];
   rows: unknown[][];

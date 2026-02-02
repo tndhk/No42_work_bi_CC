@@ -4,9 +4,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Filter } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { useDashboard, useExecuteCard } from '@/hooks';
+import {
+  useDashboard,
+  useExecuteCard,
+  useFilterViews,
+  useCreateFilterView,
+  useUpdateFilterView,
+  useDeleteFilterView,
+} from '@/hooks';
 import { DashboardViewer } from '@/components/dashboard/DashboardViewer';
 import { FilterBar } from '@/components/dashboard/FilterBar';
+import { FilterViewSelector } from '@/components/dashboard/FilterViewSelector';
+import type { FilterView } from '@/types';
 
 export function DashboardViewPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +24,12 @@ export function DashboardViewPage() {
   const executeCard = useExecuteCard();
   const [filterValues, setFilterValues] = useState<Record<string, unknown>>({});
   const [filterBarVisible, setFilterBarVisible] = useState(true);
+  const [selectedViewId, setSelectedViewId] = useState<string | undefined>();
+
+  const { data: filterViews = [] } = useFilterViews(id!);
+  const createFilterView = useCreateFilterView();
+  const updateFilterView = useUpdateFilterView();
+  const deleteFilterView = useDeleteFilterView();
 
   const handleFilterChange = useCallback((filterId: string, value: unknown) => {
     setFilterValues((prev) => {
@@ -30,7 +45,40 @@ export function DashboardViewPage() {
 
   const handleClearAll = useCallback(() => {
     setFilterValues({});
+    setSelectedViewId(undefined);
   }, []);
+
+  const handleSelectView = useCallback((view: FilterView) => {
+    setFilterValues(view.filter_state as Record<string, unknown>);
+    setSelectedViewId(view.id);
+  }, []);
+
+  const handleSaveView = useCallback(async (name: string) => {
+    if (!id) return;
+    await createFilterView.mutateAsync({
+      dashboardId: id,
+      data: {
+        name,
+        filter_state: filterValues,
+      },
+    });
+  }, [id, filterValues, createFilterView]);
+
+  const handleOverwriteView = useCallback(async (viewId: string) => {
+    await updateFilterView.mutateAsync({
+      filterViewId: viewId,
+      data: {
+        filter_state: filterValues,
+      },
+    });
+  }, [filterValues, updateFilterView]);
+
+  const handleDeleteView = useCallback(async (viewId: string) => {
+    await deleteFilterView.mutateAsync(viewId);
+    if (selectedViewId === viewId) {
+      setSelectedViewId(undefined);
+    }
+  }, [selectedViewId, deleteFilterView]);
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>;
@@ -49,20 +97,30 @@ export function DashboardViewPage() {
         <h1 className="text-2xl font-bold">{dashboard.name}</h1>
         <div className="flex items-center gap-2">
           {hasFilters && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFilterBarVisible(!filterBarVisible)}
-              aria-label="フィルタ表示切替"
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              フィルタ
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1">
-                  {activeFilterCount}
-                </Badge>
-              )}
-            </Button>
+            <>
+              <FilterViewSelector
+                views={filterViews}
+                selectedViewId={selectedViewId}
+                onSelect={handleSelectView}
+                onSave={handleSaveView}
+                onOverwrite={handleOverwriteView}
+                onDelete={handleDeleteView}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFilterBarVisible(!filterBarVisible)}
+                aria-label="フィルタ表示切替"
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                フィルタ
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] px-1">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={() => navigate(`/dashboards/${id}/edit`)}>
             <Pencil className="h-4 w-4 mr-2" />

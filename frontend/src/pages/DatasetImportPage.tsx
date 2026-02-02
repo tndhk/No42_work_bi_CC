@@ -5,11 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Upload } from 'lucide-react';
-import { useCreateDataset } from '@/hooks';
+import { useCreateDataset, useS3ImportDataset } from '@/hooks';
+import { S3ImportForm } from '@/components/dataset/S3ImportForm';
+import type { S3ImportRequest } from '@/types';
+
+type ImportMode = 'csv' | 's3';
 
 export function DatasetImportPage() {
   const navigate = useNavigate();
   const createMutation = useCreateDataset();
+  const s3ImportMutation = useS3ImportDataset();
+  const [importMode, setImportMode] = useState<ImportMode>('csv');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [delimiter, setDelimiter] = useState(',');
@@ -32,7 +38,7 @@ export function DatasetImportPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleCsvSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || !name.trim()) return;
 
@@ -49,6 +55,14 @@ export function DatasetImportPage() {
     });
   };
 
+  const handleS3Submit = (data: S3ImportRequest) => {
+    s3ImportMutation.mutate(data, {
+      onSuccess: (dataset) => {
+        navigate(`/datasets/${dataset.dataset_id}`);
+      },
+    });
+  };
+
   return (
     <div className="space-y-4 max-w-2xl">
       <div className="flex items-center gap-4">
@@ -58,86 +72,129 @@ export function DatasetImportPage() {
         <h1 className="text-2xl font-bold">データセットインポート</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>CSVファイル</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => document.getElementById('file-input')?.click()}
-            >
-              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              {file ? (
-                <p className="text-sm">{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  CSVファイルをドラッグ&ドロップ、またはクリックして選択
-                </p>
-              )}
-              <input
-                id="file-input"
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            importMode === 'csv'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setImportMode('csv')}
+        >
+          CSVアップロード
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            importMode === 's3'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setImportMode('s3')}
+        >
+          S3インポート
+        </button>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>インポート設定</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="dataset-name">データセット名</Label>
-              <Input
-                id="dataset-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="データセット名"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="delimiter">区切り文字</Label>
-              <Input
-                id="delimiter"
-                value={delimiter}
-                onChange={(e) => setDelimiter(e.target.value)}
-                className="w-20"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="has-header"
-                type="checkbox"
-                checked={hasHeader}
-                onChange={(e) => setHasHeader(e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="has-header">先頭行をヘッダとして使用</Label>
-            </div>
-          </CardContent>
-        </Card>
+      {importMode === 'csv' ? (
+        <form onSubmit={handleCsvSubmit} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>CSVファイル</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors"
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => document.getElementById('file-input')?.click()}
+              >
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                {file ? (
+                  <p className="text-sm">{file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    CSVファイルをドラッグ&ドロップ、またはクリックして選択
+                  </p>
+                )}
+                <input
+                  id="file-input"
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-        {createMutation.isError && (
-          <p className="text-sm text-destructive">インポートに失敗しました。ファイルの形式を確認してください。</p>
-        )}
+          <Card>
+            <CardHeader>
+              <CardTitle>インポート設定</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="dataset-name">データセット名</Label>
+                <Input
+                  id="dataset-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="データセット名"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="delimiter">区切り文字</Label>
+                <Input
+                  id="delimiter"
+                  value={delimiter}
+                  onChange={(e) => setDelimiter(e.target.value)}
+                  className="w-20"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  id="has-header"
+                  type="checkbox"
+                  checked={hasHeader}
+                  onChange={(e) => setHasHeader(e.target.checked)}
+                  className="rounded"
+                />
+                <Label htmlFor="has-header">先頭行をヘッダとして使用</Label>
+              </div>
+            </CardContent>
+          </Card>
 
-        <div className="flex gap-2">
-          <Button variant="outline" type="button" onClick={() => navigate('/datasets')}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!file || !name.trim() || createMutation.isPending}>
-            {createMutation.isPending ? 'インポート中...' : 'インポート'}
-          </Button>
+          {createMutation.isError && (
+            <p className="text-sm text-destructive">インポートに失敗しました。ファイルの形式を確認してください。</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" type="button" onClick={() => navigate('/datasets')}>
+              キャンセル
+            </Button>
+            <Button type="submit" disabled={!file || !name.trim() || createMutation.isPending}>
+              {createMutation.isPending ? 'インポート中...' : 'インポート'}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>S3からインポート</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <S3ImportForm
+                onSubmit={handleS3Submit}
+                isLoading={s3ImportMutation.isPending}
+              />
+            </CardContent>
+          </Card>
+
+          {s3ImportMutation.isError && (
+            <p className="text-sm text-destructive">S3インポートに失敗しました。バケット名とキーを確認してください。</p>
+          )}
         </div>
-      </form>
+      )}
     </div>
   );
 }

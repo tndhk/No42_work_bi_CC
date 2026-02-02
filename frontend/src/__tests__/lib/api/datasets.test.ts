@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { datasetsApi } from '@/lib/api/datasets';
-import type { Dataset, DatasetDetail, DatasetPreview, ApiResponse, PaginatedResponse } from '@/types';
+import type { Dataset, DatasetDetail, DatasetPreview, ApiResponse, PaginatedResponse, S3ImportRequest } from '@/types';
 
 // Mock apiClient
 vi.mock('@/lib/api-client', () => ({
@@ -212,6 +212,84 @@ describe('datasetsApi', () => {
       const call = mockGet.mock.calls[0];
       const searchParams = call[1].searchParams as URLSearchParams;
       expect(searchParams.get('limit')).toBe('50');
+    });
+  });
+
+  describe('s3Import', () => {
+    it('S3インポートデータをPOSTリクエストで送信する', async () => {
+      const mockDataset: DatasetDetail = {
+        dataset_id: 'ds_test123',
+        name: 'test-dataset',
+        source_type: 's3_csv',
+        row_count: 0,
+        column_count: 0,
+        owner: { user_id: 'owner-1', name: 'Owner' },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        schema: [],
+      };
+
+      const mockApiResponse: ApiResponse<DatasetDetail> = {
+        data: mockDataset,
+      };
+
+      mockPost.mockReturnValue({
+        json: vi.fn().mockResolvedValue(mockApiResponse),
+      });
+
+      const importRequest: S3ImportRequest = {
+        name: 'test-dataset',
+        s3_bucket: 'my-bucket',
+        s3_key: 'data/file.csv',
+      };
+
+      const result = await datasetsApi.s3Import(importRequest);
+
+      expect(mockPost).toHaveBeenCalledWith('datasets/s3-import', {
+        json: importRequest,
+      });
+      expect(result).toEqual(mockDataset);
+      expect(result.name).toBe('test-dataset');
+    });
+
+    it('全オプションパラメータを含めてPOSTリクエストを送信する', async () => {
+      const mockDataset: DatasetDetail = {
+        dataset_id: 'ds_test456',
+        name: 'full-dataset',
+        source_type: 's3_csv',
+        row_count: 0,
+        column_count: 10,
+        owner: { user_id: 'owner-1', name: 'Owner' },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        schema: [],
+      };
+
+      const mockApiResponse: ApiResponse<DatasetDetail> = {
+        data: mockDataset,
+      };
+
+      mockPost.mockReturnValue({
+        json: vi.fn().mockResolvedValue(mockApiResponse),
+      });
+
+      const importRequest: S3ImportRequest = {
+        name: 'full-dataset',
+        s3_bucket: 'my-bucket',
+        s3_key: 'data/file.tsv',
+        has_header: false,
+        delimiter: '\t',
+        encoding: 'shift_jis',
+        partition_column: 'date',
+      };
+
+      const result = await datasetsApi.s3Import(importRequest);
+
+      expect(mockPost).toHaveBeenCalledWith('datasets/s3-import', {
+        json: importRequest,
+      });
+      expect(result).toEqual(mockDataset);
+      expect(result.name).toBe('full-dataset');
     });
   });
 });

@@ -7,6 +7,7 @@ import type {
   DatasetDetail,
   DatasetUpdateRequest,
   DatasetPreview,
+  S3ImportRequest,
 } from '@/types';
 
 export const datasetsApi = {
@@ -46,6 +47,11 @@ export const datasetsApi = {
 
   getColumnValues: async (datasetId: string, columnName: string): Promise<string[]> => {
     const response = await apiClient.get(`datasets/${datasetId}/columns/${columnName}/values`).json<ApiResponse<string[]>>();
+    return response.data;
+  },
+
+  s3Import: async (data: S3ImportRequest): Promise<DatasetDetail> => {
+    const response = await apiClient.post('datasets/s3-import', { json: data }).json<ApiResponse<DatasetDetail>>();
     return response.data;
   },
 };

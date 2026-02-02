@@ -6,6 +6,7 @@ export {
   useCreateDataset,
   useUpdateDataset,
   useDeleteDataset,
+  useS3ImportDataset,
 } from './use-datasets';
 export {
   useCards,
@@ -24,3 +25,9 @@ export {
   useDeleteDashboard,
   useCloneDashboard,
 } from './use-dashboards';
+export {
+  useFilterViews,
+  useCreateFilterView,
+  useUpdateFilterView,
+  useDeleteFilterView,
+} from './use-filter-views';

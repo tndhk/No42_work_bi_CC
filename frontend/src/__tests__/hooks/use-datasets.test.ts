@@ -7,9 +7,10 @@ import {
   useCreateDataset,
   useUpdateDataset,
   useDeleteDataset,
+  useS3ImportDataset,
 } from '@/hooks/use-datasets';
 import { createWrapper, createMockDataset, createMockPaginatedResponse } from '@/__tests__/helpers/test-utils';
-import type { DatasetDetail, DatasetPreview, DatasetUpdateRequest } from '@/types';
+import type { DatasetDetail, DatasetPreview, DatasetUpdateRequest, S3ImportRequest } from '@/types';
 
 // Mock datasetsApi
 vi.mock('@/lib/api', () => ({
@@ -20,6 +21,7 @@ vi.mock('@/lib/api', () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    s3Import: vi.fn(),
   },
 }));
 
@@ -30,6 +32,7 @@ const mockPreview = datasetsApi.preview as ReturnType<typeof vi.fn>;
 const mockCreate = datasetsApi.create as ReturnType<typeof vi.fn>;
 const mockUpdate = datasetsApi.update as ReturnType<typeof vi.fn>;
 const mockDelete = datasetsApi.delete as ReturnType<typeof vi.fn>;
+const mockS3Import = datasetsApi.s3Import as ReturnType<typeof vi.fn>;
 
 describe('useDatasets', () => {
   beforeEach(() => {
@@ -174,5 +177,80 @@ describe('useDeleteDataset', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(mockDelete).toHaveBeenCalledWith('dataset-1');
+  });
+});
+
+describe('useS3ImportDataset', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('S3インポートAPIを呼び出してデータセットを作成する', async () => {
+    const mockDataset: DatasetDetail = {
+      ...createMockDataset({ dataset_id: 'ds-imported', name: 'S3 Imported', source_type: 's3_csv' }),
+      schema: [],
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    mockS3Import.mockResolvedValue(mockDataset);
+
+    const { result } = renderHook(() => useS3ImportDataset(), { wrapper: createWrapper() });
+
+    const importRequest: S3ImportRequest = {
+      name: 'test-dataset',
+      s3_bucket: 'my-bucket',
+      s3_key: 'data/file.csv',
+    };
+
+    result.current.mutate(importRequest);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockS3Import).toHaveBeenCalledWith(importRequest);
+    expect(result.current.data).toEqual(mockDataset);
+  });
+
+  it('オプションパラメータ付きでS3インポートを呼び出す', async () => {
+    const mockDataset: DatasetDetail = {
+      ...createMockDataset({ dataset_id: 'ds-imported-2', name: 'S3 TSV', source_type: 's3_csv' }),
+      schema: [],
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+
+    mockS3Import.mockResolvedValue(mockDataset);
+
+    const { result } = renderHook(() => useS3ImportDataset(), { wrapper: createWrapper() });
+
+    const importRequest: S3ImportRequest = {
+      name: 'tsv-dataset',
+      s3_bucket: 'my-bucket',
+      s3_key: 'data/file.tsv',
+      has_header: true,
+      delimiter: '\t',
+    };
+
+    result.current.mutate(importRequest);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockS3Import).toHaveBeenCalledWith(importRequest);
+    expect(result.current.data).toEqual(mockDataset);
+  });
+
+  it('エラー時にisErrorがtrueになる', async () => {
+    mockS3Import.mockRejectedValue(new Error('S3 bucket not found'));
+
+    const { result } = renderHook(() => useS3ImportDataset(), { wrapper: createWrapper() });
+
+    result.current.mutate({
+      name: 'fail-dataset',
+      s3_bucket: 'nonexistent-bucket',
+      s3_key: 'data/file.csv',
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect((result.current.error as Error).message).toBe('S3 bucket not found');
   });
 });

@@ -73,11 +73,12 @@ def client_with_mock_dynamodb(client, mock_dynamodb_resource, mock_aws_context):
 def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
     """Create DynamoDB tables for testing using moto.
 
-    Creates all four tables with proper schema:
+    Creates all five tables with proper schema:
     - users (PK: userId, GSI: UsersByEmail on email)
     - datasets (PK: datasetId, GSI: DatasetsByOwner on ownerId)
     - cards (PK: cardId, GSI: CardsByOwner on ownerId)
     - dashboards (PK: dashboardId, GSI: DashboardsByOwner on ownerId)
+    - filter_views (PK: filterViewId, GSI: FilterViewsByDashboard on dashboardId)
 
     Yields:
         Tuple of (tables dict, dynamodb resource)
@@ -191,6 +192,32 @@ def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
             ]
         )
         tables['dashboards'] = dashboards_table
+
+        # Filter views table
+        filter_views_table_name = f"{settings.dynamodb_table_prefix}filter_views"
+        filter_views_table = dynamodb.create_table(
+            TableName=filter_views_table_name,
+            KeySchema=[
+                {'AttributeName': 'filterViewId', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'filterViewId', 'AttributeType': 'S'},
+                {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
+                {'AttributeName': 'createdAt', 'AttributeType': 'N'}
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'FilterViewsByDashboard',
+                    'KeySchema': [
+                        {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'createdAt', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['filter_views'] = filter_views_table
 
         yield (tables, dynamodb)
 

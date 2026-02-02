@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
-from app.models.dataset import Dataset, DatasetUpdate
+from app.models.dataset import Dataset, DatasetUpdate, S3ImportRequest
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.dataset_service import DatasetService
@@ -105,6 +105,52 @@ async def create_dataset(
             encoding=encoding,
             delimiter=delimiter,
             partition_column=partition_column,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return api_response(dataset.model_dump())
+
+
+@router.post("/s3-import", status_code=status.HTTP_201_CREATED)
+async def s3_import_dataset(
+    import_data: S3ImportRequest,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Import CSV from S3 and create dataset.
+
+    Args:
+        import_data: S3 import request data
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client
+
+    Returns:
+        Created dataset
+
+    Raises:
+        HTTPException: 422 if validation fails or S3 error
+    """
+    service = DatasetService()
+
+    try:
+        dataset = await service.import_s3_csv(
+            name=import_data.name.strip(),
+            s3_bucket=import_data.s3_bucket,
+            s3_key=import_data.s3_key,
+            owner_id=current_user.id,
+            dynamodb=dynamodb,
+            s3_client=s3_client,
+            source_s3_client=s3_client,
+            has_header=import_data.has_header,
+            encoding=import_data.encoding,
+            delimiter=import_data.delimiter,
+            partition_column=import_data.partition_column,
         )
     except ValueError as e:
         raise HTTPException(

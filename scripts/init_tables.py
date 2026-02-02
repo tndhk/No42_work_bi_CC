@@ -89,6 +89,25 @@ TABLES = [
             },
         ],
     },
+    {
+        'TableName': 'bi_filter_views',
+        'KeySchema': [{'AttributeName': 'filterViewId', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'filterViewId', 'AttributeType': 'S'},
+            {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
+            {'AttributeName': 'createdAt', 'AttributeType': 'N'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'FilterViewsByDashboard',
+                'KeySchema': [
+                    {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
 ]
 
 def create_tables():

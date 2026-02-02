@@ -3,6 +3,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status as http_status
+
 from app.api import deps
 
 
@@ -55,11 +57,33 @@ class TestFilterViewRoutes:
             setattr(mock, k, v)
         return mock
 
+    def _mock_dashboard(self, **overrides):
+        """Helper to create a mock Dashboard."""
+        defaults = {
+            "id": "dashboard_xyz",
+            "name": "Test Dashboard",
+            "owner_id": "user_test123",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        defaults.update(overrides)
+        mock = MagicMock()
+        for k, v in defaults.items():
+            setattr(mock, k, v)
+        return mock
+
     # --- List filter views ---
 
     def test_list_filter_views(self, authed_client):
-        """Test listing filter views for a dashboard."""
-        with patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo:
+        """Test listing filter views for a dashboard with viewer permission."""
+        with (
+            patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo,
+            patch("app.api.routes.filter_views.PermissionService") as MockPermSvc,
+            patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo,
+        ):
+            mock_dashboard = self._mock_dashboard()
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=mock_dashboard)
+            MockPermSvc.return_value.assert_permission = AsyncMock(return_value=None)
             mock_fv = self._mock_filter_view()
             MockRepo.return_value.list_by_dashboard = AsyncMock(return_value=[mock_fv])
 
@@ -72,7 +96,14 @@ class TestFilterViewRoutes:
 
     def test_list_filter_views_empty(self, authed_client):
         """Test listing filter views returns empty list."""
-        with patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo:
+        with (
+            patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo,
+            patch("app.api.routes.filter_views.PermissionService") as MockPermSvc,
+            patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo,
+        ):
+            mock_dashboard = self._mock_dashboard()
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=mock_dashboard)
+            MockPermSvc.return_value.assert_permission = AsyncMock(return_value=None)
             MockRepo.return_value.list_by_dashboard = AsyncMock(return_value=[])
 
             response = authed_client.get("/api/dashboards/dashboard_xyz/filter-views")
@@ -85,11 +116,46 @@ class TestFilterViewRoutes:
         response = client.get("/api/dashboards/dashboard_xyz/filter-views")
         assert response.status_code in (401, 403)
 
+    def test_list_filter_views_dashboard_not_found(self, authed_client):
+        """Test listing filter views for non-existent dashboard returns 404."""
+        with patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo:
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=None)
+
+            response = authed_client.get("/api/dashboards/nonexistent/filter-views")
+
+        assert response.status_code == 404
+
+    def test_list_filter_views_no_permission(self, authed_client):
+        """Test listing filter views without viewer permission returns 403."""
+        with (
+            patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo,
+            patch("app.api.routes.filter_views.PermissionService") as MockPermSvc,
+        ):
+            mock_dashboard = self._mock_dashboard(owner_id="other_user")
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=mock_dashboard)
+            MockPermSvc.return_value.assert_permission = AsyncMock(
+                side_effect=HTTPException(
+                    status_code=http_status.HTTP_403_FORBIDDEN,
+                    detail="Requires viewer permission or higher",
+                )
+            )
+
+            response = authed_client.get("/api/dashboards/dashboard_xyz/filter-views")
+
+        assert response.status_code == 403
+
     # --- Create filter view ---
 
     def test_create_filter_view(self, authed_client):
-        """Test creating a filter view."""
-        with patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo:
+        """Test creating a filter view with editor permission."""
+        with (
+            patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo,
+            patch("app.api.routes.filter_views.PermissionService") as MockPermSvc,
+            patch("app.api.routes.filter_views.FilterViewRepository") as MockRepo,
+        ):
+            mock_dashboard = self._mock_dashboard()
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=mock_dashboard)
+            MockPermSvc.return_value.assert_permission = AsyncMock(return_value=None)
             mock_fv = self._mock_filter_view()
             MockRepo.return_value.create = AsyncMock(return_value=mock_fv)
 
@@ -119,6 +185,46 @@ class TestFilterViewRoutes:
             json={"name": "Test", "filter_state": {}},
         )
         assert response.status_code in (401, 403)
+
+    def test_create_filter_view_dashboard_not_found(self, authed_client):
+        """Test creating filter view for non-existent dashboard returns 404."""
+        with patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo:
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=None)
+
+            response = authed_client.post(
+                "/api/dashboards/nonexistent/filter-views",
+                json={
+                    "name": "New View",
+                    "filter_state": {"category": "sales"},
+                },
+            )
+
+        assert response.status_code == 404
+
+    def test_create_filter_view_viewer_only_forbidden(self, authed_client):
+        """Test creating filter view with only viewer permission returns 403."""
+        with (
+            patch("app.api.routes.filter_views.DashboardRepository") as MockDashRepo,
+            patch("app.api.routes.filter_views.PermissionService") as MockPermSvc,
+        ):
+            mock_dashboard = self._mock_dashboard(owner_id="other_user")
+            MockDashRepo.return_value.get_by_id = AsyncMock(return_value=mock_dashboard)
+            MockPermSvc.return_value.assert_permission = AsyncMock(
+                side_effect=HTTPException(
+                    status_code=http_status.HTTP_403_FORBIDDEN,
+                    detail="Requires editor permission or higher",
+                )
+            )
+
+            response = authed_client.post(
+                "/api/dashboards/dashboard_xyz/filter-views",
+                json={
+                    "name": "New View",
+                    "filter_state": {"category": "sales"},
+                },
+            )
+
+        assert response.status_code == 403
 
     # --- Get filter view ---
 

@@ -98,8 +98,29 @@ async def get_current_user(
     user = User(
         id=user_in_db.id,
         email=user_in_db.email,
+        role=user_in_db.role,
         created_at=user_in_db.created_at,
         updated_at=user_in_db.updated_at,
     )
 
     return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require current user to have admin role.
+
+    Args:
+        current_user: Current authenticated user
+
+    Returns:
+        User if admin
+
+    Raises:
+        HTTPException: 403 if not admin
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user

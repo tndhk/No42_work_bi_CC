@@ -24,6 +24,12 @@ export function DashboardEditPage() {
   const [datasetIds, setDatasetIds] = useState<string[]>([]);
 
   useEffect(() => {
+    if (dashboard && dashboard.my_permission === 'viewer') {
+      navigate(`/dashboards/${id}`);
+    }
+  }, [dashboard, id, navigate]);
+
+  useEffect(() => {
     if (!dashboard || layout) return;
     setName(dashboard.name);
     setLayout(dashboard.layout || { cards: [], columns: 12, row_height: 100 });

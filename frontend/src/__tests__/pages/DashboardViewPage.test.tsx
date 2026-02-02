@@ -46,6 +46,12 @@ vi.mock('@/components/dashboard/FilterBar', () => ({
   ),
 }));
 
+vi.mock('@/components/dashboard/ShareDialog', () => ({
+  ShareDialog: ({ open, onOpenChange, dashboardId }: any) => (
+    open ? <div data-testid="share-dialog">Share for {dashboardId}<button onClick={() => onOpenChange(false)}>Close</button></div> : null
+  ),
+}));
+
 vi.mock('@/components/dashboard/FilterViewSelector', () => ({
   FilterViewSelector: ({ views, selectedViewId, onSelect, onSave, onOverwrite, onDelete }: any) => (
     <div data-testid="filter-view-selector">
@@ -606,6 +612,128 @@ describe('DashboardViewPage', () => {
 
       // selectedViewId should be cleared
       expect(screen.queryByTestId('selected-view-id')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('権限制御', () => {
+    const renderViewPage = () => {
+      return render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1']}>
+          <Routes>
+            <Route path="/dashboards/:dashboardId" element={<DashboardViewPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+    };
+
+    it('viewer権限で編集ボタンが非表示', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'viewer',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      expect(screen.getByText('Test Dashboard')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /編集/ })).not.toBeInTheDocument();
+    });
+
+    it('editor権限で編集ボタンが表示される', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'editor',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      expect(screen.getByRole('button', { name: /編集/ })).toBeInTheDocument();
+    });
+
+    it('owner権限で編集ボタンと共有ボタンが表示される', async () => {
+      const user = userEvent.setup();
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'owner',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      expect(screen.getByRole('button', { name: /編集/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /共有/ })).toBeInTheDocument();
+
+      // 共有ボタンクリックでShareDialogが開く
+      await user.click(screen.getByRole('button', { name: /共有/ }));
+      expect(screen.getByTestId('share-dialog')).toBeInTheDocument();
+    });
+
+    it('viewer権限では共有ボタンが非表示', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'viewer',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      expect(screen.queryByRole('button', { name: /共有/ })).not.toBeInTheDocument();
+    });
+
+    it('editor権限では共有ボタンが非表示', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'editor',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      expect(screen.queryByRole('button', { name: /共有/ })).not.toBeInTheDocument();
+    });
+
+    it('my_permissionがundefinedの場合は全ボタン表示(後方互換)', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, cards: [], filters: [] },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      // 後方互換: 全ボタン表示
+      expect(screen.getByRole('button', { name: /編集/ })).toBeInTheDocument();
     });
   });
 });

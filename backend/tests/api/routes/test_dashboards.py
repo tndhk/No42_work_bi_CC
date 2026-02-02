@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.main import app
 from app.api.deps import get_current_user, get_dynamodb_resource
 from app.models.dashboard import Dashboard, LayoutItem, FilterDefinition
+from app.models.dashboard_share import Permission
 from app.models.user import User
 
 
@@ -143,12 +144,28 @@ class TestListDashboards:
         async def mock_list_func(self, owner_id, dynamodb):
             return [sample_dashboard]
 
+        async def mock_list_by_target(self, shared_to_id, dynamodb):
+            return []
+
+        async def mock_list_groups(self, user_id, dynamodb):
+            return []
+
         from app.repositories import dashboard_repository
+        from app.repositories import dashboard_share_repository
+        from app.repositories import group_member_repository
 
         with patch.object(
             dashboard_repository.DashboardRepository,
             'list_by_owner',
             mock_list_func
+        ), patch.object(
+            dashboard_share_repository.DashboardShareRepository,
+            'list_by_target',
+            mock_list_by_target
+        ), patch.object(
+            group_member_repository.GroupMemberRepository,
+            'list_groups_for_user',
+            mock_list_groups
         ):
             response = authenticated_client.get("/api/dashboards")
 
@@ -160,6 +177,7 @@ class TestListDashboards:
             assert len(data) == 1
             assert data[0]["id"] == sample_dashboard.id
             assert data[0]["name"] == sample_dashboard.name
+            assert data[0]["my_permission"] == "owner"
 
     def test_list_dashboards_empty(
         self, authenticated_client: TestClient
@@ -168,12 +186,28 @@ class TestListDashboards:
         async def mock_list_func(self, owner_id, dynamodb):
             return []
 
+        async def mock_list_by_target(self, shared_to_id, dynamodb):
+            return []
+
+        async def mock_list_groups(self, user_id, dynamodb):
+            return []
+
         from app.repositories import dashboard_repository
+        from app.repositories import dashboard_share_repository
+        from app.repositories import group_member_repository
 
         with patch.object(
             dashboard_repository.DashboardRepository,
             'list_by_owner',
             mock_list_func
+        ), patch.object(
+            dashboard_share_repository.DashboardShareRepository,
+            'list_by_target',
+            mock_list_by_target
+        ), patch.object(
+            group_member_repository.GroupMemberRepository,
+            'list_groups_for_user',
+            mock_list_groups
         ):
             response = authenticated_client.get("/api/dashboards")
 
@@ -320,12 +354,20 @@ class TestGetDashboard:
         async def mock_get_func(self, dashboard_id, dynamodb):
             return sample_dashboard
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has access
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
             'get_by_id',
             mock_get_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.get(f"/api/dashboards/{sample_dashboard.id}")
 
@@ -387,7 +429,11 @@ class TestUpdateDashboard:
         async def mock_update_func(self, dashboard_id, data, dynamodb):
             return updated_dashboard
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has editor access
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
@@ -397,6 +443,10 @@ class TestUpdateDashboard:
             dashboard_repository.DashboardRepository,
             'update',
             mock_update_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.put(
                 f"/api/dashboards/{sample_dashboard.id}",
@@ -413,15 +463,25 @@ class TestUpdateDashboard:
         self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
     ) -> None:
         """Test updating dashboard not owned returns 403."""
+        from fastapi import HTTPException
+
         async def mock_get_func(self, dashboard_id, dynamodb):
             return sample_dashboard_other_owner
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            raise HTTPException(status_code=403, detail="Requires editor permission or higher")
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
             'get_by_id',
             mock_get_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.put(
                 f"/api/dashboards/{sample_dashboard_other_owner.id}",
@@ -475,7 +535,11 @@ class TestDeleteDashboard:
         async def mock_delete_func(self, dashboard_id, dynamodb):
             return None
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has access
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
@@ -485,6 +549,10 @@ class TestDeleteDashboard:
             dashboard_repository.DashboardRepository,
             'delete',
             mock_delete_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.delete(f"/api/dashboards/{sample_dashboard.id}")
 
@@ -494,15 +562,25 @@ class TestDeleteDashboard:
         self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
     ) -> None:
         """Test deleting dashboard not owned returns 403."""
+        from fastapi import HTTPException
+
         async def mock_get_func(self, dashboard_id, dynamodb):
             return sample_dashboard_other_owner
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            raise HTTPException(status_code=403, detail="Requires owner permission or higher")
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
             'get_by_id',
             mock_get_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.delete(
                 f"/api/dashboards/{sample_dashboard_other_owner.id}"
@@ -564,8 +642,12 @@ class TestGetReferencedDatasets:
         async def mock_get_referenced_func(self, dashboard, dynamodb):
             return referenced_datasets
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has viewer access
+
         from app.repositories import dashboard_repository
         from app.services import dashboard_service
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
@@ -575,6 +657,10 @@ class TestGetReferencedDatasets:
             dashboard_service.DashboardService,
             'get_referenced_datasets',
             mock_get_referenced_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.get(
                 f"/api/dashboards/{sample_dashboard.id}/referenced-datasets"
@@ -598,8 +684,12 @@ class TestGetReferencedDatasets:
         async def mock_get_referenced_func(self, dashboard, dynamodb):
             return []
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has viewer access
+
         from app.repositories import dashboard_repository
         from app.services import dashboard_service
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
@@ -609,6 +699,10 @@ class TestGetReferencedDatasets:
             dashboard_service.DashboardService,
             'get_referenced_datasets',
             mock_get_referenced_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.get(
                 f"/api/dashboards/{sample_dashboard_no_layout.id}/referenced-datasets"
@@ -675,7 +769,11 @@ class TestCloneDashboard:
         async def mock_create_func(self, data, dynamodb):
             return cloned_dashboard
 
+        async def mock_assert_perm(self, dashboard, user_id, required, dynamodb):
+            pass  # Owner has viewer access
+
         from app.repositories import dashboard_repository
+        from app.services import permission_service
 
         with patch.object(
             dashboard_repository.DashboardRepository,
@@ -685,6 +783,10 @@ class TestCloneDashboard:
             dashboard_repository.DashboardRepository,
             'create',
             mock_create_func
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert_perm
         ):
             response = authenticated_client.post(
                 f"/api/dashboards/{sample_dashboard.id}/clone"
@@ -727,3 +829,276 @@ class TestCloneDashboard:
             "/api/dashboards/dash_123/clone"
         )
         assert response.status_code == 403
+
+
+class TestDashboardPermissions:
+    """Tests for permission-based access control."""
+
+    def test_get_dashboard_viewer_allowed(
+        self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test viewer can access dashboard."""
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            pass  # Allow access (viewer permission granted)
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ):
+            response = authenticated_client.get(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}"
+            )
+            assert response.status_code == 200
+
+    def test_get_dashboard_no_permission(
+        self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test user without permission gets 403."""
+        from fastapi import HTTPException
+
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            raise HTTPException(status_code=403, detail="No access")
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ):
+            response = authenticated_client.get(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}"
+            )
+            assert response.status_code == 403
+
+    def test_update_dashboard_editor_allowed(
+        self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test editor can update dashboard."""
+        updated = Dashboard(
+            id=sample_dashboard_other_owner.id,
+            name="Updated",
+            owner_id=sample_dashboard_other_owner.owner_id,
+            default_filter_view_id=None,
+            created_at=sample_dashboard_other_owner.created_at,
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            pass  # Editor permission granted
+
+        async def mock_update(self, did, data, dynamodb):
+            return updated
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ), patch.object(
+            dashboard_repository.DashboardRepository,
+            'update',
+            mock_update
+        ):
+            response = authenticated_client.put(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}",
+                json={"name": "Updated"}
+            )
+            assert response.status_code == 200
+
+    def test_delete_dashboard_requires_owner(
+        self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test non-owner cannot delete dashboard."""
+        from fastapi import HTTPException
+
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            raise HTTPException(status_code=403, detail="Owner only")
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ):
+            response = authenticated_client.delete(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}"
+            )
+            assert response.status_code == 403
+
+    def test_clone_dashboard_viewer_allowed(
+        self, authenticated_client: TestClient, mock_user: User, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test viewer can clone dashboard."""
+        cloned = Dashboard(
+            id="dash_cloned",
+            name=f"{sample_dashboard_other_owner.name} (Copy)",
+            owner_id=mock_user.id,
+            default_filter_view_id=None,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            pass  # Viewer permission granted
+
+        async def mock_create(self, data, dynamodb):
+            return cloned
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ), patch.object(
+            dashboard_repository.DashboardRepository,
+            'create',
+            mock_create
+        ):
+            response = authenticated_client.post(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}/clone"
+            )
+            assert response.status_code == 201
+
+    def test_referenced_datasets_no_permission(
+        self, authenticated_client: TestClient, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test user without permission cannot access referenced datasets."""
+        from fastapi import HTTPException
+
+        async def mock_get(self, did, dynamodb):
+            return sample_dashboard_other_owner
+
+        async def mock_assert(self, dashboard, user_id, required, dynamodb):
+            raise HTTPException(status_code=403, detail="No access")
+
+        from app.repositories import dashboard_repository
+        from app.services import permission_service
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get
+        ), patch.object(
+            permission_service.PermissionService,
+            'assert_permission',
+            mock_assert
+        ):
+            response = authenticated_client.get(
+                f"/api/dashboards/{sample_dashboard_other_owner.id}/referenced-datasets"
+            )
+            assert response.status_code == 403
+
+    def test_list_dashboards_includes_shared(
+        self, authenticated_client: TestClient, mock_user: User,
+        sample_dashboard: Dashboard, sample_dashboard_other_owner: Dashboard
+    ) -> None:
+        """Test list includes shared dashboards with my_permission."""
+        from app.models.dashboard_share import DashboardShare, SharedToType
+
+        shared_entry = DashboardShare(
+            id="share_1",
+            dashboard_id=sample_dashboard_other_owner.id,
+            shared_to_type=SharedToType.USER,
+            shared_to_id=mock_user.id,
+            permission=Permission.VIEWER,
+            shared_by="user_456",
+            created_at=datetime.now(timezone.utc),
+        )
+
+        async def mock_list_by_owner(self, owner_id, dynamodb):
+            return [sample_dashboard]
+
+        async def mock_list_by_target(self, shared_to_id, dynamodb):
+            if shared_to_id == mock_user.id:
+                return [shared_entry]
+            return []
+
+        async def mock_list_groups(self, user_id, dynamodb):
+            return []
+
+        async def mock_get_by_id(self, dashboard_id, dynamodb):
+            if dashboard_id == sample_dashboard_other_owner.id:
+                return sample_dashboard_other_owner
+            return None
+
+        from app.repositories import dashboard_repository
+        from app.repositories import dashboard_share_repository
+        from app.repositories import group_member_repository
+
+        with patch.object(
+            dashboard_repository.DashboardRepository,
+            'list_by_owner',
+            mock_list_by_owner
+        ), patch.object(
+            dashboard_share_repository.DashboardShareRepository,
+            'list_by_target',
+            mock_list_by_target
+        ), patch.object(
+            group_member_repository.GroupMemberRepository,
+            'list_groups_for_user',
+            mock_list_groups
+        ), patch.object(
+            dashboard_repository.DashboardRepository,
+            'get_by_id',
+            mock_get_by_id
+        ):
+            response = authenticated_client.get("/api/dashboards")
+
+            assert response.status_code == 200
+            response_data = response.json()
+            data = response_data["data"]
+            assert len(data) == 2
+
+            # Find own and shared dashboards
+            own = next(d for d in data if d["id"] == sample_dashboard.id)
+            shared = next(d for d in data if d["id"] == sample_dashboard_other_owner.id)
+
+            assert own["my_permission"] == "owner"
+            assert shared["my_permission"] == "viewer"

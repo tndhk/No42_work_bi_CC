@@ -19,6 +19,8 @@ test.describe('Dataset', () => {
       datasetIds: [],
       cardIds: [],
       dashboardIds: [],
+      shareIds: [],
+      groupIds: [],
     };
 
     // ログイン

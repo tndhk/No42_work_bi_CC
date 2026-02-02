@@ -26,9 +26,9 @@ describe('Header', () => {
     cleanup();
   });
 
-  it('BI Toolロゴを表示する', () => {
+  it('ヘッダーが表示される', () => {
     render(<Header />, { wrapper: createWrapper() });
-    expect(screen.getByText('BI Tool')).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
   });
 
   it('ユーザーがいる場合にメールアドレスを表示する', () => {

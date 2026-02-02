@@ -26,8 +26,23 @@ export {
   useCloneDashboard,
 } from './use-dashboards';
 export {
+  useShares,
+  useCreateShare,
+  useUpdateShare,
+  useDeleteShare,
+} from './use-dashboard-shares';
+export {
   useFilterViews,
   useCreateFilterView,
   useUpdateFilterView,
   useDeleteFilterView,
 } from './use-filter-views';
+export {
+  useGroups,
+  useGroup,
+  useCreateGroup,
+  useUpdateGroup,
+  useDeleteGroup,
+  useAddMember,
+  useRemoveMember,
+} from './use-groups';

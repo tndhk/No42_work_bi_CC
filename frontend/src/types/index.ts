@@ -39,6 +39,11 @@ export type {
   DashboardDetail,
   DashboardCreateRequest,
   DashboardUpdateRequest,
+  Permission,
+  SharedToType,
+  DashboardShare,
+  ShareCreateRequest,
+  ShareUpdateRequest,
 } from './dashboard';
 export { isDashboard, isLayoutItem } from './dashboard';
 
@@ -48,6 +53,16 @@ export type {
   FilterViewUpdateRequest,
 } from './filter-view';
 export { isFilterView } from './filter-view';
+
+export type {
+  Group,
+  GroupDetail,
+  GroupMember,
+  GroupCreateRequest,
+  GroupUpdateRequest,
+  AddMemberRequest,
+} from './group';
+export { isGroup } from './group';
 
 export type {
   ApiResponse,

@@ -84,6 +84,29 @@ class TestUserInDB:
                 updated_at=datetime.utcnow()
             )
 
+    def test_user_in_db_default_role(self):
+        """Test that UserInDB role defaults to 'user'."""
+        user = UserInDB(
+            id="user-123",
+            email="test@example.com",
+            hashed_password="hashed_pwd_hash",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        assert user.role == "user"
+
+    def test_user_in_db_with_admin_role(self):
+        """Test that UserInDB role can be set to 'admin'."""
+        user = UserInDB(
+            id="user-123",
+            email="test@example.com",
+            hashed_password="hashed_pwd_hash",
+            role="admin",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        assert user.role == "admin"
+
     def test_user_in_db_serialization(self):
         """Test UserInDB serialization to dict."""
         now = datetime.utcnow()
@@ -127,6 +150,27 @@ class TestUser:
 
         user_dict = user.model_dump()
         assert "hashed_password" not in user_dict
+
+    def test_user_default_role(self):
+        """Test that User role defaults to 'user'."""
+        user = User(
+            id="user-123",
+            email="test@example.com",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        assert user.role == "user"
+
+    def test_user_with_admin_role(self):
+        """Test that User role can be set to 'admin'."""
+        user = User(
+            id="user-123",
+            email="test@example.com",
+            role="admin",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        assert user.role == "admin"
 
     def test_user_missing_email(self):
         """Test User validation fails without email."""

@@ -162,4 +162,110 @@ describe('DashboardListPage', () => {
 
     expect(screen.getByText(/100件中/)).toBeInTheDocument();
   });
+
+  describe('権限制御', () => {
+    it('viewer権限のダッシュボードは編集・削除ボタンが非表示', () => {
+      const dashboards = [
+        createMockDashboard({ dashboard_id: 'dashboard-1', name: 'Viewer Dashboard', my_permission: 'viewer' }),
+      ];
+
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse(dashboards),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      expect(screen.getByText('Viewer Dashboard')).toBeInTheDocument();
+      // 表示ボタン(Eye)は存在する
+      const row = screen.getByText('Viewer Dashboard').closest('tr')!;
+      const buttons = row.querySelectorAll('button');
+      // 表示ボタンのみ (Eye)
+      expect(buttons).toHaveLength(1);
+    });
+
+    it('editor権限のダッシュボードは削除ボタンが非表示', () => {
+      const dashboards = [
+        createMockDashboard({ dashboard_id: 'dashboard-1', name: 'Editor Dashboard', my_permission: 'editor' }),
+      ];
+
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse(dashboards),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      const row = screen.getByText('Editor Dashboard').closest('tr')!;
+      const buttons = row.querySelectorAll('button');
+      // 表示ボタン(Eye) + 編集ボタン(Pencil) の2つ
+      expect(buttons).toHaveLength(2);
+    });
+
+    it('owner権限のダッシュボードは全操作ボタンが表示される', () => {
+      const dashboards = [
+        createMockDashboard({ dashboard_id: 'dashboard-1', name: 'Owner Dashboard', my_permission: 'owner' }),
+      ];
+
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse(dashboards),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      const row = screen.getByText('Owner Dashboard').closest('tr')!;
+      const buttons = row.querySelectorAll('button');
+      // 表示(Eye) + 編集(Pencil) + 削除(Trash2) の3つ
+      expect(buttons).toHaveLength(3);
+    });
+
+    it('my_permissionがundefinedの場合は全ボタン表示(後方互換)', () => {
+      const dashboards = [
+        createMockDashboard({ dashboard_id: 'dashboard-1', name: 'Legacy Dashboard' }),
+      ];
+
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse(dashboards),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      const row = screen.getByText('Legacy Dashboard').closest('tr')!;
+      const buttons = row.querySelectorAll('button');
+      // 表示(Eye) + 編集(Pencil) + 削除(Trash2) の3つ
+      expect(buttons).toHaveLength(3);
+    });
+
+    it('権限バッジが表示される', () => {
+      const dashboards = [
+        createMockDashboard({ dashboard_id: 'dashboard-1', name: 'Owner Dashboard', my_permission: 'owner' }),
+        createMockDashboard({ dashboard_id: 'dashboard-2', name: 'Viewer Dashboard', my_permission: 'viewer' }),
+        createMockDashboard({ dashboard_id: 'dashboard-3', name: 'Editor Dashboard', my_permission: 'editor' }),
+      ];
+
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse(dashboards),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      expect(screen.getByText('owner')).toBeInTheDocument();
+      expect(screen.getByText('viewer')).toBeInTheDocument();
+      expect(screen.getByText('editor')).toBeInTheDocument();
+    });
+
+    it('権限列がテーブルヘッダーに表示される', () => {
+      mockUseDashboards.mockReturnValue({
+        data: createMockPaginatedResponse([]),
+        isLoading: false,
+      } as any);
+
+      render(<MemoryRouter><DashboardListPage /></MemoryRouter>, { wrapper: createWrapper() });
+
+      expect(screen.getByText('権限')).toBeInTheDocument();
+    });
+  });
 });

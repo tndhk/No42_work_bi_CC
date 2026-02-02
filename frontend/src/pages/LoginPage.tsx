@@ -48,6 +48,7 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">BI Tool</CardTitle>
+          <div className="mx-auto mt-2 h-0.5 w-12 rounded-full bg-secondary" />
           <CardDescription>ログインしてください</CardDescription>
         </CardHeader>
         <CardContent>

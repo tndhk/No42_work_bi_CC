@@ -68,7 +68,7 @@ export function DashboardViewer({ dashboard, filters, onExecuteCard }: Dashboard
       {dashboard.layout.cards.map((item) => (
         <div
           key={item.card_id}
-          className="border rounded-lg bg-card overflow-hidden"
+          className="border rounded-lg bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
         >
           {loading[item.card_id] ? (
             <div className="flex items-center justify-center h-full">

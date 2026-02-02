@@ -261,4 +261,104 @@ describe('DashboardEditPage', () => {
     await user.click(screen.getByRole('button', { name: /フィルタ設定/ }));
     expect(screen.getByText('2 filters configured')).toBeInTheDocument();
   });
+
+  describe('権限制御', () => {
+    it('viewer権限でビューページにリダイレクトする', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'viewer',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+          <Routes>
+            <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboards/dashboard-1');
+    });
+
+    it('editor権限でエディタが表示される', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'editor',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+          <Routes>
+            <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dashboard-editor')).toBeInTheDocument();
+    });
+
+    it('owner権限でエディタが表示される', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'owner',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+          <Routes>
+            <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dashboard-editor')).toBeInTheDocument();
+    });
+
+    it('my_permissionがundefinedの場合はリダイレクトしない(後方互換)', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: { ...dashboard, layout: { cards: [], columns: 12, row_height: 100 }, filters: [] },
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1/edit']}>
+          <Routes>
+            <Route path="/dashboards/:id/edit" element={<DashboardEditPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(screen.getByTestId('dashboard-editor')).toBeInTheDocument();
+    });
+  });
 });

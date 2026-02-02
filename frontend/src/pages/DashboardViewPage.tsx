@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Filter } from 'lucide-react';
+import { Pencil, Filter, Share2 } from 'lucide-react';
+import { ShareDialog } from '@/components/dashboard/ShareDialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import {
   useDashboard,
@@ -25,6 +26,7 @@ export function DashboardViewPage() {
   const [filterValues, setFilterValues] = useState<Record<string, unknown>>({});
   const [filterBarVisible, setFilterBarVisible] = useState(true);
   const [selectedViewId, setSelectedViewId] = useState<string | undefined>();
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const { data: filterViews = [] } = useFilterViews(id!);
   const createFilterView = useCreateFilterView();
@@ -88,6 +90,7 @@ export function DashboardViewPage() {
     return <div className="text-center py-12 text-muted-foreground">ダッシュボードが見つかりません</div>;
   }
 
+  const myPermission = dashboard.my_permission;
   const hasFilters = dashboard.filters && dashboard.filters.length > 0;
   const activeFilterCount = Object.keys(filterValues).length;
 
@@ -122,10 +125,18 @@ export function DashboardViewPage() {
               </Button>
             </>
           )}
-          <Button variant="outline" onClick={() => navigate(`/dashboards/${id}/edit`)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            編集
-          </Button>
+          {myPermission !== 'viewer' && (
+            <Button variant="outline" onClick={() => navigate(`/dashboards/${id}/edit`)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              編集
+            </Button>
+          )}
+          {myPermission === 'owner' && (
+            <Button variant="outline" onClick={() => setShareDialogOpen(true)}>
+              <Share2 className="h-4 w-4 mr-2" />
+              共有
+            </Button>
+          )}
         </div>
       </div>
 
@@ -145,6 +156,14 @@ export function DashboardViewPage() {
           executeCard.mutateAsync({ cardId, data: { filters, use_cache: true } })
         }
       />
+
+      {myPermission === 'owner' && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          dashboardId={id!}
+        />
+      )}
     </div>
   );
 }

@@ -1,22 +1,31 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { BarChart3, Database, LayoutDashboard, CreditCard } from 'lucide-react';
+import { BarChart3, Database, LayoutDashboard, CreditCard, Users } from 'lucide-react';
+import { useAuthStore } from '@/stores/auth-store';
 
 const navItems = [
   { to: '/dashboards', label: 'ダッシュボード', icon: LayoutDashboard },
   { to: '/datasets', label: 'データセット', icon: Database },
   { to: '/cards', label: 'カード', icon: CreditCard },
-] as const;
+];
 
 export function Sidebar() {
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'admin';
+
+  const items = [
+    ...navItems,
+    ...(isAdmin ? [{ to: '/admin/groups', label: 'グループ管理', icon: Users }] : []),
+  ];
+
   return (
-    <aside className="hidden md:flex w-56 flex-col border-r bg-muted/40">
-      <div className="flex h-14 items-center border-b px-4">
-        <BarChart3 className="h-5 w-5 mr-2" />
-        <span className="font-semibold">BI Tool</span>
+    <aside className="hidden md:flex w-60 flex-col bg-sidebar border-r border-white/10">
+      <div className="flex h-14 items-center border-b border-white/10 px-4">
+        <BarChart3 className="h-5 w-5 mr-2 text-sidebar-active" />
+        <span className="text-white font-semibold tracking-tight">BI Tool</span>
       </div>
       <nav className="flex-1 space-y-1 p-2">
-        {navItems.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -24,8 +33,8 @@ export function Sidebar() {
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  ? 'bg-sidebar-active text-sidebar-active-foreground shadow-sm'
+                  : 'text-sidebar-foreground hover:bg-white/5 hover:text-white'
               )
             }
           >

@@ -25,6 +25,8 @@ test.describe('Card + Dashboard', () => {
       datasetIds: [],
       cardIds: [],
       dashboardIds: [],
+      shareIds: [],
+      groupIds: [],
     };
 
     // トークン取得

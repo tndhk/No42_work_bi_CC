@@ -5,9 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user, get_dynamodb_resource
 from app.api.response import api_response
+from app.models.dashboard_share import Permission
 from app.models.filter_view import FilterViewCreate
 from app.models.user import User
+from app.repositories.dashboard_repository import DashboardRepository
 from app.repositories.filter_view_repository import FilterViewRepository
+from app.services.permission_service import PermissionService
 
 router = APIRouter()
 
@@ -20,6 +23,8 @@ async def list_filter_views(
 ) -> dict[str, Any]:
     """List all filter views for a dashboard.
 
+    Requires viewer permission or higher on the dashboard.
+
     Args:
         dashboard_id: Dashboard ID from URL path
         current_user: Authenticated user
@@ -27,7 +32,18 @@ async def list_filter_views(
 
     Returns:
         List of filter views for the dashboard
+
+    Raises:
+        HTTPException: 404 if dashboard not found, 403 if insufficient permission
     """
+    dash_repo = DashboardRepository()
+    dashboard = await dash_repo.get_by_id(dashboard_id, dynamodb)
+    if not dashboard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+
+    permission_service = PermissionService()
+    await permission_service.assert_permission(dashboard, current_user.id, Permission.VIEWER, dynamodb)
+
     repo = FilterViewRepository()
     filter_views = await repo.list_by_dashboard(dashboard_id, dynamodb)
     return api_response([fv.model_dump() for fv in filter_views])
@@ -42,6 +58,8 @@ async def create_filter_view(
 ) -> dict[str, Any]:
     """Create a new filter view for a dashboard.
 
+    Requires editor permission or higher on the dashboard.
+
     Args:
         dashboard_id: Dashboard ID from URL path
         filter_view_data: Filter view creation data
@@ -52,8 +70,16 @@ async def create_filter_view(
         Created filter view
 
     Raises:
-        HTTPException: 422 if validation fails
+        HTTPException: 404 if dashboard not found, 403 if insufficient permission, 422 if validation fails
     """
+    dash_repo = DashboardRepository()
+    dashboard = await dash_repo.get_by_id(dashboard_id, dynamodb)
+    if not dashboard:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
+
+    permission_service = PermissionService()
+    await permission_service.assert_permission(dashboard, current_user.id, Permission.EDITOR, dynamodb)
+
     create_data = {
         'id': f"fv_{uuid.uuid4().hex[:12]}",
         'dashboard_id': dashboard_id,

@@ -15,11 +15,8 @@ export function Header() {
   const { mutate: logout } = useLogout();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4">
-        <div className="flex items-center gap-2 font-semibold">
-          BI Tool
-        </div>
         <div className="ml-auto flex items-center gap-2">
           {user && (
             <DropdownMenu>

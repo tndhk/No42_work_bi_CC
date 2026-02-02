@@ -11,6 +11,7 @@ import { DatasetImportPage } from '@/pages/DatasetImportPage';
 import { DatasetDetailPage } from '@/pages/DatasetDetailPage';
 import { CardListPage } from '@/pages/CardListPage';
 import { CardEditPage } from '@/pages/CardEditPage';
+import { GroupListPage } from '@/pages/GroupListPage';
 
 export const router = createBrowserRouter([
   {
@@ -62,6 +63,10 @@ export const router = createBrowserRouter([
       {
         path: 'cards/:id',
         element: <CardEditPage />,
+      },
+      {
+        path: 'admin/groups',
+        element: <GroupListPage />,
       },
     ],
   },

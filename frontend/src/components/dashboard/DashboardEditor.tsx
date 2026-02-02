@@ -39,7 +39,7 @@ export function DashboardEditor({ layout, onLayoutChange, onRemoveCard }: Dashbo
   const rglLayout = toRGLLayout(layout.cards);
 
   return (
-    <div className="border rounded-lg bg-muted/20 p-4">
+    <div className="border rounded-lg bg-muted/20 p-4 cursor-grab" style={{ backgroundImage: 'radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
       <ResponsiveGridLayout
         className="layout"
         layouts={{ lg: rglLayout }}

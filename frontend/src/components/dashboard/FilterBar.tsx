@@ -17,7 +17,7 @@ export function FilterBar({ filters, values, onFilterChange, onClearAll }: Filte
   if (filters.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3" data-testid="filter-bar">
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/80 backdrop-blur-sm shadow-sm p-3" data-testid="filter-bar">
       {filters.map((filter) => {
         if (filter.type === 'category') {
           return (

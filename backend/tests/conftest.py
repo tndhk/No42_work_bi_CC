@@ -73,12 +73,15 @@ def client_with_mock_dynamodb(client, mock_dynamodb_resource, mock_aws_context):
 def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
     """Create DynamoDB tables for testing using moto.
 
-    Creates all five tables with proper schema:
+    Creates all tables with proper schema:
     - users (PK: userId, GSI: UsersByEmail on email)
     - datasets (PK: datasetId, GSI: DatasetsByOwner on ownerId)
     - cards (PK: cardId, GSI: CardsByOwner on ownerId)
     - dashboards (PK: dashboardId, GSI: DashboardsByOwner on ownerId)
     - filter_views (PK: filterViewId, GSI: FilterViewsByDashboard on dashboardId)
+    - groups (PK: groupId, GSI: GroupsByName on name)
+    - group_members (PK: groupId+userId, GSI: MembersByUser on userId)
+    - dashboard_shares (PK: shareId, GSI: SharesByDashboard, SharesByTarget)
 
     Yields:
         Tuple of (tables dict, dynamodb resource)
@@ -218,6 +221,91 @@ def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
             ]
         )
         tables['filter_views'] = filter_views_table
+
+        # Groups table
+        groups_table_name = f"{settings.dynamodb_table_prefix}groups"
+        groups_table = dynamodb.create_table(
+            TableName=groups_table_name,
+            KeySchema=[
+                {'AttributeName': 'groupId', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'groupId', 'AttributeType': 'S'},
+                {'AttributeName': 'name', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'GroupsByName',
+                    'KeySchema': [
+                        {'AttributeName': 'name', 'KeyType': 'HASH'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['groups'] = groups_table
+
+        # Group members table
+        group_members_table_name = f"{settings.dynamodb_table_prefix}group_members"
+        group_members_table = dynamodb.create_table(
+            TableName=group_members_table_name,
+            KeySchema=[
+                {'AttributeName': 'groupId', 'KeyType': 'HASH'},
+                {'AttributeName': 'userId', 'KeyType': 'RANGE'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'groupId', 'AttributeType': 'S'},
+                {'AttributeName': 'userId', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'MembersByUser',
+                    'KeySchema': [
+                        {'AttributeName': 'userId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'groupId', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['group_members'] = group_members_table
+
+        # Dashboard shares table
+        dashboard_shares_table_name = f"{settings.dynamodb_table_prefix}dashboard_shares"
+        dashboard_shares_table = dynamodb.create_table(
+            TableName=dashboard_shares_table_name,
+            KeySchema=[
+                {'AttributeName': 'shareId', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'shareId', 'AttributeType': 'S'},
+                {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
+                {'AttributeName': 'sharedToId', 'AttributeType': 'S'},
+                {'AttributeName': 'createdAt', 'AttributeType': 'N'}
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'SharesByDashboard',
+                    'KeySchema': [
+                        {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'createdAt', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                },
+                {
+                    'IndexName': 'SharesByTarget',
+                    'KeySchema': [
+                        {'AttributeName': 'sharedToId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'createdAt', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['dashboard_shares'] = dashboard_shares_table
 
         yield (tables, dynamodb)
 

@@ -71,3 +71,26 @@ export function isLayoutItem(value: unknown): value is LayoutItem {
     typeof obj.h === 'number'
   );
 }
+
+export type Permission = 'owner' | 'editor' | 'viewer';
+export type SharedToType = 'user' | 'group';
+
+export interface DashboardShare {
+  id: string;
+  dashboard_id: string;
+  shared_to_type: SharedToType;
+  shared_to_id: string;
+  permission: Permission;
+  shared_by: string;
+  created_at: string;
+}
+
+export interface ShareCreateRequest {
+  shared_to_type: SharedToType;
+  shared_to_id: string;
+  permission: Permission;
+}
+
+export interface ShareUpdateRequest {
+  permission: Permission;
+}

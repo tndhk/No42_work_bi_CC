@@ -9,6 +9,8 @@ export interface TestDataCleanup {
   datasetIds: string[];
   cardIds: string[];
   dashboardIds: string[];
+  shareIds: { dashboardId: string; shareId: string }[];
+  groupIds: string[];
 }
 
 /**
@@ -160,10 +162,145 @@ export async function deleteDashboard(token: string, dashboardId: string): Promi
 }
 
 /**
+ * ダッシュボード共有を作成
+ */
+export async function createShare(
+  token: string,
+  dashboardId: string,
+  sharedToType: 'user' | 'group',
+  sharedToId: string,
+  permission: 'viewer' | 'editor'
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/shares`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      shared_to_type: sharedToType,
+      shared_to_id: sharedToId,
+      permission,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create share failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data.id;
+}
+
+/**
+ * ダッシュボード共有を削除
+ */
+export async function deleteShare(
+  token: string,
+  dashboardId: string,
+  shareId: string
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/shares/${shareId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Delete share failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
+ * グループを作成
+ */
+export async function createGroup(
+  token: string,
+  name: string
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/groups`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create group failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data.id;
+}
+
+/**
+ * グループを削除
+ */
+export async function deleteGroup(token: string, groupId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/groups/${groupId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Delete group failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
+ * グループにメンバーを追加
+ */
+export async function addGroupMember(
+  token: string,
+  groupId: string,
+  userId: string
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/groups/${groupId}/members`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Add group member failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
+ * ユーザー登録 (テスト用)
+ */
+export async function registerUser(
+  email: string,
+  password: string,
+  name: string,
+  role: string = 'member'
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name, role }),
+  });
+
+  if (!response.ok && response.status !== 409) {
+    throw new Error(`Register user failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data?.user_id || data.data?.id || '';
+}
+
+/**
  * テストデータを一括削除
  */
 export async function cleanupTestData(token: string, cleanup: TestDataCleanup): Promise<void> {
-  // 逆順で削除 (Dashboard → Card → Dataset)
+  // 逆順で削除 (Share → Dashboard → Card → Dataset → Group)
+  for (const share of cleanup.shareIds) {
+    await deleteShare(token, share.dashboardId, share.shareId);
+  }
   for (const dashboardId of cleanup.dashboardIds) {
     await deleteDashboard(token, dashboardId);
   }
@@ -172,5 +309,8 @@ export async function cleanupTestData(token: string, cleanup: TestDataCleanup): 
   }
   for (const datasetId of cleanup.datasetIds) {
     await deleteDataset(token, datasetId);
+  }
+  for (const groupId of cleanup.groupIds) {
+    await deleteGroup(token, groupId);
   }
 }

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Plus, Eye, Pencil, Trash2 } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Pagination } from '@/components/common/Pagination';
@@ -58,6 +59,7 @@ export function DashboardListPage() {
             <TableHead>名前</TableHead>
             <TableHead>カード数</TableHead>
             <TableHead>オーナー</TableHead>
+            <TableHead>権限</TableHead>
             <TableHead>更新日時</TableHead>
             <TableHead className="w-[120px]">操作</TableHead>
           </TableRow>
@@ -68,25 +70,36 @@ export function DashboardListPage() {
               <TableCell className="font-medium">{dashboard.name}</TableCell>
               <TableCell>{dashboard.card_count}</TableCell>
               <TableCell>{dashboard.owner.name}</TableCell>
+              <TableCell>
+                {dashboard.my_permission && (
+                  <Badge variant={dashboard.my_permission === 'owner' ? 'default' : 'secondary'}>
+                    {dashboard.my_permission}
+                  </Badge>
+                )}
+              </TableCell>
               <TableCell>{new Date(dashboard.updated_at).toLocaleString('ja-JP')}</TableCell>
               <TableCell>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}`)}>
                     <Eye className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}/edit`)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(dashboard.dashboard_id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {dashboard.my_permission !== 'viewer' && (
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}/edit`)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {(!dashboard.my_permission || dashboard.my_permission === 'owner') && (
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(dashboard.dashboard_id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
           ))}
           {data?.data.length === 0 && (
             <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+              <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                 ダッシュボードがありません
               </TableCell>
             </TableRow>

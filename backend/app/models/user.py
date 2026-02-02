@@ -54,6 +54,7 @@ class UserInDB(BaseModel):
     id: str
     email: str
     hashed_password: str
+    role: str = "user"
     created_at: datetime
     updated_at: datetime
 
@@ -65,6 +66,7 @@ class User(BaseModel):
 
     id: str
     email: str
+    role: str = "user"
     created_at: datetime
     updated_at: datetime
 

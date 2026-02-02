@@ -1,4 +1,6 @@
-# 社内BI・Pythonカード データフロー詳細仕様書 v0.2
+# 社内BI・Pythonカード データフロー詳細仕様書 v0.3
+
+Last Updated: 2026-02-03
 
 ## 1. データフロー概要
 
@@ -383,7 +385,7 @@ sequenceDiagram
     API->>Frontend: 201 Created (dataset情報)
 ```
 
-**処理ステップ:**
+処理ステップ:
 
 1. フロントエンドから `S3ImportRequest` を送信 (`s3_bucket`, `s3_key`, `name`, `delimiter`, `encoding` 等)
 2. API が source S3 バケットから CSV ファイルを `GetObject` で取得
@@ -392,7 +394,7 @@ sequenceDiagram
 5. Parquet 変換して データセット用 S3 バケットに保存 (Section 2.4 の `ParquetConverter` を共有利用)
 6. DynamoDB にメタデータ保存 (`source_type: "s3_csv"`, `source_config` に元バケット/キー情報を格納)
 
-**エラーハンドリング:**
+エラーハンドリング:
 
 | エラー | 条件 | レスポンス |
 |--------|------|-----------|
@@ -928,21 +930,21 @@ sequenceDiagram
     Frontend->>User: フィルタ適用済みダッシュボード表示
 ```
 
-**フィルタ状態保存フロー:**
+フィルタ状態保存フロー:
 
 1. ユーザがダッシュボード上でフィルタ (カテゴリ / 日付範囲) を設定
 2. `FilterViewSelector` コンポーネントで「保存」をクリック
 3. `POST /api/dashboards/{id}/filter-views` で `filter_state` を送信
 4. DynamoDB `bi_filter_views` テーブルにレコード格納
 
-**フィルタ状態復元フロー:**
+フィルタ状態復元フロー:
 
 1. ダッシュボード表示時に `GET /api/dashboards/{id}/filter-views` で一覧取得
 2. ユーザが `FilterViewSelector` でビューを選択
 3. 選択されたビューの `filter_state` をカードフィルタに一括適用
 4. 各カードが更新されたフィルタで再実行
 
-**FilterView データモデル:**
+FilterView データモデル:
 
 | フィールド | 型 | 説明 |
 |-----------|-----|------|
@@ -958,9 +960,246 @@ sequenceDiagram
 
 ---
 
-## 5. Chatbot データフロー
+## 5. Dashboard Access Permission Flow
 
-### 5.1 シーケンス
+ダッシュボードへのアクセス権限判定は `PermissionService` (`backend/app/services/permission_service.py`) が担当する。
+権限レベルは VIEWER (1) < EDITOR (2) < OWNER (3) の 3 段階で、ユーザが持つ最高レベルが採用される。
+
+### 5.1 ダッシュボード詳細取得時の権限チェック
+
+`GET /api/dashboards/{dashboard_id}` がコールされた際のフロー。
+`PermissionService.assert_permission()` は内部で `get_user_permission()` を呼び出し、
+VIEWER 以上の権限がない場合は HTTP 403 を返す。
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant API as API (dashboards.py)
+    participant PermSvc as PermissionService
+    participant ShareRepo as DashboardShareRepository
+    participant MemberRepo as GroupMemberRepository
+    participant DynamoDB
+
+    Frontend->>API: GET /api/dashboards/{dashboard_id}
+    API->>DynamoDB: DashboardRepository.get_by_id()
+    DynamoDB-->>API: Dashboard (or None)
+
+    alt Dashboard not found
+        API-->>Frontend: 404 Not Found
+    end
+
+    API->>PermSvc: assert_permission(dashboard, user_id, VIEWER)
+    PermSvc->>PermSvc: get_user_permission(dashboard, user_id)
+
+    Note over PermSvc: Step 1: Owner check
+    PermSvc->>PermSvc: dashboard.owner_id == user_id ?
+
+    alt owner_id matches
+        PermSvc-->>PermSvc: return Permission.OWNER
+    end
+
+    Note over PermSvc: Step 2-3: Share check
+    PermSvc->>ShareRepo: list_by_dashboard(dashboard_id)
+    ShareRepo->>DynamoDB: Query (SharesByDashboard GSI)
+    DynamoDB-->>ShareRepo: share records
+    ShareRepo-->>PermSvc: List[DashboardShare]
+
+    PermSvc->>MemberRepo: list_groups_for_user(user_id)
+    MemberRepo->>DynamoDB: Query (user group memberships)
+    DynamoDB-->>MemberRepo: group_id list
+    MemberRepo-->>PermSvc: List[str] (group IDs)
+
+    Note over PermSvc: Step 2: Direct user share
+    PermSvc->>PermSvc: shared_to_type==USER and shared_to_id==user_id ?
+    Note over PermSvc: Step 3: Group share
+    PermSvc->>PermSvc: shared_to_type==GROUP and shared_to_id in user_group_set ?
+
+    PermSvc->>PermSvc: highest permission level from matching shares
+
+    alt No permission found (None)
+        PermSvc-->>API: raise 403 Forbidden
+        API-->>Frontend: 403 Forbidden
+    else Permission found (>= VIEWER)
+        PermSvc-->>API: pass (no exception)
+        API-->>Frontend: 200 Dashboard data
+    end
+```
+
+判定順序の詳細 (`PermissionService.get_user_permission()`):
+
+1. `dashboard.owner_id == user_id` であれば即座に `Permission.OWNER` を返す
+2. 該当ダッシュボードの全共有レコード (`DashboardShareRepository.list_by_dashboard()`) を取得
+3. ユーザが所属するグループ一覧 (`GroupMemberRepository.list_groups_for_user()`) を取得
+4. 各共有レコードについて以下を判定:
+   - `shared_to_type == USER` かつ `shared_to_id == user_id` なら直接ユーザ共有として権限レベルを比較
+   - `shared_to_type == GROUP` かつ `shared_to_id` がユーザの所属グループに含まれればグループ共有として権限レベルを比較
+5. マッチした全レコードのうち、最も高い権限レベル (`PERMISSION_LEVELS` マップで数値比較) を返す
+6. マッチなしなら `None` を返す (アクセス拒否)
+
+### 5.2 ダッシュボード一覧での my_permission 付与
+
+`GET /api/dashboards` (一覧取得) では、各ダッシュボードに `my_permission` フィールドを付与して返す。
+PermissionService を直接は使わず、ルートハンドラ内で同等ロジックを実行する。
+
+```mermaid
+sequenceDiagram
+    participant Frontend
+    participant API as API (dashboards.py)
+    participant DashRepo as DashboardRepository
+    participant ShareRepo as DashboardShareRepository
+    participant MemberRepo as GroupMemberRepository
+    participant DynamoDB
+
+    Frontend->>API: GET /api/dashboards?limit=50&offset=0
+
+    Note over API: Step 1: Own dashboards
+    API->>DashRepo: list_by_owner(current_user.id)
+    DashRepo->>DynamoDB: Query
+    DynamoDB-->>DashRepo: owned dashboards
+    DashRepo-->>API: List[Dashboard]
+    API->>API: dashboard_map[id] = dashboard, permission_map[id] = "owner"
+
+    Note over API: Step 2: Direct user shares
+    API->>ShareRepo: list_by_target(current_user.id)
+    ShareRepo->>DynamoDB: Query (SharesByTarget GSI)
+    DynamoDB-->>ShareRepo: user share records
+    ShareRepo-->>API: List[DashboardShare]
+    API->>API: _process_shares(): add to dashboard_map, update permission_map (highest wins)
+
+    Note over API: Step 3: Group shares
+    API->>MemberRepo: list_groups_for_user(current_user.id)
+    MemberRepo->>DynamoDB: Query
+    DynamoDB-->>MemberRepo: group_id list
+    MemberRepo-->>API: List[str]
+
+    loop each group_id
+        API->>ShareRepo: list_by_target(group_id)
+        ShareRepo->>DynamoDB: Query (SharesByTarget GSI)
+        DynamoDB-->>ShareRepo: group share records
+        ShareRepo-->>API: List[DashboardShare]
+        API->>API: _process_shares(): merge into dashboard_map/permission_map
+    end
+
+    Note over API: Step 4: Merge and paginate
+    API->>API: sort by created_at desc, slice [offset:offset+limit]
+    API->>API: each item gets my_permission from permission_map
+    API-->>Frontend: paginated_response(items with my_permission)
+```
+
+`_process_shares()` ヘルパー関数のロジック:
+
+- 共有レコード1件ずつ走査
+- `dashboard_map` に未登録のダッシュボードは `DashboardRepository.get_by_id()` で取得して追加
+- 既に `dashboard_map` に存在する場合、`PERMISSION_LEVELS` マップで数値比較し、より高い権限レベルで上書き
+- 最終的に各ダッシュボードの `my_permission` は `permission_map[dashboard_id]` の値となる
+
+### 5.3 各エンドポイントの必要権限
+
+| エンドポイント | メソッド | 必要権限 | 備考 |
+|---------------|---------|---------|------|
+| /api/dashboards | GET | (認証のみ) | 自身がアクセス可能なもののみ返却 |
+| /api/dashboards | POST | (認証のみ) | 作成者が OWNER になる |
+| /api/dashboards/{id} | GET | VIEWER | PermissionService.assert_permission() |
+| /api/dashboards/{id} | PUT | EDITOR | PermissionService.assert_permission() |
+| /api/dashboards/{id} | DELETE | OWNER | PermissionService.assert_permission() |
+| /api/dashboards/{id}/clone | POST | VIEWER | クローン先は実行者が OWNER |
+| /api/dashboards/{id}/shares | GET/POST/PUT/DELETE | OWNER | _get_dashboard_as_owner() で owner_id 一致を確認 |
+
+---
+
+## 6. Dashboard Sharing Flow
+
+ダッシュボード共有は `dashboard_shares.py` のルーターが処理し、
+DynamoDB の `dashboard_shares` テーブルを通じて CRUD を実行する。
+共有操作はダッシュボードのオーナーのみが実行できる。
+
+### 6.1 共有作成フロー
+
+フロントエンドの ShareDialog からユーザまたはグループに対して共有を作成するフロー。
+
+```mermaid
+sequenceDiagram
+    participant User as User (Owner)
+    participant Dialog as ShareDialog (Frontend)
+    participant API as API (dashboard_shares.py)
+    participant DashRepo as DashboardRepository
+    participant ShareRepo as DashboardShareRepository
+    participant DynamoDB
+
+    User->>Dialog: 共有先 (user/group) と権限 (viewer/editor) を選択
+    Dialog->>API: POST /api/dashboards/{dashboard_id}/shares
+    Note right of Dialog: Body: {shared_to_type, shared_to_id, permission}
+
+    Note over API: Step 1: Owner verification
+    API->>DashRepo: get_by_id(dashboard_id)
+    DashRepo->>DynamoDB: GetItem
+    DynamoDB-->>DashRepo: Dashboard
+    DashRepo-->>API: Dashboard
+
+    alt Dashboard not found
+        API-->>Dialog: 404 Not Found
+    end
+
+    API->>API: dashboard.owner_id == current_user.id ?
+
+    alt Not owner
+        API-->>Dialog: 403 Forbidden ("Only dashboard owner can manage shares")
+    end
+
+    Note over API: Step 2: Duplicate check
+    API->>ShareRepo: find_share(dashboard_id, shared_to_type, shared_to_id)
+    ShareRepo->>DynamoDB: Query (SharesByDashboard GSI) + filter
+    DynamoDB-->>ShareRepo: existing share or None
+    ShareRepo-->>API: DashboardShare or None
+
+    alt Share already exists
+        API-->>Dialog: 409 Conflict ("Share already exists")
+    end
+
+    Note over API: Step 3: Create share
+    API->>API: generate share_id ("share_" + uuid hex[:12])
+    API->>ShareRepo: create({id, dashboard_id, shared_to_type, shared_to_id, permission, shared_by})
+    ShareRepo->>DynamoDB: PutItem (with created_at timestamp)
+    DynamoDB-->>ShareRepo: success
+    ShareRepo-->>API: DashboardShare
+
+    API-->>Dialog: 201 Created (share data)
+    Dialog-->>User: 共有追加完了表示
+```
+
+### 6.2 共有 CRUD 一覧
+
+| 操作 | エンドポイント | メソッド | レスポンス | 備考 |
+|------|---------------|---------|-----------|------|
+| 一覧 | /api/dashboards/{id}/shares | GET | 200: List[DashboardShare] | SharesByDashboard GSI で取得 |
+| 作成 | /api/dashboards/{id}/shares | POST | 201: DashboardShare | 重複時 409 |
+| 更新 | /api/dashboards/{id}/shares/{share_id} | PUT | 200: DashboardShare | permission のみ更新可 |
+| 削除 | /api/dashboards/{id}/shares/{share_id} | DELETE | 204 No Content | -- |
+
+全操作で `_get_dashboard_as_owner()` を呼び出し、ダッシュボードの owner_id と current_user.id の一致を確認する。
+
+### 6.3 DashboardShare データモデル
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | String | 共有ID (PK: shareId) "share_" + uuid hex[:12] |
+| dashboard_id | String | 対象ダッシュボードID |
+| shared_to_type | Enum(user, group) | 共有先の種別 |
+| shared_to_id | String | 共有先のユーザID またはグループID |
+| permission | Enum(owner, editor, viewer) | 付与する権限レベル |
+| shared_by | String | 共有を作成したユーザID |
+| created_at | DateTime | 作成日時 (UTC) |
+
+DynamoDB GSI:
+
+- SharesByDashboard: PK = dashboardId -- ダッシュボード別の共有一覧取得に使用
+- SharesByTarget: PK = sharedToId -- ユーザ/グループ別の被共有一覧取得に使用 (ダッシュボード一覧で利用)
+
+---
+
+## 7. Chatbot データフロー
+
+### 7.1 シーケンス
 
 ```mermaid
 sequenceDiagram
@@ -988,7 +1227,7 @@ sequenceDiagram
     Frontend->>User: 回答表示
 ```
 
-### 5.2 Datasetサマリ生成
+### 7.2 Datasetサマリ生成
 
 ```python
 from dataclasses import dataclass
@@ -1117,7 +1356,7 @@ class DatasetSummarizer:
         return "\n".join(lines)
 ```
 
-### 5.3 Vertex AI連携
+### 7.3 Vertex AI連携
 
 ```python
 from google.cloud import aiplatform
@@ -1220,9 +1459,9 @@ class ChatbotService:
 
 ---
 
-## 6. スキーマ変更検知
+## 8. スキーマ変更検知
 
-### 6.1 スキーマ比較
+### 8.1 スキーマ比較
 
 ```python
 from dataclasses import dataclass

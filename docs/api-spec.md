@@ -1,5 +1,7 @@
 # 社内BI・Pythonカード API詳細仕様書 v0.1
 
+Last Updated: 2026-02-03
+
 ## 1. 概要
 
 ### 1.1 ベースURL
@@ -22,7 +24,7 @@ Authorization: Bearer <jwt_token>
 
 ### 1.3 共通レスポンス形式
 
-**成功時:**
+成功時:
 ```json
 {
   "data": { ... },
@@ -32,7 +34,7 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-**エラー時:**
+エラー時:
 ```json
 {
   "error": {
@@ -68,7 +70,7 @@ Authorization: Bearer <jwt_token>
 
 ログイン
 
-**Request:**
+Request:
 ```json
 {
   "email": "user@example.com",
@@ -76,7 +78,7 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -92,7 +94,7 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-**Errors:**
+Errors:
 - `401 INVALID_CREDENTIALS`: メールアドレスまたはパスワードが正しくありません
 
 ---
@@ -101,7 +103,7 @@ Authorization: Bearer <jwt_token>
 
 ログアウト
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -116,7 +118,7 @@ Authorization: Bearer <jwt_token>
 
 現在のユーザ情報取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -138,91 +140,93 @@ Authorization: Bearer <jwt_token>
 
 ## 3. Users API
 
+Last Updated: 2026-02-03
+
+認証: JWT Bearer (全エンドポイント)
+
 ### GET /api/users
 
-ユーザ一覧取得
+メールアドレスでユーザを検索する。共有ダイアログ等でのユーザ検索用途を想定。
 
-**Query Parameters:**
+Query Parameters:
+
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
-| limit | integer | No | 20 | 取得件数（1-100） |
-| offset | integer | No | 0 | オフセット |
-| q | string | No | - | 検索クエリ（名前、メール） |
+| q | string | No | "" | メール検索文字列 (部分一致)。空文字の場合は空配列を返す |
+| limit | integer | No | 20 | 取得件数 (1-100) |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
     {
-      "user_id": "user_abc123",
+      "id": "user_abc123",
       "email": "user@example.com",
-      "name": "山田太郎"
+      "role": "user"
     }
-  ],
-  "pagination": {
-    "total": 50,
-    "limit": 20,
-    "offset": 0,
-    "has_next": true
-  }
+  ]
 }
 ```
 
----
-
-### GET /api/users/{userId}
-
-ユーザ詳細取得
-
-**Response (200):**
-```json
-{
-  "data": {
-    "user_id": "user_abc123",
-    "email": "user@example.com",
-    "name": "山田太郎",
-    "groups": [
-      {
-        "group_id": "group_xyz",
-        "name": "データ分析チーム"
-      }
-    ],
-    "created_at": "2024-01-01T00:00:00Z"
-  }
-}
-```
-
-**Errors:**
-- `404 NOT_FOUND`: ユーザが見つかりません
+- `q` が空文字またはスペースのみの場合、`data` は空配列 `[]` を返す
+- レスポンスにページネーション情報は含まれない (`api_response` 形式)
+- `role` の値は `"admin"` または `"user"`
 
 ---
 
 ## 4. Groups API
 
+Last Updated: 2026-02-03
+
+認証: JWT Bearer (全エンドポイント)
+認可: 全エンドポイントに admin 権限が必要 (`require_admin`)。
+admin 以外のユーザーがアクセスした場合は `403 Forbidden` ("Admin access required") が返る。
+
+Group モデル:
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | string | グループID (`group_` + 12桁hex) |
+| name | string | グループ名 |
+| created_at | string (ISO 8601) | 作成日時 |
+| updated_at | string (ISO 8601) | 更新日時 |
+
+GroupMember モデル:
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| group_id | string | グループID |
+| user_id | string | ユーザーID |
+| added_at | string (ISO 8601) | 追加日時 |
+
+---
+
 ### GET /api/groups
 
-グループ一覧取得
+グループ一覧取得 (全件取得、ページネーションなし)
 
-**Query Parameters:**
-| パラメータ | 型 | 必須 | デフォルト | 説明 |
-|-----------|-----|------|-----------|------|
-| limit | integer | No | 20 | 取得件数 |
-| offset | integer | No | 0 | オフセット |
+認可: admin のみ
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
     {
-      "group_id": "group_xyz",
+      "id": "group_xyz",
       "name": "データ分析チーム",
-      "member_count": 5,
-      "created_at": "2024-01-01T00:00:00Z"
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-10T00:00:00Z"
     }
-  ],
-  "pagination": { ... }
+  ]
 }
 ```
+
+- レスポンスにページネーション情報は含まれない (`api_response` 形式)
+- 内部では `GroupRepository.list_all()` により DynamoDB テーブルを scan して全件取得
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
 
 ---
 
@@ -230,53 +234,71 @@ Authorization: Bearer <jwt_token>
 
 グループ作成
 
-**Request:**
+認可: admin のみ
+
+Request:
 ```json
 {
   "name": "マーケティングチーム"
 }
 ```
 
-**Response (201):**
+- `name`: 必須。1文字以上 (`min_length=1`)。空白のみは不可。
+
+Response (201):
 ```json
 {
   "data": {
-    "group_id": "group_new123",
+    "id": "group_new123abc456",
     "name": "マーケティングチーム",
-    "member_count": 0,
-    "created_at": "2024-01-15T10:00:00Z"
+    "created_at": "2024-01-15T10:00:00Z",
+    "updated_at": "2024-01-15T10:00:00Z"
   }
 }
 ```
 
-**Errors:**
-- `400 VALIDATION_ERROR`: グループ名は必須です
-- `409 DUPLICATE_ERROR`: 同名のグループが既に存在します
+内部では `GroupRepository.get_by_name()` により GroupsByName GSI を使用して名前の重複チェックを行う。
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `409 Conflict`: 同名のグループが既に存在します ("Group name already exists")
+- `422 Unprocessable Entity`: バリデーションエラー (name が空文字 / 未指定)
 
 ---
 
 ### GET /api/groups/{groupId}
 
-グループ詳細取得
+グループ詳細取得 (メンバー一覧を含む)
 
-**Response (200):**
+認可: admin のみ
+
+Response (200):
 ```json
 {
   "data": {
-    "group_id": "group_xyz",
+    "id": "group_xyz",
     "name": "データ分析チーム",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-10T00:00:00Z",
     "members": [
       {
+        "group_id": "group_xyz",
         "user_id": "user_abc123",
-        "email": "user@example.com",
-        "name": "山田太郎"
+        "added_at": "2024-01-05T00:00:00Z"
       }
-    ],
-    "created_at": "2024-01-01T00:00:00Z",
-    "updated_at": "2024-01-10T00:00:00Z"
+    ]
   }
 }
 ```
+
+- `members` は GroupMember モデルの配列。`GroupMemberRepository.list_members()` で取得される。
+- メンバーにはユーザーの `email` や `name` は含まれない (user_id のみ)。
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `404 Not Found`: グループが見つかりません ("Group not found")
 
 ---
 
@@ -284,23 +306,40 @@ Authorization: Bearer <jwt_token>
 
 グループ更新
 
-**Request:**
+認可: admin のみ
+
+Request:
 ```json
 {
   "name": "データ分析チーム（更新）"
 }
 ```
 
-**Response (200):**
+- `name`: 任意。指定する場合は1文字以上 (`min_length=1`)。空白のみは不可。
+
+Response (200):
+
+更新後の Group モデル全フィールドを返す。
+
 ```json
 {
   "data": {
-    "group_id": "group_xyz",
+    "id": "group_xyz",
     "name": "データ分析チーム（更新）",
+    "created_at": "2024-01-01T00:00:00Z",
     "updated_at": "2024-01-15T10:00:00Z"
   }
 }
 ```
+
+内部では名前変更時に `GroupRepository.get_by_name()` で重複チェックを行う (自グループは除外)。
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `404 Not Found`: グループが見つかりません ("Group not found")
+- `409 Conflict`: 同名のグループが既に存在します ("Group name already exists")
+- `422 Unprocessable Entity`: バリデーションエラー (name が空文字)
 
 ---
 
@@ -308,10 +347,14 @@ Authorization: Bearer <jwt_token>
 
 グループ削除
 
-**Response (204):** No Content
+認可: admin のみ
 
-**Errors:**
-- `403 FORBIDDEN`: このグループを削除する権限がありません
+Response (204): No Content
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `404 Not Found`: グループが見つかりません ("Group not found")
 
 ---
 
@@ -319,14 +362,19 @@ Authorization: Bearer <jwt_token>
 
 メンバー追加
 
-**Request:**
+認可: admin のみ
+
+Request:
 ```json
 {
   "user_id": "user_def456"
 }
 ```
 
-**Response (201):**
+Response (201):
+
+GroupMember モデルを返す。
+
 ```json
 {
   "data": {
@@ -337,13 +385,25 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `404 Not Found`: グループが見つかりません ("Group not found")
+
 ---
 
 ### DELETE /api/groups/{groupId}/members/{userId}
 
 メンバー削除
 
-**Response (204):** No Content
+認可: admin のみ
+
+Response (204): No Content
+
+Errors:
+- `401 Unauthorized`: 認証トークンが無効または未指定
+- `403 Forbidden`: admin 権限がありません ("Admin access required")
+- `404 Not Found`: グループが見つかりません ("Group not found")
 
 ---
 
@@ -353,14 +413,14 @@ Authorization: Bearer <jwt_token>
 
 Dataset一覧取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 20 | 取得件数 |
 | offset | integer | No | 0 | オフセット |
 | owner | string | No | - | 所有者ID（自分のみ: me） |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -388,7 +448,7 @@ Dataset一覧取得
 
 Dataset作成（Local CSV取り込み）
 
-**Request (multipart/form-data):**
+Request (multipart/form-data):
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
 | file | File | Yes | CSVファイル |
@@ -398,7 +458,7 @@ Dataset作成（Local CSV取り込み）
 | encoding | string | No | 文字コード（デフォルト: utf-8） |
 | partition_column | string | No | パーティションカラム（日付型） |
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -424,7 +484,7 @@ Dataset作成（Local CSV取り込み）
 }
 ```
 
-**Errors:**
+Errors:
 - `400 VALIDATION_ERROR`: CSVファイルが必要です
 - `400 VALIDATION_ERROR`: ファイルサイズが上限を超えています（100MB）
 - `400 VALIDATION_ERROR`: CSVの解析に失敗しました
@@ -435,7 +495,7 @@ Dataset作成（Local CSV取り込み）
 
 S3 CSV取り込み
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上データS3",
@@ -448,7 +508,7 @@ S3 CSV取り込み
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -467,7 +527,7 @@ S3 CSV取り込み
 }
 ```
 
-**Errors:**
+Errors:
 - `400 VALIDATION_ERROR`: S3バケットまたはキーが不正です
 - `403 FORBIDDEN`: S3へのアクセス権限がありません
 
@@ -477,7 +537,7 @@ S3 CSV取り込み
 
 Dataset詳細取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -515,7 +575,7 @@ Dataset詳細取得
 
 Dataset更新（メタデータのみ）
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上データ2024（更新）",
@@ -523,7 +583,7 @@ Dataset更新（メタデータのみ）
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -534,7 +594,7 @@ Dataset更新（メタデータのみ）
 }
 ```
 
-**Errors:**
+Errors:
 - `403 FORBIDDEN`: このDatasetを編集する権限がありません
 
 ---
@@ -543,9 +603,9 @@ Dataset更新（メタデータのみ）
 
 Dataset削除
 
-**Response (204):** No Content
+Response (204): No Content
 
-**Errors:**
+Errors:
 - `403 FORBIDDEN`: このDatasetを削除する権限がありません
 - `409 CONFLICT`: このDatasetは他のCard/Transformで使用されています
 
@@ -555,14 +615,14 @@ Dataset削除
 
 再取り込み
 
-**Request:**
+Request:
 ```json
 {
   "force": false
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -582,7 +642,7 @@ Dataset削除
 }
 ```
 
-**Response (200) スキーマ変更検知時:**
+Response (200) スキーマ変更検知時:
 ```json
 {
   "data": {
@@ -607,12 +667,12 @@ forceをtrueで再リクエストすると強制的に取り込み
 
 プレビュー取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 100 | 取得行数（1-1000） |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -636,14 +696,14 @@ forceをtrueで再リクエストすると強制的に取り込み
 
 Transform一覧取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 20 | 取得件数 |
 | offset | integer | No | 0 | オフセット |
 | owner | string | No | - | 所有者ID |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -680,7 +740,7 @@ Transform一覧取得
 
 Transform作成
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上集計Transform",
@@ -691,7 +751,7 @@ Transform作成
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -709,7 +769,7 @@ Transform作成
 }
 ```
 
-**Errors:**
+Errors:
 - `400 VALIDATION_ERROR`: コードにtransform関数が定義されていません
 - `400 VALIDATION_ERROR`: 入力Datasetが見つかりません
 
@@ -719,7 +779,7 @@ Transform作成
 
 Transform詳細取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -751,7 +811,7 @@ Transform詳細取得
 
 Transform更新
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上集計Transform（更新）",
@@ -760,7 +820,7 @@ Transform更新
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -777,7 +837,7 @@ Transform更新
 
 Transform削除
 
-**Response (204):** No Content
+Response (204): No Content
 
 ---
 
@@ -785,14 +845,14 @@ Transform削除
 
 手動実行
 
-**Request:**
+Request:
 ```json
 {
   "params": {}
 }
 ```
 
-**Response (202):**
+Response (202):
 ```json
 {
   "data": {
@@ -804,7 +864,7 @@ Transform削除
 }
 ```
 
-**Response (200) 完了時（ポーリングまたはWebSocket）:**
+Response (200) 完了時（ポーリングまたはWebSocket）:
 ```json
 {
   "data": {
@@ -823,7 +883,7 @@ Transform削除
 }
 ```
 
-**Errors:**
+Errors:
 - `408 EXECUTION_TIMEOUT`: 実行がタイムアウトしました
 - `500 EXECUTION_ERROR`: 実行中にエラーが発生しました
 
@@ -833,13 +893,13 @@ Transform削除
 
 実行履歴取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 20 | 取得件数 |
 | offset | integer | No | 0 | オフセット |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -874,14 +934,14 @@ Transform削除
 
 Card一覧取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 20 | 取得件数 |
 | offset | integer | No | 0 | オフセット |
 | owner | string | No | - | 所有者ID |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -911,7 +971,7 @@ Card一覧取得
 
 Card作成
 
-**Request:**
+Request:
 ```json
 {
   "name": "月別売上グラフ",
@@ -921,7 +981,7 @@ Card作成
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -938,7 +998,7 @@ Card作成
 }
 ```
 
-**Errors:**
+Errors:
 - `400 VALIDATION_ERROR`: コードにrender関数が定義されていません
 - `400 VALIDATION_ERROR`: Datasetが見つかりません
 
@@ -948,7 +1008,7 @@ Card作成
 
 Card詳細取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -978,7 +1038,7 @@ Card詳細取得
 
 Card更新
 
-**Request:**
+Request:
 ```json
 {
   "name": "月別売上グラフ（更新）",
@@ -986,7 +1046,7 @@ Card更新
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1003,9 +1063,9 @@ Card更新
 
 Card削除
 
-**Response (204):** No Content
+Response (204): No Content
 
-**Errors:**
+Errors:
 - `409 CONFLICT`: このCardは他のDashboardで使用されています
 
 ---
@@ -1014,7 +1074,7 @@ Card削除
 
 プレビュー実行
 
-**Request:**
+Request:
 ```json
 {
   "filters": {
@@ -1027,7 +1087,7 @@ Card削除
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1040,7 +1100,7 @@ Card削除
 }
 ```
 
-**Errors:**
+Errors:
 - `408 EXECUTION_TIMEOUT`: 実行がタイムアウトしました
 - `500 EXECUTION_ERROR`: 実行中にエラーが発生しました
 
@@ -1050,7 +1110,7 @@ Card削除
 
 カード実行（Dashboard用）
 
-**Request:**
+Request:
 ```json
 {
   "filters": {
@@ -1064,7 +1124,7 @@ Card削除
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1084,7 +1144,7 @@ Card削除
 
 Dashboard一覧取得
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 20 | 取得件数 |
@@ -1092,7 +1152,7 @@ Dashboard一覧取得
 | owner | string | No | - | 所有者ID |
 | shared | boolean | No | - | 共有されたもののみ |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -1119,14 +1179,14 @@ Dashboard一覧取得
 
 Dashboard作成
 
-**Request:**
+Request:
 ```json
 {
   "name": "新規ダッシュボード"
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -1153,7 +1213,7 @@ Dashboard作成
 
 Dashboard詳細取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1212,7 +1272,7 @@ Dashboard詳細取得
 
 Dashboard更新
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上ダッシュボード（更新）",
@@ -1235,7 +1295,7 @@ Dashboard更新
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1252,7 +1312,7 @@ Dashboard更新
 
 Dashboard削除
 
-**Response (204):** No Content
+Response (204): No Content
 
 ---
 
@@ -1260,14 +1320,14 @@ Dashboard削除
 
 Dashboard複製
 
-**Request:**
+Request:
 ```json
 {
   "name": "売上ダッシュボード（コピー）"
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -1284,7 +1344,7 @@ Dashboard複製
 
 参照Dataset一覧取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -1306,53 +1366,74 @@ Dashboard複製
 
 ## 9. Dashboard Shares API
 
-### GET /api/dashboards/{dashboardId}/shares
+Last Updated: 2026-02-03
+
+認証: JWT Bearer (全エンドポイント)
+認可: 全エンドポイントでダッシュボードのオーナーのみが操作可能。オーナー以外のユーザがアクセスした場合は 403 を返す。
+
+DashboardShare モデル:
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | string | 共有ID (`share_` + 12桁hex) |
+| dashboard_id | string | 対象ダッシュボードID |
+| shared_to_type | string | 共有先種別: `"user"` または `"group"` |
+| shared_to_id | string | 共有先ユーザID またはグループID |
+| permission | string | 権限: `"owner"`, `"editor"`, `"viewer"` のいずれか |
+| shared_by | string | 共有作成者のユーザID (文字列) |
+| created_at | string (ISO 8601) | 作成日時 |
+
+注意: `shared_by` はユーザIDの文字列であり、ネストしたオブジェクトではない。
+`shared_to` もネストオブジェクトではなく、`shared_to_type` と `shared_to_id` のフラットフィールドで表現される。
+DashboardShare には `updated_at` フィールドは存在しない。
+
+---
+
+### GET /api/dashboards/{dashboard_id}/shares
 
 共有一覧取得
 
-**Response (200):**
+認可: ダッシュボードのオーナーのみ
+
+Response (200):
 ```json
 {
   "data": [
     {
-      "share_id": "share_abc123",
+      "id": "share_abc123def456",
+      "dashboard_id": "dash_abc123",
       "shared_to_type": "user",
-      "shared_to": {
-        "user_id": "user_def456",
-        "name": "田中花子"
-      },
+      "shared_to_id": "user_def456",
       "permission": "viewer",
-      "shared_by": {
-        "user_id": "user_abc123",
-        "name": "山田太郎"
-      },
+      "shared_by": "user_abc123",
       "created_at": "2024-01-10T00:00:00Z"
     },
     {
-      "share_id": "share_def456",
+      "id": "share_def456ghi789",
+      "dashboard_id": "dash_abc123",
       "shared_to_type": "group",
-      "shared_to": {
-        "group_id": "group_xyz",
-        "name": "データ分析チーム"
-      },
+      "shared_to_id": "group_xyz",
       "permission": "editor",
-      "shared_by": {
-        "user_id": "user_abc123",
-        "name": "山田太郎"
-      },
+      "shared_by": "user_abc123",
       "created_at": "2024-01-11T00:00:00Z"
     }
   ]
 }
 ```
 
+Errors:
+- `403 FORBIDDEN`: Only dashboard owner can manage shares
+- `404 NOT_FOUND`: Dashboard not found
+
 ---
 
-### POST /api/dashboards/{dashboardId}/shares
+### POST /api/dashboards/{dashboard_id}/shares
 
 共有追加
 
-**Request:**
+認可: ダッシュボードのオーナーのみ
+
+Request:
 ```json
 {
   "shared_to_type": "user",
@@ -1361,58 +1442,90 @@ Dashboard複製
 }
 ```
 
-**Response (201):**
+リクエストフィールド:
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| shared_to_type | string | Yes | `"user"` または `"group"` |
+| shared_to_id | string | Yes | 共有先ユーザID またはグループID |
+| permission | string | Yes | `"owner"`, `"editor"`, `"viewer"` のいずれか |
+
+重複チェック: 同一 dashboard_id + shared_to_type + shared_to_id の組み合わせが既に存在する場合、409 を返す。
+内部では `DashboardShareRepository.find_share()` により SharesByDashboard GSI を使用して重複を検出する。
+
+Response (201):
 ```json
 {
   "data": {
-    "share_id": "share_new123",
+    "id": "share_new123abc456",
+    "dashboard_id": "dash_abc123",
     "shared_to_type": "user",
-    "shared_to": {
-      "user_id": "user_ghi789",
-      "name": "佐藤一郎"
-    },
+    "shared_to_id": "user_ghi789",
     "permission": "viewer",
+    "shared_by": "user_abc123",
     "created_at": "2024-01-15T10:00:00Z"
   }
 }
 ```
 
-**Errors:**
-- `400 VALIDATION_ERROR`: 権限はowner, editor, viewerのいずれかです
-- `403 FORBIDDEN`: このDashboardを共有する権限がありません
-- `409 DUPLICATE_ERROR`: 既に共有されています
+Errors:
+- `403 FORBIDDEN`: Only dashboard owner can manage shares
+- `404 NOT_FOUND`: Dashboard not found
+- `409 CONFLICT`: Share already exists
+- `422 VALIDATION_ERROR`: リクエストボディのバリデーションエラー (shared_to_type / permission の不正な値など)
 
 ---
 
-### PUT /api/dashboards/{dashboardId}/shares/{shareId}
+### PUT /api/dashboards/{dashboard_id}/shares/{share_id}
 
-共有更新
+共有権限更新
 
-**Request:**
+認可: ダッシュボードのオーナーのみ
+
+Request:
 ```json
 {
   "permission": "editor"
 }
 ```
 
-**Response (200):**
+リクエストフィールド:
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| permission | string | Yes | `"owner"`, `"editor"`, `"viewer"` のいずれか |
+
+Response (200):
 ```json
 {
   "data": {
-    "share_id": "share_abc123",
+    "id": "share_abc123def456",
+    "dashboard_id": "dash_abc123",
+    "shared_to_type": "user",
+    "shared_to_id": "user_def456",
     "permission": "editor",
-    "updated_at": "2024-01-15T10:00:00Z"
+    "shared_by": "user_abc123",
+    "created_at": "2024-01-10T00:00:00Z"
   }
 }
 ```
 
+Errors:
+- `403 FORBIDDEN`: Only dashboard owner can manage shares
+- `404 NOT_FOUND`: Dashboard not found / Share not found
+- `422 VALIDATION_ERROR`: リクエストボディのバリデーションエラー
+
 ---
 
-### DELETE /api/dashboards/{dashboardId}/shares/{shareId}
+### DELETE /api/dashboards/{dashboard_id}/shares/{share_id}
 
 共有削除
 
-**Response (204):** No Content
+認可: ダッシュボードのオーナーのみ
+
+Response (204): No Content
+
+Errors:
+- `403 FORBIDDEN`: Only dashboard owner can manage shares
+- `404 NOT_FOUND`: Dashboard not found / Share not found
 
 ---
 
@@ -1422,7 +1535,7 @@ Dashboard複製
 
 FilterView一覧取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -1454,7 +1567,7 @@ FilterView一覧取得
 
 FilterView作成
 
-**Request:**
+Request:
 ```json
 {
   "name": "Q2分析ビュー",
@@ -1469,7 +1582,7 @@ FilterView作成
 }
 ```
 
-**Response (201):**
+Response (201):
 ```json
 {
   "data": {
@@ -1489,7 +1602,7 @@ FilterView作成
 
 FilterView詳細取得
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1521,7 +1634,7 @@ FilterView詳細取得
 
 FilterView更新
 
-**Request:**
+Request:
 ```json
 {
   "name": "Q1分析ビュー（更新）",
@@ -1536,7 +1649,7 @@ FilterView更新
 }
 ```
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1553,7 +1666,7 @@ FilterView更新
 
 FilterView削除
 
-**Response (204):** No Content
+Response (204): No Content
 
 ---
 
@@ -1563,7 +1676,7 @@ FilterView削除
 
 Chatbot質問
 
-**Request:**
+Request:
 ```json
 {
   "message": "このダッシュボードで最も売上が高いカテゴリは何ですか？",
@@ -1573,7 +1686,7 @@ Chatbot質問
 
 `conversation_id`は会話を継続する場合に指定（省略時は新規会話）
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": {
@@ -1589,7 +1702,7 @@ Chatbot質問
 }
 ```
 
-**Errors:**
+Errors:
 - `429 RATE_LIMIT_EXCEEDED`: リクエスト数が上限に達しました
 - `500 EXECUTION_ERROR`: AI応答の生成に失敗しました
 
@@ -1601,7 +1714,7 @@ Chatbot質問
 
 監査ログ取得（管理者のみ）
 
-**Query Parameters:**
+Query Parameters:
 | パラメータ | 型 | 必須 | デフォルト | 説明 |
 |-----------|-----|------|-----------|------|
 | limit | integer | No | 50 | 取得件数 |
@@ -1612,7 +1725,7 @@ Chatbot質問
 | start_date | string | No | - | 開始日（ISO 8601） |
 | end_date | string | No | - | 終了日（ISO 8601） |
 
-**Response (200):**
+Response (200):
 ```json
 {
   "data": [
@@ -1637,7 +1750,7 @@ Chatbot質問
 }
 ```
 
-**イベント種別:**
+イベント種別:
 - `USER_LOGIN`
 - `USER_LOGOUT`
 - `DATASET_CREATED`

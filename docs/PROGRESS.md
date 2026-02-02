@@ -1,5 +1,7 @@
 # 社内BI・Pythonカード 実装進捗
 
+Last Updated: 2026-02-03
+
 要件定義書 (docs/requirements.md) および設計書 (docs/design.md) に基づく全機能の実装ステータス。
 
 ---
@@ -44,8 +46,8 @@
 
 ### FR-7: 共有/権限 (Dashboardのみ)
 
-- [ ] FR-7.1 Dashboard共有 (DashboardSharesモデル・API・共有ダイアログ)
-- [ ] FR-7.2 権限チェック (Owner/Editor/Viewer、APIレベル認可)
+- [x] FR-7.1 Dashboard共有 (DashboardShareモデル・共有CRUD API・ShareDialog UI・ユーザー/グループ宛共有)
+- [x] FR-7.2 権限チェック (Owner/Editor/Viewer、PermissionService、グループ経由の権限解決、APIレベル認可)
 
 ### FR-8: Chatbot (データ質問)
 
@@ -81,9 +83,9 @@
 
 ## インフラ・管理機能
 
-- [ ] Group CRUD (バックエンドモデル・API)
-- [ ] Group メンバー管理
-- [ ] User一覧/管理API
+- [x] Group CRUD (Groupモデル・GroupRepository・Groups API・GroupListPage UI)
+- [x] Group メンバー管理 (GroupMember・GroupMemberRepository・メンバー追加/削除API・GroupDetailPanel UI)
+- [x] User一覧/検索API (UserRepository.scan_by_email_prefix・Users API)
 - [ ] S3認証方式 (IAMロール/アクセスキー)
 - [ ] EventBridge Scheduler 連携
 
@@ -91,9 +93,9 @@
 
 ## 品質・テスト (完了済み)
 
-- [x] フロントエンドテスト 83%+ カバレッジ (290+ テスト)
-- [x] バックエンドテスト充実 (29モジュール、7,644行)
-- [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard)
+- [x] フロントエンドテスト 83%+ カバレッジ (53テストファイル)
+- [x] バックエンドテスト充実 (45モジュール、11,515行)
+- [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard, sharing)
 - [x] Docker Compose ヘルスチェック
 - [x] ドキュメント整備 (codemaps, CONTRIB.md, RUNBOOK.md)
 
@@ -109,6 +111,7 @@
 | Phase Q5 | クリーンアップ・依存整理 | 701aa1e | 2026-01-31 |
 | Docs | コードマップ・開発ガイド更新 | 5c728e8 | 2026-01-31 |
 | FR-5/6 + FR-1.2 | フィルタUI + FilterView CRUD + S3 Import | (WIP) | 2026-02-02 |
+| FR-7 | Dashboard共有/権限 + グループ管理 + User検索API | -- | 2026-02-03 |
 
 ## 次期フェーズ候補
 
@@ -116,7 +119,6 @@
 |--------|--------|----------|--------|
 | 高 | FilterView共有機能 (FR-6.2) | FR-6.1完了 | 小 |
 | 高 | Transform (ETL) | Executor基盤あり | 大 |
-| 中 | Dashboard共有/権限 + グループ管理 | グループ → 共有の順 | 大 |
 | 中 | S3 CSV Import 再取り込み (FR-1.3) | FR-1.2完了 | 小 |
 | 低 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
 | 低 | 監査ログ | 他機能に依存しない | 中 |

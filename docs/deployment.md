@@ -1,4 +1,6 @@
-# 社内BI・Pythonカード デプロイメントガイド v0.1
+# 社内BI・Pythonカード デプロイメントガイド v0.2
+
+Last Updated: 2026-02-03
 
 ## 1. 環境構成
 
@@ -227,41 +229,55 @@ volumes:
 
 ### 2.4 DynamoDBテーブル初期化スクリプト
 
+`scripts/init_tables.py` で 8 テーブルを作成する（MVP 5 テーブル + FR-7 で追加された 3 テーブル）。
+
+テーブル一覧:
+
+| テーブル名 | PK | GSI | 用途 |
+|------------|-----|-----|------|
+| `bi_users` | `userId` | `UsersByEmail` (PK: email) | ユーザ管理 |
+| `bi_datasets` | `datasetId` | `DatasetsByOwner` (PK: ownerId, SK: createdAt) | データセット |
+| `bi_cards` | `cardId` | `CardsByOwner` (PK: ownerId, SK: createdAt) | カード |
+| `bi_dashboards` | `dashboardId` | `DashboardsByOwner` (PK: ownerId, SK: createdAt) | ダッシュボード |
+| `bi_filter_views` | `filterViewId` | `FilterViewsByDashboard` (PK: dashboardId, SK: createdAt) | フィルタビュー |
+| `bi_groups` | `groupId` | `GroupsByName` (PK: name) | グループ管理 (FR-7) |
+| `bi_group_members` | `groupId` + `userId` (複合キー) | `MembersByUser` (PK: userId, SK: groupId) | グループメンバー (FR-7) |
+| `bi_dashboard_shares` | `shareId` | `SharesByDashboard` (PK: dashboardId, SK: createdAt), `SharesByTarget` (PK: sharedToId, SK: createdAt) | ダッシュボード共有 (FR-7) |
+
+注意: 現在の `scripts/init_tables.py` は上位 5 テーブルのみ定義済み。FR-7 で追加された 3 テーブル (`bi_groups`, `bi_group_members`, `bi_dashboard_shares`) はリポジトリ層から参照されているが、init スクリプトへの追加は未完了。本番デプロイ前にスクリプト更新が必要。
+
 ```python
 # scripts/init_tables.py
+#!/usr/bin/env python3
+"""DynamoDB テーブル初期化スクリプト (MVP版)"""
 import boto3
 import os
+import time
 
 DYNAMODB_ENDPOINT = os.environ.get('DYNAMODB_ENDPOINT', 'http://localhost:8000')
+AWS_REGION = os.environ.get('AWS_REGION', 'ap-northeast-1')
 
 dynamodb = boto3.resource(
     'dynamodb',
     endpoint_url=DYNAMODB_ENDPOINT,
-    region_name='ap-northeast-1',
-    aws_access_key_id='dummy',
-    aws_secret_access_key='dummy',
+    region_name=AWS_REGION,
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID', 'dummy'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY', 'dummy'),
 )
 
+# MVP用テーブル定義 (5テーブル)
 TABLES = [
     {
         'TableName': 'bi_users',
         'KeySchema': [{'AttributeName': 'userId', 'KeyType': 'HASH'}],
-        'AttributeDefinitions': [{'AttributeName': 'userId', 'AttributeType': 'S'}],
-    },
-    {
-        'TableName': 'bi_groups',
-        'KeySchema': [{'AttributeName': 'groupId', 'KeyType': 'HASH'}],
         'AttributeDefinitions': [
-            {'AttributeName': 'groupId', 'AttributeType': 'S'},
             {'AttributeName': 'userId', 'AttributeType': 'S'},
+            {'AttributeName': 'email', 'AttributeType': 'S'},
         ],
         'GlobalSecondaryIndexes': [
             {
-                'IndexName': 'GroupMembers',
-                'KeySchema': [
-                    {'AttributeName': 'groupId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'userId', 'KeyType': 'RANGE'},
-                ],
+                'IndexName': 'UsersByEmail',
+                'KeySchema': [{'AttributeName': 'email', 'KeyType': 'HASH'}],
                 'Projection': {'ProjectionType': 'ALL'},
             },
         ],
@@ -277,25 +293,6 @@ TABLES = [
         'GlobalSecondaryIndexes': [
             {
                 'IndexName': 'DatasetsByOwner',
-                'KeySchema': [
-                    {'AttributeName': 'ownerId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
-                ],
-                'Projection': {'ProjectionType': 'ALL'},
-            },
-        ],
-    },
-    {
-        'TableName': 'bi_transforms',
-        'KeySchema': [{'AttributeName': 'transformId', 'KeyType': 'HASH'}],
-        'AttributeDefinitions': [
-            {'AttributeName': 'transformId', 'AttributeType': 'S'},
-            {'AttributeName': 'ownerId', 'AttributeType': 'S'},
-            {'AttributeName': 'createdAt', 'AttributeType': 'N'},
-        ],
-        'GlobalSecondaryIndexes': [
-            {
-                'IndexName': 'TransformsByOwner',
                 'KeySchema': [
                     {'AttributeName': 'ownerId', 'KeyType': 'HASH'},
                     {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
@@ -343,25 +340,6 @@ TABLES = [
         ],
     },
     {
-        'TableName': 'bi_dashboard_shares',
-        'KeySchema': [{'AttributeName': 'shareId', 'KeyType': 'HASH'}],
-        'AttributeDefinitions': [
-            {'AttributeName': 'shareId', 'AttributeType': 'S'},
-            {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
-            {'AttributeName': 'createdAt', 'AttributeType': 'N'},
-        ],
-        'GlobalSecondaryIndexes': [
-            {
-                'IndexName': 'SharesByDashboard',
-                'KeySchema': [
-                    {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
-                ],
-                'Projection': {'ProjectionType': 'ALL'},
-            },
-        ],
-    },
-    {
         'TableName': 'bi_filter_views',
         'KeySchema': [{'AttributeName': 'filterViewId', 'KeyType': 'HASH'}],
         'AttributeDefinitions': [
@@ -380,28 +358,66 @@ TABLES = [
             },
         ],
     },
+    # --- FR-7 追加テーブル (3テーブル) ---
     {
-        'TableName': 'bi_audit_logs',
-        'KeySchema': [{'AttributeName': 'logId', 'KeyType': 'HASH'}],
+        'TableName': 'bi_groups',
+        'KeySchema': [{'AttributeName': 'groupId', 'KeyType': 'HASH'}],
         'AttributeDefinitions': [
-            {'AttributeName': 'logId', 'AttributeType': 'S'},
-            {'AttributeName': 'timestamp', 'AttributeType': 'N'},
-            {'AttributeName': 'targetId', 'AttributeType': 'S'},
+            {'AttributeName': 'groupId', 'AttributeType': 'S'},
+            {'AttributeName': 'name', 'AttributeType': 'S'},
         ],
         'GlobalSecondaryIndexes': [
             {
-                'IndexName': 'LogsByTimestamp',
+                'IndexName': 'GroupsByName',
+                'KeySchema': [{'AttributeName': 'name', 'KeyType': 'HASH'}],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_group_members',
+        'KeySchema': [
+            {'AttributeName': 'groupId', 'KeyType': 'HASH'},
+            {'AttributeName': 'userId', 'KeyType': 'RANGE'},
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'groupId', 'AttributeType': 'S'},
+            {'AttributeName': 'userId', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'MembersByUser',
                 'KeySchema': [
-                    {'AttributeName': 'timestamp', 'KeyType': 'HASH'},
-                    {'AttributeName': 'logId', 'KeyType': 'RANGE'},
+                    {'AttributeName': 'userId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'groupId', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_dashboard_shares',
+        'KeySchema': [{'AttributeName': 'shareId', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'shareId', 'AttributeType': 'S'},
+            {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
+            {'AttributeName': 'sharedToId', 'AttributeType': 'S'},
+            {'AttributeName': 'createdAt', 'AttributeType': 'N'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'SharesByDashboard',
+                'KeySchema': [
+                    {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
                 ],
                 'Projection': {'ProjectionType': 'ALL'},
             },
             {
-                'IndexName': 'LogsByTarget',
+                'IndexName': 'SharesByTarget',
                 'KeySchema': [
-                    {'AttributeName': 'targetId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                    {'AttributeName': 'sharedToId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
                 ],
                 'Projection': {'ProjectionType': 'ALL'},
             },
@@ -410,33 +426,46 @@ TABLES = [
 ]
 
 def create_tables():
+    """テーブルを作成"""
+    # DynamoDBが起動するまで待機
+    max_retries = 30
+    for i in range(max_retries):
+        try:
+            list(dynamodb.tables.all())
+            print("DynamoDB接続成功")
+            break
+        except Exception as e:
+            if i == max_retries - 1:
+                raise
+            print(f"DynamoDB接続待機中... ({i+1}/{max_retries})")
+            time.sleep(2)
+
     existing_tables = [t.name for t in dynamodb.tables.all()]
-    
+
     for table_def in TABLES:
         table_name = table_def['TableName']
-        
+
         if table_name in existing_tables:
-            print(f"Table {table_name} already exists, skipping...")
+            print(f"テーブル {table_name} は既に存在します。スキップします。")
             continue
-        
+
         # BillingMode を追加
         create_params = {
             **table_def,
             'BillingMode': 'PAY_PER_REQUEST',
         }
-        
-        # GSIにもBillingMode適用
-        if 'GlobalSecondaryIndexes' in create_params:
-            for gsi in create_params['GlobalSecondaryIndexes']:
-                # ProvisionedThroughputを削除（PAY_PER_REQUESTでは不要）
-                gsi.pop('ProvisionedThroughput', None)
-        
-        print(f"Creating table {table_name}...")
+
+        print(f"テーブル {table_name} を作成中...")
         dynamodb.create_table(**create_params)
-        print(f"Table {table_name} created.")
+        print(f"テーブル {table_name} を作成しました。")
 
 if __name__ == '__main__':
-    create_tables()
+    try:
+        create_tables()
+        print("\n全てのテーブル作成が完了しました。")
+    except Exception as e:
+        print(f"\nエラー: {e}")
+        exit(1)
 ```
 
 ---

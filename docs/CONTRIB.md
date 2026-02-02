@@ -1,10 +1,10 @@
 # 開発者ガイド (CONTRIB)
 
-**最終更新:** 2026-02-02
-**プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import 実装中
+最終更新: 2026-02-03
+プロジェクト: 社内BI・Pythonカード MVP
+フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management 実装中
 
-> **実装進捗:** 全機能の実装ステータスは [PROGRESS.md](./PROGRESS.md) を参照
+> 実装進捗: 全機能の実装ステータスは [PROGRESS.md](./PROGRESS.md) を参照
 
 ---
 
@@ -27,26 +27,37 @@
 work_BI_ClaudeCode/
 ├── backend/             # FastAPI バックエンド (Python 3.11)
 │   ├── app/
-│   │   ├── api/         # APIルート定義 (auth, datasets, cards, dashboards, filter_views)
+│   │   ├── api/         # APIルート定義
+│   │   │   └── routes/  # auth, datasets, cards, dashboards, filter_views, users, groups, dashboard_shares
 │   │   ├── core/        # 設定、セキュリティ、ロギング
 │   │   ├── db/          # DynamoDB / S3 クライアント
-│   │   ├── models/      # Pydantic モデル
-│   │   ├── repositories/# データアクセス層 (DynamoDB CRUD)
-│   │   ├── services/    # ビジネスロジック層
+│   │   ├── models/      # Pydantic モデル (user, dataset, card, dashboard, filter_view, group, dashboard_share, common)
+│   │   ├── repositories/# データアクセス層 (DynamoDB CRUD: user, dataset, card, dashboard, filter_view, group, group_member, dashboard_share)
+│   │   ├── services/    # ビジネスロジック層 (csv_parser, dataset, card_execution, dashboard, parquet_storage, permission, type_inferrer)
 │   │   └── main.py      # アプリケーションエントリポイント
 │   ├── tests/           # pytest テスト
+│   │   ├── api/routes/  # APIルートテスト (test_auth, test_cards, test_dashboards, test_datasets, test_filter_views, test_s3_import, test_dashboard_shares, test_groups, test_users)
+│   │   ├── api/         # test_health, test_deps
+│   │   ├── core/        # test_config, test_logging, test_password_policy, test_security
+│   │   ├── db/          # test_dynamodb, test_s3
+│   │   ├── integration/ # test_permission_integration
+│   │   ├── models/      # test_user, test_dataset, test_card, test_dashboard, test_filter_view, test_group, test_dashboard_share, test_common, test_s3_import
+│   │   ├── repositories/# test_base, test_user, test_dataset, test_card, test_dashboard, test_filter_view, test_group, test_group_member, test_dashboard_share
+│   │   └── services/    # test_csv_parser, test_dataset, test_card_execution, test_dashboard, test_parquet_storage, test_permission, test_type_inferrer 等
 │   ├── pyproject.toml   # プロジェクト設定 (ruff, mypy, pytest)
 │   ├── requirements.txt # Python依存パッケージ
 │   └── Dockerfile.dev   # 開発用Dockerfile
 ├── frontend/            # React SPA (TypeScript / Vite)
 │   ├── src/
-│   │   ├── __tests__/   # Vitest テスト (46ファイル, 290+テスト)
+│   │   ├── __tests__/   # Vitest テスト (53ファイル, 340+テスト)
 │   │   │   ├── components/  # コンポーネントテスト
 │   │   │   │   ├── card/        # CardEditor, CardPreview
 │   │   │   │   ├── common/      # AuthGuard, ErrorBoundary, Header, Layout 等
-│   │   │   │   ├── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm 等
-│   │   │   │   └── filters/ # CategoryFilter, DateRangeFilter
-│   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets, use-filter-views
+│   │   │   │   ├── dashboard/   # DashboardViewer, DashboardEditor, AddCardDialog, ShareDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm 等
+│   │   │   │   │   └── filters/ # CategoryFilter, DateRangeFilter
+│   │   │   │   ├── dataset/     # S3ImportForm
+│   │   │   │   └── group/       # GroupCreateDialog, GroupDetailPanel, GroupListPage, MemberAddDialog
+│   │   │   ├── hooks/       # use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-dashboard-shares, use-groups
 │   │   │   ├── lib/         # api-client, utils, layout-utils, api/*.test.ts (auth, cards, dashboards, datasets, filter-views)
 │   │   │   ├── pages/       # 全9ページのテスト
 │   │   │   ├── stores/      # auth-store
@@ -55,17 +66,20 @@ work_BI_ClaudeCode/
 │   │   ├── components/  # UIコンポーネント
 │   │   │   ├── card/    # カード関連 (CardEditor, CardPreview)
 │   │   │   ├── common/  # 共通 (Header, Sidebar, Layout, AuthGuard, ErrorBoundary)
-│   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor, FilterBar, FilterConfigPanel, FilterDefinitionForm)
+│   │   │   ├── dashboard/ # ダッシュボード関連 (DashboardViewer, DashboardEditor, ShareDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm)
 │   │   │   │   └── filters/ # フィルタUI (CategoryFilter, DateRangeFilter)
 │   │   │   ├── dataset/ # データセット関連 (S3ImportForm)
+│   │   │   ├── group/   # グループ管理 (GroupCreateDialog, GroupDetailPanel, MemberAddDialog)
 │   │   │   └── ui/      # shadcn/ui プリミティブ (button, input, label, dialog, calendar, checkbox, popover, select 等)
-│   │   ├── hooks/       # React Query カスタムフック (5ファイル)
+│   │   ├── hooks/       # React Query カスタムフック (7ファイル)
 │   │   ├── lib/         # APIクライアント、ユーティリティ、layout-utils
-│   │   ├── pages/       # ページコンポーネント (9ページ)
+│   │   │   └── api/     # APIモジュール (auth, cards, dashboards, datasets, filter-views, dashboard-shares, groups)
+│   │   ├── pages/       # ページコンポーネント (10ページ)
 │   │   ├── stores/      # Zustand ストア (auth-store)
-│   │   ├── types/       # TypeScript型定義
+│   │   ├── types/       # TypeScript型定義 (api, card, dashboard, dataset, filter-view, group, user)
 │   │   ├── routes.tsx   # React Router ルート定義
 │   │   └── App.tsx      # アプリケーションルート
+│   ├── e2e/             # Playwright E2Eテスト (auth, dataset, card-dashboard, sharing)
 │   ├── package.json     # Node.js依存パッケージ
 │   └── vite.config.ts   # Vite設定 (パスエイリアス @/ = src/)
 ├── executor/            # Pythonコード実行サンドボックス (FastAPI)
@@ -204,7 +218,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 | 変数名 | デフォルト値 | 説明 |
 |--------|-------------|------|
-| `JWT_SECRET_KEY` | (テンプレート値) | JWT署名キー。**本番環境では必ず変更すること** (最低32文字) |
+| `JWT_SECRET_KEY` | (テンプレート値) | JWT署名キー。本番環境では必ず変更すること (最低32文字) |
 | `JWT_ALGORITHM` | `HS256` | JWT署名アルゴリズム |
 | `JWT_EXPIRE_MINUTES` | `1440` | JWTトークン有効期限 (分。デフォルト24時間) |
 
@@ -323,7 +337,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 | スクリプト | 説明 |
 |-----------|------|
-| `scripts/init_tables.py` | DynamoDB テーブル作成 (9テーブル: bi_users, bi_groups, bi_datasets, bi_transforms, bi_cards, bi_dashboards, bi_dashboard_shares, bi_filter_views, bi_audit_logs) |
+| `scripts/init_tables.py` | DynamoDB テーブル作成 (10テーブル: bi_users, bi_groups, bi_group_members, bi_datasets, bi_transforms, bi_cards, bi_dashboards, bi_dashboard_shares, bi_filter_views, bi_audit_logs) |
 | `scripts/seed_test_user.py` | E2Eテスト用ユーザ作成 (e2e@example.com / Test@1234) - DynamoDB Localに直接挿入 |
 
 ---
@@ -332,12 +346,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 
 ### 6.1 フロントエンドテスト
 
-**現在のテスト状況 (Phase Q3 完了時点):**
+現在のテスト状況 (FR-7 Dashboard Sharing / Group Management 実装時点):
 
 | メトリクス | 値 |
 |-----------|-----|
-| テストファイル数 | 46 |
-| テストケース数 | 290+ |
+| テストファイル数 | 53 |
+| テストケース数 | 340+ |
 | Statements カバレッジ | 83.07% |
 | テストフレームワーク | Vitest 1.x + @testing-library/react 14.x |
 | テスト環境 | jsdom |
@@ -361,17 +375,18 @@ npx vitest src/__tests__/pages/
 npx vitest --ui
 ```
 
-テスト構成 (46ファイル):
+テスト構成 (53ファイル):
 
 | テストカテゴリ | ファイル数 | 対象 |
 |---------------|-----------|------|
 | `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage, DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
 | `__tests__/components/common/` | 8 | AuthGuard, ErrorBoundary, ConfirmDialog, Header, Sidebar, Layout, LoadingSpinner, Pagination |
-| `__tests__/components/dashboard/` | 8 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector |
+| `__tests__/components/dashboard/` | 9 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, ShareDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector |
 | `__tests__/components/dashboard/filters/` | 2 | CategoryFilter, DateRangeFilter |
 | `__tests__/components/dataset/` | 1 | S3ImportForm |
 | `__tests__/components/card/` | 2 | CardEditor, CardPreview |
-| `__tests__/hooks/` | 5 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views |
+| `__tests__/components/group/` | 4 | GroupCreateDialog, GroupDetailPanel, GroupListPage, MemberAddDialog |
+| `__tests__/hooks/` | 7 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-dashboard-shares, use-groups |
 | `__tests__/lib/api/` | 5 | auth, cards, dashboards, datasets, filter-views |
 | `__tests__/lib/` | 3 | api-client, utils, layout-utils |
 | `__tests__/stores/` | 1 | auth-store |
@@ -407,13 +422,14 @@ pytest -v
 
 | テストディレクトリ | 対象 |
 |-------------------|------|
-| `tests/api/routes/` | APIエンドポイント (test_auth, test_cards, test_dashboards, test_datasets, test_filter_views, test_s3_import) |
-| `tests/api/` | ヘルスチェック |
+| `tests/api/routes/` | APIエンドポイント (test_auth, test_cards, test_dashboards, test_datasets, test_filter_views, test_s3_import, test_dashboard_shares, test_groups, test_users) |
+| `tests/api/` | ヘルスチェック (test_health), 依存性注入 (test_deps) |
 | `tests/core/` | 設定、ロギング、パスワードポリシー、セキュリティ |
 | `tests/db/` | DynamoDB / S3 クライアント |
-| `tests/models/` | Pydantic モデル |
-| `tests/repositories/` | リポジトリ層 |
-| `tests/services/` | サービス層 (CSV解析、データセット、カード実行、ダッシュボード等) |
+| `tests/integration/` | 権限統合テスト (test_permission_integration) |
+| `tests/models/` | Pydantic モデル (user, dataset, card, dashboard, filter_view, group, dashboard_share, common, s3_import) |
+| `tests/repositories/` | リポジトリ層 (base, user, dataset, card, dashboard, filter_view, group, group_member, dashboard_share) |
+| `tests/services/` | サービス層 (CSV解析、データセット、カード実行、ダッシュボード、パーミッション等) |
 
 テストは `moto` (AWS サービスモック) と `respx` (HTTP モック) を使用しています。
 
@@ -442,7 +458,7 @@ pytest --cov=app
 
 ### 6.4 E2Eテスト (Playwright)
 
-**前提条件:**
+前提条件:
 - Docker Compose で全サービスが起動していること
 - テストユーザがDynamoDB Localに登録されていること
 
@@ -467,20 +483,21 @@ npm run e2e:headed
 npm run e2e:report
 ```
 
-**E2Eテスト構成:**
+E2Eテスト構成:
 
 | テストスイート | テストケース | 対象 |
 |---------------|------------|------|
 | `e2e/auth.spec.ts` | 5 | ログイン/ログアウト、未認証リダイレクト、バリデーション、認証失敗 |
 | `e2e/dataset.spec.ts` | 3 | CSVインポート、一覧表示・削除、プレビュー |
 | `e2e/card-dashboard.spec.ts` | 5 | Card作成、Dashboard作成・閲覧、削除 |
+| `e2e/sharing.spec.ts` | - | ダッシュボード共有、グループ管理 |
 
-**テストユーザ情報:**
+テストユーザ情報:
 - Email: `e2e@example.com`
 - Password: `Test@1234`
 - User ID: `e2e-test-user-001`
 
-**注意事項:**
+注意事項:
 - E2Eテストは`workers: 1`でシングルワーカー実行 (DynamoDB Localの共有のため)
 - テストはグローバルセットアップでAPIヘルスチェックを実行してから開始
 - 各テストはクリーンアップ処理で作成したデータを自動削除
@@ -529,7 +546,7 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 
 ### 7.2 主要依存パッケージ
 
-**フロントエンド (frontend/package.json):**
+フロントエンド (frontend/package.json):
 
 | パッケージ | バージョン | 用途 |
 |-----------|-----------|------|
@@ -549,7 +566,7 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | react-day-picker | ^9.13.0 | カレンダーUI |
 | tailwind-merge | ^3.4.0 | Tailwind CSSクラスマージ |
 
-**フロントエンド devDependencies:**
+フロントエンド devDependencies:
 
 | パッケージ | バージョン | 用途 |
 |-----------|-----------|------|
@@ -566,7 +583,7 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | tailwindcss | ^3.4.0 | CSSフレームワーク |
 | eslint | ^8.56.0 | リンター |
 
-**バックエンド (backend/requirements.txt):**
+バックエンド (backend/requirements.txt):
 
 | パッケージ | バージョン | 用途 |
 |-----------|-----------|------|
@@ -622,6 +639,18 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | GET | `/api/filter-views/{id}` | フィルタビュー詳細取得 |
 | PUT | `/api/filter-views/{id}` | フィルタビュー更新 |
 | DELETE | `/api/filter-views/{id}` | フィルタビュー削除 |
+| GET | `/api/users` | ユーザー検索 (メール部分一致) |
+| GET | `/api/groups` | グループ一覧 (管理者のみ) |
+| POST | `/api/groups` | グループ作成 (管理者のみ) |
+| GET | `/api/groups/{groupId}` | グループ詳細取得 (メンバー情報含む) |
+| PUT | `/api/groups/{groupId}` | グループ更新 (管理者のみ) |
+| DELETE | `/api/groups/{groupId}` | グループ削除 (管理者のみ) |
+| POST | `/api/groups/{groupId}/members` | グループメンバー追加 (管理者のみ) |
+| DELETE | `/api/groups/{groupId}/members/{userId}` | グループメンバー削除 (管理者のみ) |
+| GET | `/api/dashboards/{id}/shares` | ダッシュボード共有一覧 (オーナーのみ) |
+| POST | `/api/dashboards/{id}/shares` | ダッシュボード共有追加 (オーナーのみ) |
+| PUT | `/api/dashboards/{id}/shares/{shareId}` | ダッシュボード共有権限更新 (オーナーのみ) |
+| DELETE | `/api/dashboards/{id}/shares/{shareId}` | ダッシュボード共有削除 (オーナーのみ) |
 
 ### 7.4 フロントエンドルート一覧
 
@@ -637,28 +666,30 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 | `/datasets/:id` | DatasetDetailPage | データセット詳細 |
 | `/cards` | CardListPage | カード一覧 |
 | `/cards/:id` | CardEditPage | カード編集 |
+| `/admin/groups` | GroupListPage | グループ管理 (管理者のみ) |
 
 認証が必要なルートは `AuthGuard` コンポーネントで保護されています。
 
 ### 7.5 DynamoDB テーブル構成
 
-| テーブル名 | パーティションキー | GSI |
-|-----------|-------------------|-----|
-| `bi_users` | `userId` (S) | `UsersByEmail` (email -> ALL) |
-| `bi_groups` | `groupId` (S) | `GroupMembers` (groupId + userId) |
-| `bi_datasets` | `datasetId` (S) | `DatasetsByOwner` (ownerId + createdAt) |
-| `bi_transforms` | `transformId` (S) | `TransformsByOwner` (ownerId + createdAt) |
-| `bi_cards` | `cardId` (S) | `CardsByOwner` (ownerId + createdAt) |
-| `bi_dashboards` | `dashboardId` (S) | `DashboardsByOwner` (ownerId + createdAt) |
-| `bi_dashboard_shares` | `shareId` (S) | `SharesByDashboard` (dashboardId + createdAt) |
-| `bi_filter_views` | `filterViewId` (S) | `FilterViewsByDashboard` (dashboardId + createdAt) |
-| `bi_audit_logs` | `logId` (S) | `LogsByTimestamp`, `LogsByTarget` |
+| テーブル名 | キー | GSI |
+|-----------|------|-----|
+| `bi_users` | PK: `userId` (S) | `UsersByEmail` (email -> ALL) |
+| `bi_groups` | PK: `groupId` (S) | `GroupsByName` (name -> ALL) |
+| `bi_group_members` | PK: `groupId` (S), SK: `userId` (S) | `MembersByUser` (userId -> ALL) |
+| `bi_datasets` | PK: `datasetId` (S) | `DatasetsByOwner` (ownerId + createdAt) |
+| `bi_transforms` | PK: `transformId` (S) | `TransformsByOwner` (ownerId + createdAt) |
+| `bi_cards` | PK: `cardId` (S) | `CardsByOwner` (ownerId + createdAt) |
+| `bi_dashboards` | PK: `dashboardId` (S) | `DashboardsByOwner` (ownerId + createdAt) |
+| `bi_dashboard_shares` | PK: `shareId` (S) | `SharesByDashboard` (dashboardId + createdAt), `SharesByTarget` (sharedToId -> ALL) |
+| `bi_filter_views` | PK: `filterViewId` (S) | `FilterViewsByDashboard` (dashboardId + createdAt) |
+| `bi_audit_logs` | PK: `logId` (S) | `LogsByTimestamp`, `LogsByTarget` |
 
 ### 7.6 Executor サンドボックス
 
 カードの Python コードは Executor サービス内のサンドボックスで実行されます。
 
-**利用可能なライブラリ:**
+利用可能なライブラリ:
 - `pandas` (as `pd`)
 - `numpy` (as `np`)
 - `plotly.express` (as `px`)
@@ -666,14 +697,14 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 - `matplotlib.pyplot` (as `plt`)
 - `seaborn` (as `sns`)
 
-**ブロックされている操作:**
+ブロックされている操作:
 - ファイルI/O (`open`, `os`, `pathlib` 等)
 - ネットワークアクセス (`socket`, `http`, `urllib`, `requests` 等)
 - プロセス操作 (`subprocess`, `multiprocessing` 等)
 - `exec`, `eval`, `compile` の直接呼び出し
 - `pickle`, `marshal` によるシリアライゼーション
 
-**リソース制限:**
+リソース制限:
 - タイムアウト: 10秒 (SIGALRM)
 - メモリ: 2048MB (Linux環境のみ RLIMIT_AS で制限)
 
@@ -683,20 +714,20 @@ cd executor && source venv/bin/activate && pytest --cov=app && cd ..
 
 ### 8.1 バックエンド (Python)
 
-- **フォーマッタ/リンタ:** Ruff (line-length: 100, target: Python 3.11)
-- **型チェック:** mypy (strict モード、一部overrideあり: slowapi, pyarrow, aioboto3, botocore)
-- **テストフレームワーク:** pytest (asyncio_mode: auto)
-- **ドキュメント:** Google style docstring
-- **命名規則:** snake_case (変数/関数)、PascalCase (クラス)
+- フォーマッタ/リンタ: Ruff (line-length: 100, target: Python 3.11)
+- 型チェック: mypy (strict モード、一部overrideあり: slowapi, pyarrow, aioboto3, botocore)
+- テストフレームワーク: pytest (asyncio_mode: auto)
+- ドキュメント: Google style docstring
+- 命名規則: snake_case (変数/関数)、PascalCase (クラス)
 
 ### 8.2 フロントエンド (TypeScript)
 
-- **フォーマッタ/リンタ:** ESLint + TypeScript ESLint (@typescript-eslint/eslint-plugin 6.x)
-- **テストフレームワーク:** Vitest + Testing Library (@testing-library/react, @testing-library/user-event)
-- **UIライブラリ:** shadcn/ui (Radix UI + Tailwind CSS)
-- **状態管理:** TanStack Query (サーバ状態) + Zustand (クライアント状態)
-- **命名規則:** camelCase (変数/関数)、PascalCase (コンポーネント/型)
-- **パスエイリアス:** `@/` = `src/` (vite.config.ts で設定)
+- フォーマッタ/リンタ: ESLint + TypeScript ESLint (@typescript-eslint/eslint-plugin 6.x)
+- テストフレームワーク: Vitest + Testing Library (@testing-library/react, @testing-library/user-event)
+- UIライブラリ: shadcn/ui (Radix UI + Tailwind CSS)
+- 状態管理: TanStack Query (サーバ状態) + Zustand (クライアント状態)
+- 命名規則: camelCase (変数/関数)、PascalCase (コンポーネント/型)
+- パスエイリアス: `@/` = `src/` (vite.config.ts で設定)
 
 ---
 

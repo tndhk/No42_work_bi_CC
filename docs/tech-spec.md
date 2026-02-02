@@ -1,4 +1,6 @@
-# 社内BI・Pythonカード 技術仕様書 v0.2
+# 社内BI・Pythonカード 技術仕様書 v0.3
+
+Last Updated: 2026-02-03
 
 ## 1. 技術スタック
 
@@ -89,10 +91,11 @@ work_BI/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── common/           # 共通コンポーネント
-│   │   │   ├── dashboard/        # Dashboard関連
+│   │   │   ├── dashboard/        # Dashboard関連（ShareDialog含む）
 │   │   │   ├── dataset/          # Dataset関連
 │   │   │   ├── transform/        # Transform関連
 │   │   │   ├── card/             # Card関連
+│   │   │   ├── group/            # Group関連（GroupCreateDialog, GroupDetailPanel, MemberAddDialog）
 │   │   │   └── chatbot/          # Chatbot関連
 │   │   ├── hooks/                # カスタムフック
 │   │   ├── lib/                  # ユーティリティ
@@ -116,6 +119,7 @@ work_BI/
 │   │   │   │   ├── transforms.py
 │   │   │   │   ├── cards.py
 │   │   │   │   ├── dashboards.py
+│   │   │   │   ├── dashboard_shares.py  # 共有CRUD
 │   │   │   │   ├── filter_views.py
 │   │   │   │   ├── filter_view_detail.py
 │   │   │   │   └── chatbot.py
@@ -129,11 +133,12 @@ work_BI/
 │   │   │   └── s3.py             # S3接続
 │   │   ├── models/               # Pydanticモデル
 │   │   │   ├── user.py
-│   │   │   ├── group.py
+│   │   │   ├── group.py           # Group, GroupCreate, GroupUpdate, GroupMember
 │   │   │   ├── dataset.py
 │   │   │   ├── transform.py
 │   │   │   ├── card.py
 │   │   │   ├── dashboard.py
+│   │   │   ├── dashboard_share.py # DashboardShare, Permission, SharedToType
 │   │   │   └── filter_view.py
 │   │   ├── services/             # ビジネスロジック
 │   │   │   ├── dataset_service.py
@@ -141,10 +146,17 @@ work_BI/
 │   │   │   ├── card_service.py
 │   │   │   ├── dashboard_service.py
 │   │   │   ├── executor_service.py
-│   │   │   └── chatbot_service.py
+│   │   │   ├── chatbot_service.py
+│   │   │   └── permission_service.py  # Dashboard権限チェック
 │   │   ├── repositories/          # データアクセス層
+│   │   │   ├── base.py                          # BaseRepository 基底クラス
+│   │   │   ├── user_repository.py
+│   │   │   ├── group_repository.py              # GroupRepository
+│   │   │   ├── group_member_repository.py       # GroupMemberRepository（複合キー）
 │   │   │   ├── dataset_repository.py
+│   │   │   ├── card_repository.py
 │   │   │   ├── dashboard_repository.py
+│   │   │   ├── dashboard_share_repository.py    # DashboardShareRepository
 │   │   │   └── filter_view_repository.py
 │   │   └── main.py               # エントリポイント
 │   ├── tests/
@@ -230,7 +242,7 @@ LOG_FORMAT=json
 
 ### 3.2 リソース制限
 
-**Card実行:**
+Card実行:
 ```yaml
 cpu: 1024        # 1 vCPU
 memory: 2048     # 2 GB
@@ -238,7 +250,7 @@ timeout: 10      # 10秒
 disk: 1024       # 1 GB
 ```
 
-**Transform実行:**
+Transform実行:
 ```yaml
 cpu: 2048        # 2 vCPU
 memory: 4096     # 4 GB
@@ -270,7 +282,7 @@ card_execution:
 
 ### 4.1 CSV → Parquet変換
 
-**型推論ルール:**
+型推論ルール:
 
 | CSVデータパターン | 推論される型 |
 |------------------|------------|
@@ -281,7 +293,7 @@ card_execution:
 | ISO 8601日時（YYYY-MM-DDTHH:MM:SS） | datetime |
 | 上記以外 | string |
 
-**変換オプション:**
+変換オプション:
 ```python
 class CsvImportOptions(BaseModel):
     has_header: bool = True
@@ -296,12 +308,12 @@ class CsvImportOptions(BaseModel):
 
 ### 4.2 パーティション仕様
 
-**パーティション分割:**
+パーティション分割:
 - 日付カラムが指定された場合、日単位でパーティション
 - パーティションキー: `YYYY-MM-DD`
 - パーティションなしの場合、単一Parquetファイル
 
-**S3パス構造:**
+S3パス構造:
 ```
 datasets/{datasetId}/
   _metadata.json           # メタデータ
@@ -316,7 +328,7 @@ datasets/{datasetId}/
 
 ### 4.3 フィルタ適用ロジック
 
-**カテゴリフィルタ:**
+カテゴリフィルタ:
 ```python
 # 単一選択
 df = df[df[column] == value]
@@ -329,7 +341,7 @@ if include_null:
     df = df[(df[column].isin(values)) | (df[column].isna())]
 ```
 
-**日付フィルタ:**
+日付フィルタ:
 ```python
 # 期間フィルタ（境界を含む）
 df = df[(df[column] >= start_date) & (df[column] <= end_date)]
@@ -342,7 +354,7 @@ partitions_to_read = [
 ]
 ```
 
-**日付境界ルール:**
+日付境界ルール:
 - 開始日: 00:00:00 から（含む）
 - 終了日: 23:59:59 まで（含む）
 - タイムゾーン: JST（Asia/Tokyo）固定
@@ -369,7 +381,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 ```
 
-**パスワードポリシー:**
+パスワードポリシー:
 - 最小8文字
 - 英大文字、英小文字、数字を各1文字以上含む
 - 連続する同一文字は3文字まで
@@ -428,7 +440,7 @@ CSP_POLICY = {
 ></iframe>
 ```
 
-**sandbox属性:**
+sandbox属性:
 - `allow-scripts`: JavaScript実行を許可
 - `allow-same-origin`: 削除（クロスオリジン扱い）
 - その他は全て禁止
@@ -472,7 +484,7 @@ CSP_POLICY = {
 
 ### 6.3 リトライポリシー
 
-**S3アクセス:**
+S3アクセス:
 ```python
 retry_config = {
     "max_attempts": 3,
@@ -480,7 +492,7 @@ retry_config = {
 }
 ```
 
-**DynamoDB:**
+DynamoDB:
 ```python
 retry_config = {
     "max_attempts": 3,
@@ -488,7 +500,7 @@ retry_config = {
 }
 ```
 
-**Vertex AI:**
+Vertex AI:
 ```python
 retry_config = {
     "max_attempts": 2,
@@ -558,7 +570,7 @@ retry_config = {
 
 ### 8.2 テストデータ
 
-**フィクスチャ:**
+フィクスチャ:
 ```python
 # tests/fixtures/datasets.py
 SAMPLE_DATASET = {
@@ -573,7 +585,7 @@ SAMPLE_DATASET = {
 }
 ```
 
-**モック:**
+モック:
 - DynamoDB: moto
 - S3: moto
 - Vertex AI: unittest.mock

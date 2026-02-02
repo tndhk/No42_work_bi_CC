@@ -1,4 +1,6 @@
-# 社内BI・Pythonカード 設計書 v0.2
+# 社内BI・Pythonカード 設計書 v0.3
+
+Last Updated: 2026-02-03
 
 ## 1. アーキテクチャ概要
 
@@ -9,30 +11,30 @@ graph TB
     subgraph frontend [Frontend]
         UI[React SPA]
     end
-    
+
     subgraph api [API Layer - ECS Fargate]
         FastAPI[FastAPI Service]
     end
-    
+
     subgraph executor [Python Executor - ECS Fargate]
         CardRunner[Card Runner]
         TransformRunner[Transform Runner]
     end
-    
+
     subgraph storage [Storage]
         DynamoDB[(DynamoDB)]
         S3_Data[(S3 - Parquet)]
         S3_Static[(S3 - Static Assets)]
     end
-    
+
     subgraph scheduler [Scheduler]
         EventBridge[EventBridge Scheduler]
     end
-    
+
     subgraph ai [AI Service]
         VertexAI[Vertex AI Gemini]
     end
-    
+
     UI --> FastAPI
     FastAPI --> DynamoDB
     FastAPI --> S3_Data
@@ -46,14 +48,14 @@ graph TB
 
 ### 1.2 コンポーネント責務
 
-**フロントエンド（React SPA）**
+フロントエンド（React SPA）
 - ダッシュボードUI
 - フィルタ操作
 - 共有/権限UI
 - Chatbot UI
 - カードのiframe表示
 
-**API層（FastAPI）**
+API層（FastAPI）
 - Dataset取り込みオーケストレーション
 - Dashboard/Card/Transform/FilterViewのCRUD
 - カード実行のオーケストレーション
@@ -61,41 +63,41 @@ graph TB
 - 共有/権限チェック
 - Chatbot連携（Vertex AI API呼び出し）
 
-**Python実行基盤（ECS Fargate）**
+Python実行基盤（ECS Fargate）
 - Card実行（サンドボックス環境）
 - Transform実行（サンドボックス環境）
 - 外部ネットワーク遮断
 - リソース制限
 - 実行キュー管理
 
-**ストレージ**
+ストレージ
 - DynamoDB: メタデータ（Dataset/Card/Dashboard等の定義）
 - S3: Dataset Parquet形式、静的アセット（JS/CSS）
 
-**スケジューラ**
+スケジューラ
 - EventBridge Scheduler: Transformのスケジュール実行
 
-**AIサービス**
+AIサービス
 - Vertex AI: Chatbot機能
 
 ### 1.3 データフロー
 
-**Dataset取り込みフロー:**
+Dataset取り込みフロー:
 ```
 CSV (Local/S3) → API → Parquet変換 → S3保存 → DynamoDBメタデータ登録
 ```
 
-**カード実行フロー:**
+カード実行フロー:
 ```
 Dashboard閲覧 → フィルタ変更 → API → フィルタ適用 → 実行基盤 → HTML生成 → iframe表示
 ```
 
-**Transform実行フロー:**
+Transform実行フロー:
 ```
 Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力Dataset読み込み → 変換 → 出力Dataset保存
 ```
 
-**Chatbotフロー:**
+Chatbotフロー:
 ```
 ユーザ質問 → API → Datasetサマリ生成 → Vertex AI → 回答 → UI表示
 ```
@@ -125,10 +127,22 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | createdAt | Number | 作成日時 |
 | updatedAt | Number | 更新日時 |
 
-**GSI: GroupMembers**
-- PK: groupId
-- SK: userId
-- 用途: グループのメンバー一覧取得
+`GSI: GroupsByName`
+- PK: name
+- 用途: グループ名による検索
+
+#### GroupMembers テーブル
+
+| 属性名 | 型 | 説明 |
+|--------|-----|------|
+| groupId | String (PK) | グループID |
+| userId | String (SK) | ユーザID |
+| addedAt | Number | 追加日時（Unix timestamp） |
+
+`GSI: MembersByUser`
+- PK: userId
+- SK: groupId
+- 用途: ユーザが所属するグループ一覧取得
 
 #### Datasets テーブル
 
@@ -149,7 +163,7 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | lastImportAt | Number | 最終取り込み日時 |
 | lastImportBy | String | 最終取り込み実行者 |
 
-**GSI: DatasetsByOwner**
+GSI: DatasetsByOwner
 - PK: ownerId
 - SK: createdAt
 - 用途: 所有者別Dataset一覧取得
@@ -168,7 +182,7 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | createdAt | Number | 作成日時 |
 | updatedAt | Number | 更新日時 |
 
-**GSI: TransformsByOwner**
+GSI: TransformsByOwner
 - PK: ownerId
 - SK: createdAt
 - 用途: 所有者別Transform一覧取得
@@ -188,7 +202,7 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | createdAt | Number | 作成日時 |
 | updatedAt | Number | 更新日時 |
 
-**GSI: CardsByOwner**
+GSI: CardsByOwner
 - PK: ownerId
 - SK: createdAt
 - 用途: 所有者別Card一覧取得
@@ -206,17 +220,17 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | createdAt | Number | 作成日時 |
 | updatedAt | Number | 更新日時 |
 
-**GSI: DashboardsByOwner**
+GSI: DashboardsByOwner
 - PK: ownerId
 - SK: createdAt
 - 用途: 所有者別Dashboard一覧取得
 
-**GSI: DashboardsBySharedUser**
+GSI: DashboardsBySharedUser
 - PK: sharedUserId
 - SK: dashboardId
 - 用途: 共有されたDashboard一覧取得
 
-**GSI: DashboardsBySharedGroup**
+GSI: DashboardsBySharedGroup
 - PK: sharedGroupId
 - SK: dashboardId
 - 用途: グループ共有されたDashboard一覧取得
@@ -233,7 +247,7 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | sharedBy | String | 共有実行者ユーザID |
 | createdAt | Number | 作成日時 |
 
-**GSI: SharesByDashboard**
+GSI: SharesByDashboard
 - PK: dashboardId
 - SK: createdAt
 - 用途: Dashboardの共有一覧取得
@@ -252,7 +266,7 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | createdAt | Number | 作成日時 |
 | updatedAt | Number | 更新日時 |
 
-**GSI: FilterViewsByDashboard**
+GSI: FilterViewsByDashboard
 - PK: dashboardId
 - SK: createdAt
 - 用途: DashboardのFilterView一覧取得
@@ -269,12 +283,12 @@ Transform定義 → 手動実行/スケジュール → 実行基盤 → 入力D
 | targetId | String | 対象オブジェクトID |
 | details | Map | 詳細情報 |
 
-**GSI: LogsByTimestamp**
+GSI: LogsByTimestamp
 - PK: timestamp (日付パーティション)
 - SK: logId
 - 用途: 時系列ログ検索
 
-**GSI: LogsByTarget**
+GSI: LogsByTarget
 - PK: targetId
 - SK: timestamp
 - 用途: 対象別ログ検索
@@ -296,7 +310,7 @@ s3://{bucket}/
       plotly-{version}.css
 ```
 
-**Parquet形式の利点:**
+Parquet形式の利点:
 - 列指向フォーマットでクエリ効率が高い
 - 圧縮率が高い
 - パーティションでプルーニング可能
@@ -307,11 +321,11 @@ s3://{bucket}/
 
 ### 3.1 認証/認可
 
-**認証方式:**
+認証方式:
 - MVP: セッションベース（JWT）
 - V1以降: OIDC（IdP連携）
 
-**認可チェック:**
+認可チェック:
 - Dashboard閲覧: Viewer/Editor/Owner権限チェック
 - Dashboard編集: Editor/Owner権限チェック
 - Dashboard共有: Owner権限チェック
@@ -409,7 +423,7 @@ s3://{bucket}/
 
 ### 3.3 エラーハンドリング
 
-**エラー形式:**
+エラー形式:
 ```json
 {
   "error": {
@@ -420,7 +434,7 @@ s3://{bucket}/
 }
 ```
 
-**主要エラーコード:**
+主要エラーコード:
 - `UNAUTHORIZED`: 認証エラー
 - `FORBIDDEN`: 権限エラー
 - `NOT_FOUND`: リソース不存在
@@ -434,33 +448,33 @@ s3://{bucket}/
 
 ### 4.1 サンドボックス実装方式
 
-**コンテナベース分離:**
+コンテナベース分離:
 - ECS Fargateタスクとして実行
 - 各実行は独立したコンテナインスタンス
 - 実行終了後にコンテナ破棄
 
-**ネットワーク分離:**
+ネットワーク分離:
 - VPCセキュリティグループで外部通信遮断
 - S3/DynamoDBへのアクセスのみ許可（VPCエンドポイント経由）
 
-**ファイルシステム:**
+ファイルシステム:
 - 読み取り専用ルートファイルシステム
 - 一時ディレクトリのみ書き込み可能
 - 実行終了時にクリーンアップ
 
-**ユーザ分離:**
+ユーザ分離:
 - 非rootユーザで実行
 - コンテナ内でユーザ分離は不要（コンテナ単位で分離）
 
 ### 4.2 リソース制限
 
-**Card実行:**
+Card実行:
 - CPU: 1 vCPU
 - メモリ: 2 GB
 - タイムアウト: 10秒
 - ディスク: 1 GB
 
-**Transform実行:**
+Transform実行:
 - CPU: 2 vCPU
 - メモリ: 4 GB
 - タイムアウト: 5分
@@ -468,7 +482,7 @@ s3://{bucket}/
 
 ### 4.3 ホワイトリストライブラリ管理
 
-**許可ライブラリリスト（暫定）:**
+許可ライブラリリスト（暫定）:
 - pandas
 - pyarrow
 - plotly
@@ -476,19 +490,19 @@ s3://{bucket}/
 - matplotlib
 - seaborn
 
-**実装方式:**
+実装方式:
 - Dockerイメージに許可ライブラリのみインストール
 - importフックで動的チェック（追加の安全策）
 - ライブラリバージョンは固定
 
 ### 4.4 実行キューとバックプレッシャ
 
-**キュー管理:**
+キュー管理:
 - RedisまたはDynamoDBでキュー管理
 - 同時実行数上限: Card 10件、Transform 5件
 - キューが満杯の場合、HTTP 503を返す
 
-**実行フロー:**
+実行フロー:
 ```
 API → キュー追加 → ワーカーが取得 → ECSタスク起動 → 実行 → 結果保存 → キューから削除
 ```
@@ -499,42 +513,42 @@ API → キュー追加 → ワーカーが取得 → ECSタスク起動 → 実
 
 ### 5.1 画面一覧
 
-1. **ログイン画面**
+1. ログイン画面
    - ユーザ名/パスワード入力
 
-2. **Dashboard一覧画面**
+2. Dashboard一覧画面
    - Dashboard一覧表示
    - 作成/削除ボタン
 
-3. **Dashboard閲覧画面**
+3. Dashboard閲覧画面
    - カード表示（グリッドレイアウト）
    - フィルタバー
    - FilterView選択
    - Chatbotパネル（スライドイン）
 
-4. **Dashboard編集画面**
+4. Dashboard編集画面
    - カード追加/削除/移動/リサイズ
    - フィルタ設定
    - 共有設定
 
-5. **Dataset管理画面**
+5. Dataset管理画面
    - Dataset一覧
    - 取り込み（Local/S3）
    - プレビュー
    - 再取り込み
 
-6. **Transform管理画面**
+6. Transform管理画面
    - Transform一覧
    - 作成/編集
    - 実行履歴
    - スケジュール設定
 
-7. **Card管理画面**
+7. Card管理画面
    - Card一覧
    - 作成/編集
    - プレビュー
 
-8. **ユーザ/グループ管理画面**
+8. ユーザ/グループ管理画面
    - ユーザ一覧
    - グループ一覧
    - メンバー管理
@@ -544,39 +558,46 @@ API → キュー追加 → ワーカーが取得 → ECSタスク起動 → 実
 ```
 src/
   components/
-    Dashboard/
+    dashboard/
       DashboardViewer.tsx      # 閲覧モード
       DashboardEditor.tsx      # 編集モード
       FilterBar.tsx            # フィルタバー
       FilterViewSelector.tsx   # FilterView選択・保存
       CardContainer.tsx        # カードコンテナ（iframe）
       ChatbotPanel.tsx         # Chatbotパネル
-    Dataset/
+      ShareDialog.tsx          # ダッシュボード共有設定ダイアログ
+    dataset/
       DatasetList.tsx
       DatasetImport.tsx
       DatasetPreview.tsx
       S3ImportForm.tsx          # S3 CSV取り込みフォーム
-    Transform/
+    transform/
       TransformList.tsx
       TransformEditor.tsx
       TransformExecutionHistory.tsx
-    Card/
+    card/
       CardList.tsx
       CardEditor.tsx
       CardPreview.tsx
-    Common/
+    group/
+      GroupCreateDialog.tsx     # グループ作成ダイアログ
+      GroupDetailPanel.tsx      # グループ詳細パネル（メンバー一覧表示）
+      MemberAddDialog.tsx       # メンバー追加ダイアログ
+    common/
       Layout.tsx
       Header.tsx
       Sidebar.tsx
+  pages/
+    GroupListPage.tsx           # グループ管理ページ（admin専用）
 ```
 
 ### 5.3 状態管理
 
-**状態管理ライブラリ:**
+状態管理ライブラリ:
 - React Query: サーバ状態管理
 - Zustand: クライアント状態管理（フィルタ状態等）
 
-**主要状態:**
+主要状態:
 - 認証状態
 - 現在のDashboard
 - フィルタ状態
@@ -584,7 +605,7 @@ src/
 
 ### 5.4 iframe + CSP設計
 
-**iframe実装:**
+iframe実装:
 ```tsx
 <iframe
   sandbox="allow-scripts allow-same-origin"
@@ -593,16 +614,16 @@ src/
 />
 ```
 
-**CSP設定:**
+CSP設定:
 ```
-Content-Security-Policy: 
+Content-Security-Policy:
   default-src 'self';
   script-src 'self' https://cdn.internal.company.com/plotly/;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data:;
 ```
 
-**許可JSライブラリ:**
+許可JSライブラリ:
 - Plotly: 社内CDNから配信
 - バージョン固定（例: plotly-2.26.0.js）
 
@@ -612,12 +633,12 @@ Content-Security-Policy:
 
 ### 6.1 AWS構成（本番）
 
-**VPC構成:**
+VPC構成:
 - パブリックサブネット: ALB
 - プライベートサブネット: ECS Fargate（API/実行基盤）
 - VPCエンドポイント: S3, DynamoDB
 
-**ECS構成:**
+ECS構成:
 - クラスタ: `bi-cluster`
 - タスク定義:
   - `api-task`: FastAPIサービス
@@ -626,19 +647,19 @@ Content-Security-Policy:
   - `api-service`: APIサービス（ALB経由）
   - `executor-service`: 実行基盤（内部のみ）
 
-**DynamoDB:**
+DynamoDB:
 - テーブル: 上記テーブル設計参照
 - キャパシティモード: オンデマンド
 
-**S3:**
+S3:
 - バケット: `bi-datasets-{env}`
 - バケット: `bi-static-{env}`
 
-**EventBridge:**
+EventBridge:
 - Scheduler: Transformのスケジュール実行
 - Rule: cron式でECSタスク起動
 
-**CloudFront:**
+CloudFront:
 - オリジン: S3（静的アセット）
 - キャッシュポリシー: 静的コンテンツ
 
@@ -700,7 +721,7 @@ services:
 
 ### 6.3 環境変数による切り替え
 
-**環境変数:**
+環境変数:
 - `ENV`: local / staging / production
 - `DYNAMODB_ENDPOINT`: DynamoDBエンドポイント（local時はDynamoDB Local）
 - `S3_ENDPOINT`: S3エンドポイント（local時はMinIO）
@@ -715,17 +736,17 @@ services:
 
 ### 7.1 Vertex AI連携方式
 
-**API使用:**
+API使用:
 - Vertex AI Gemini API（REST）
 - プロジェクトIDとリージョンで認証
 
-**認証:**
+認証:
 - サービスアカウントキー（JSON）
 - 環境変数で設定
 
 ### 7.2 プロンプト設計
 
-**プロンプト構造:**
+プロンプト構造:
 ```
 あなたはデータ分析の専門家です。以下のDataset情報を基に、ユーザの質問に回答してください。
 
@@ -740,34 +761,34 @@ Dataset情報:
 回答は簡潔に、データに基づいた内容でお願いします。
 ```
 
-**Datasetサマリ生成:**
+Datasetサマリ生成:
 - スキーマ: 列名、型、NULL許容
 - サンプルデータ: 先頭10行
 - 統計情報: 行数、列数、各列の基本統計（数値列: min/max/mean、カテゴリ列: ユニーク数）
 
-**大規模Dataset対応:**
+大規模Dataset対応:
 - 100万行の場合は全行送信不可
 - サンプリング（ランダム1000行）または集計結果を送信
 
 ### 7.3 レート制限
 
-**制限:**
+制限:
 - ユーザあたり1分間に5リクエスト
 - Dashboardあたり1分間に10リクエスト
 
-**実装:**
+実装:
 - RedisまたはDynamoDBでレート制限管理
 - 超過時はHTTP 429を返す
 
 ### 7.4 UI設計
 
-**Chatbotパネル:**
+Chatbotパネル:
 - Dashboard閲覧画面の右側にスライドイン
 - 会話履歴表示
 - 入力フォーム
 - ローディング状態表示
 
-**会話履歴:**
+会話履歴:
 - セッション単位で保持
 - ページリロードでリセット
 - 将来的には保存機能（V1以降）
@@ -778,50 +799,50 @@ Dataset情報:
 
 ### 8.1 Python実行セキュリティ
 
-**ネットワーク層:**
+ネットワーク層:
 - VPCセキュリティグループで外部通信遮断
 - S3/DynamoDBへのアクセスのみ許可（VPCエンドポイント）
 
-**コンテナ層:**
+コンテナ層:
 - リソース制限（CPU/メモリ/タイムアウト）
 - 読み取り専用ファイルシステム
 - 非rootユーザ実行
 
-**コード層:**
+コード層:
 - ホワイトリストライブラリ
 - importフックで動的チェック
 
 ### 8.2 HTML表示セキュリティ
 
-**iframe分離:**
+iframe分離:
 - sandbox属性で権限制限
 - allow-scripts, allow-same-originのみ許可
 
-**CSP:**
+CSP:
 - デフォルトで'self'のみ許可
 - 許可JSライブラリは社内CDNから配信
 - 任意スクリプト禁止
 
 ### 8.3 認証/認可セキュリティ
 
-**認証:**
+認証:
 - JWT（MVP）
 - セッションタイムアウト: 24時間
 - パスワードポリシー: 8文字以上、英数字記号
 
-**認可:**
+認可:
 - Dashboard権限チェック（各APIエンドポイント）
 - Dataset/Card/Transform編集はownerチェック
 
 ### 8.4 監査ログ
 
-**記録対象:**
+記録対象:
 - Dashboard共有変更
 - Dataset取り込み/Transform実行
 - カード実行失敗
 - ログイン/ログアウト
 
-**ログ形式:**
+ログ形式:
 - DynamoDB AuditLogsテーブルに保存
 - 検索可能な形式（GSIで時系列/対象別検索）
 
@@ -831,32 +852,32 @@ Dataset情報:
 
 ### 9.1 Dataset最適化
 
-**Parquet形式:**
+Parquet形式:
 - 列指向フォーマットでクエリ効率向上
 - 圧縮率が高い（ストレージ削減）
 
-**パーティション:**
+パーティション:
 - 日付カラムでパーティション
 - フィルタ適用時にパーティションプルーニング
 
 ### 9.2 カード実行最適化
 
-**並列実行:**
+並列実行:
 - 複数カードを並列実行
 - 同時実行数上限で制御
 
-**キャッシュ:**
+キャッシュ:
 - フィルタ値をキーにHTML出力をキャッシュ
 - RedisまたはDynamoDBでキャッシュ管理
 - TTL: 1時間
 
 ### 9.3 フロントエンド最適化
 
-**コード分割:**
+コード分割:
 - ルート単位でコード分割
 - 遅延読み込み
 
-**アセット最適化:**
+アセット最適化:
 - JS/CSSのminify
 - 画像の最適化
 - CDN配信（CloudFront）
@@ -867,11 +888,11 @@ Dataset情報:
 
 ### 10.1 ログ
 
-**ログ出力:**
+ログ出力:
 - CloudWatch Logs（本番）
 - 標準出力（ローカル）
 
-**ログレベル:**
+ログレベル:
 - ERROR: エラー
 - WARN: 警告
 - INFO: 情報
@@ -879,23 +900,23 @@ Dataset情報:
 
 ### 10.2 メトリクス
 
-**主要メトリクス:**
+主要メトリクス:
 - Dashboard表示レイテンシ
 - カード実行時間
 - Transform実行時間
 - エラー率
 - 同時実行数
 
-**実装:**
+実装:
 - CloudWatch Metrics
 - カスタムメトリクス送信
 
 ### 10.3 アラート
 
-**アラート条件:**
+アラート条件:
 - エラー率が5%超過
 - カード実行タイムアウト率が10%超過
 - Dashboard表示レイテンシがp95 10秒超過
 
-**通知:**
+通知:
 - SNS経由でSlack通知

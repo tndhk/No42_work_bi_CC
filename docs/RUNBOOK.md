@@ -1,8 +1,8 @@
 # 運用ランブック (RUNBOOK)
 
-**最終更新:** 2026-02-02
-**プロジェクト:** 社内BI・Pythonカード MVP
-**フェーズ:** Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import 実装中
+最終更新: 2026-02-03
+プロジェクト: 社内BI・Pythonカード MVP
+フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management 実装中
 
 ---
 
@@ -14,7 +14,7 @@
 | staging | 検証 | https://bi-staging.internal.company.com | 内部ALB |
 | production | 本番 | https://bi.internal.company.com | 内部ALB |
 
-**サービス構成:**
+サービス構成:
 
 | サービス | テクノロジー | ポート (local) | AWS (staging/prod) |
 |---------|------------|---------|------------------|
@@ -129,9 +129,9 @@ python init_tables.py
 docker compose run --rm dynamodb-init
 ```
 
-作成されるテーブル (9テーブル):
-- `bi_users`, `bi_groups`, `bi_datasets`, `bi_transforms`, `bi_cards`
-- `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
+作成されるテーブル (10テーブル):
+- `bi_users`, `bi_groups`, `bi_group_members`, `bi_datasets`, `bi_transforms`
+- `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
 
 #### 2.2.6 デプロイ前チェックリスト
 
@@ -218,7 +218,7 @@ curl -s http://localhost:9000/minio/health/live
 - レスポンスステータス
 - 処理時間 (`duration_ms`)
 
-**ログ検索コマンド:**
+ログ検索コマンド:
 
 ```bash
 # CloudWatch Logs (本番)
@@ -239,6 +239,10 @@ aws logs filter-log-events \
 | データセット作成 | dataset_id, owner_id | `bi_audit_logs` |
 | カード実行 | card_id, execution_time_ms, cached | `bi_audit_logs` |
 | ダッシュボード共有変更 | dashboard_id, shared_with, permission | `bi_audit_logs` |
+| ダッシュボード共有作成 | dashboard_id, shared_to_type, shared_to_id, permission, shared_by | `bi_audit_logs` |
+| ダッシュボード共有削除 | dashboard_id, share_id, deleted_by | `bi_audit_logs` |
+| グループ作成/更新/削除 | group_id, group_name, action, admin_user_id | `bi_audit_logs` |
+| グループメンバー追加/削除 | group_id, user_id, action, admin_user_id | `bi_audit_logs` |
 | Transform実行成功/失敗 | transform_id, duration_ms, status | `bi_audit_logs` |
 
 監査ログのGSI:
@@ -251,9 +255,9 @@ aws logs filter-log-events \
 
 ### 5.1 APIサーバが起動しない
 
-**症状:** `docker compose logs api` でエラーが表示される
+症状: `docker compose logs api` でエラーが表示される
 
-**確認手順:**
+確認手順:
 
 1. 環境変数を確認
    ```bash
@@ -273,9 +277,9 @@ aws logs filter-log-events \
 
 ### 5.2 カード実行がタイムアウトする
 
-**症状:** カードプレビュー/実行時に408エラーが返る
+症状: カードプレビュー/実行時に408エラーが返る
 
-**原因と対策:**
+原因と対策:
 
 | 原因 | 対策 |
 |------|------|
@@ -284,12 +288,12 @@ aws logs filter-log-events \
 | 無限ループ | タイムアウト (10秒) で自動停止される |
 | Executor のリソース不足 | ECS タスクの CPU/メモリを増やす |
 
-**Executor ログの確認:**
+Executor ログの確認:
 ```bash
 docker compose logs -f executor
 ```
 
-**Executor リソース設定 (環境変数):**
+Executor リソース設定 (環境変数):
 - `EXECUTOR_TIMEOUT_CARD=10` (秒)
 - `EXECUTOR_TIMEOUT_TRANSFORM=300` (秒)
 - `EXECUTOR_MAX_CONCURRENT_CARDS=10`
@@ -297,24 +301,24 @@ docker compose logs -f executor
 
 ### 5.3 CSVインポートが失敗する
 
-**症状:** データセット作成APIが422エラーを返す
+症状: データセット作成APIが422エラーを返す
 
-**確認手順:**
+確認手順:
 
 1. ファイルサイズ制限 (最大100MB) を超えていないか確認
 2. 文字コードが正しいか確認 (自動推定が失敗する場合は `encoding` パラメータを明示指定)
 3. 区切り文字が正しいか確認 (デフォルトはカンマ)
 
-**サポートされる文字コード:**
+サポートされる文字コード:
 - `utf-8` (デフォルト)
 - `shift_jis` / `cp932` (日本語Windows)
 - 自動推定は chardet ライブラリを使用
 
 ### 5.4 フロントエンドが API に接続できない
 
-**症状:** ブラウザコンソールに CORS エラー / Network Error が表示される
+症状: ブラウザコンソールに CORS エラー / Network Error が表示される
 
-**確認手順:**
+確認手順:
 
 1. APIサーバが起動しているか確認
    ```bash
@@ -329,9 +333,9 @@ docker compose logs -f executor
 
 ### 5.5 DynamoDB テーブルが見つからない
 
-**症状:** APIレスポンスで "Table not found" エラー
+症状: APIレスポンスで "Table not found" エラー
 
-**対策:**
+対策:
 ```bash
 # テーブルの存在確認
 aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northeast-1
@@ -340,14 +344,14 @@ aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northe
 docker compose run --rm dynamodb-init
 ```
 
-**作成されるべきテーブル (9テーブル):**
-`bi_users`, `bi_groups`, `bi_datasets`, `bi_transforms`, `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
+作成されるべきテーブル (10テーブル):
+`bi_users`, `bi_groups`, `bi_group_members`, `bi_datasets`, `bi_transforms`, `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
 
 ### 5.6 MinIO / S3 のファイルアクセスエラー
 
-**症状:** データセットのプレビューやカード実行でS3関連エラー
+症状: データセットのプレビューやカード実行でS3関連エラー
 
-**確認手順:**
+確認手順:
 
 1. MinIOが起動しているか確認
    ```bash
@@ -363,15 +367,15 @@ docker compose run --rm dynamodb-init
    docker compose run --rm minio-init
    ```
 
-**必要なバケット:**
+必要なバケット:
 - `bi-datasets` -- Parquetデータ格納
 - `bi-static` -- 静的アセット (Plotly等)
 
 ### 5.7 JWT認証エラー
 
-**症状:** 401 Unauthorized エラー
+症状: 401 Unauthorized エラー
 
-**確認手順:**
+確認手順:
 
 1. トークンの有効期限が切れていないか確認 (デフォルト24時間)
 2. `JWT_SECRET_KEY` が全サービスで同じ値か確認
@@ -379,9 +383,9 @@ docker compose run --rm dynamodb-init
 
 ### 5.8 フロントエンドテストの失敗
 
-**症状:** CI/CDパイプラインでテストが失敗する
+症状: CI/CDパイプラインでテストが失敗する
 
-**確認手順:**
+確認手順:
 
 ```bash
 cd frontend
@@ -396,9 +400,152 @@ npx vitest src/__tests__/pages/LoginPage.test.tsx --reporter=verbose
 npx vitest --ui
 ```
 
-**現在のテスト基準:**
+現在のテスト基準:
 - 46テストファイル、290+テストケースが全て合格すること
 - Statement coverage 83%+ を維持すること
+
+### 5.9 Dashboard Sharing Issues
+
+#### 共有が作成できない
+
+症状: `POST /api/dashboards/{dashboard_id}/shares` で 403 または 409 エラーが返る
+
+確認手順:
+
+1. ダッシュボードのオーナーであるか確認
+   - 共有の作成・更新・削除はダッシュボードのオーナー (`dashboard.owner_id == current_user.id`) のみ可能
+   - オーナー以外が操作した場合、`403 Forbidden` (`"Only dashboard owner can manage shares"`) が返る
+   - `_get_dashboard_as_owner()` ヘルパー関数 (`backend/app/api/routes/dashboard_shares.py`) で検証
+
+2. 重複する共有が既に存在しないか確認
+   - 同一ダッシュボード + 同一 `shared_to_type` + 同一 `shared_to_id` の組み合わせが既にある場合、`409 Conflict` (`"Share already exists"`) が返る
+   - `DashboardShareRepository.find_share()` で既存の共有を検索し、存在すれば拒否
+   - 権限レベルを変更したい場合は `PUT /api/dashboards/{dashboard_id}/shares/{share_id}` で更新する
+
+3. ダッシュボードが存在するか確認
+   - ダッシュボードが見つからない場合、`404 Not Found` (`"Dashboard not found"`) が返る
+
+権限レベル (`Permission` enum / `backend/app/models/dashboard_share.py`):
+
+| 権限 | enum値 | 数値レベル | 説明 |
+|------|--------|-----------|------|
+| `VIEWER` | `"viewer"` | 1 | 閲覧のみ |
+| `EDITOR` | `"editor"` | 2 | 閲覧 + 編集 |
+| `OWNER` | `"owner"` | 3 | 全操作 (ダッシュボード作成者に自動付与) |
+
+共有対象タイプ (`SharedToType` enum):
+- `USER` (`"user"`) -- 特定のユーザに直接共有
+- `GROUP` (`"group"`) -- グループ全体に共有
+
+#### 共有したのにアクセスできない
+
+症状: 共有を作成したが、対象ユーザがダッシュボードにアクセスできない
+
+確認手順 (`PermissionService` フロー / `backend/app/services/permission_service.py`):
+
+1. `PermissionService.get_user_permission()` の判定順序を確認:
+   - (1) ダッシュボードの `owner_id` がユーザIDと一致するか → `OWNER` を返す
+   - (2) `DashboardShareRepository.list_by_dashboard()` で全共有を取得
+   - (3) `GroupMemberRepository.list_groups_for_user()` でユーザの所属グループ一覧を取得
+   - (4) 各共有について、ユーザ直接共有 (`shared_to_type == USER` かつ `shared_to_id == user_id`) またはグループ共有 (`shared_to_type == GROUP` かつ `shared_to_id` がユーザの所属グループに含まれる) をチェック
+   - (5) 該当する共有のうち最も高い権限レベルを返す (該当なしの場合 `None`)
+
+2. グループ経由の共有の場合、ユーザがグループに所属しているか確認
+   - `bi_group_members` テーブルの `MembersByUser` GSI で確認可能
+   - メンバー追加は `POST /api/groups/{group_id}/members` で実行 (admin 権限が必要)
+
+3. 権限不足の場合は `403 Forbidden` (`"Requires {required} permission or higher"`) が返る
+
+#### 409 Conflict エラーの対処
+
+`POST /api/dashboards/{dashboard_id}/shares` で `409 Conflict` が返る場合:
+
+```bash
+# 既存の共有一覧を確認
+curl -s -H "Authorization: Bearer <token>" \
+  http://localhost:8000/api/dashboards/<dashboard_id>/shares | jq .
+
+# 既存の共有の権限を変更する場合は PUT を使用
+curl -s -X PUT -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"permission": "editor"}' \
+  http://localhost:8000/api/dashboards/<dashboard_id>/shares/<share_id> | jq .
+```
+
+### 5.10 Group Management Issues
+
+#### グループが作成/更新/削除できない
+
+症状: `POST /api/groups` 等で 403 エラーが返る
+
+確認手順:
+
+1. 操作ユーザが `admin` ロールを持っているか確認
+   - グループ関連の全エンドポイント (一覧取得、作成、取得、更新、削除、メンバー管理) は `require_admin` 依存関係 (`backend/app/api/deps.py`) で保護されている
+   - `current_user.role != "admin"` の場合、`403 Forbidden` (`"Admin access required"`) が返る
+   - ユーザの `role` は `bi_users` テーブルの `role` フィールドで管理 (デフォルト値: `"user"`)
+
+2. グループが見つからない場合
+   - `GET /api/groups/{group_id}` で `404 Not Found` (`"Group not found"`) が返る場合、グループIDが正しいか確認
+
+#### グループ名の重複 (409 Conflict)
+
+症状: `POST /api/groups` または `PUT /api/groups/{group_id}` で `409 Conflict` が返る
+
+原因: 同名のグループが既に存在する
+
+確認手順:
+
+1. `GroupRepository.get_by_name()` で既存グループを名前で検索している
+2. 作成時: 同名グループが存在すれば `409 Conflict` (`"Group name already exists"`) を返す
+3. 更新時: 同名グループが存在し、かつそのグループIDが更新対象と異なる場合に `409 Conflict` を返す (自身のIDと一致する場合は許可)
+
+```bash
+# グループ一覧を取得して既存名を確認
+curl -s -H "Authorization: Bearer <admin_token>" \
+  http://localhost:8000/api/groups | jq '.data[].name'
+```
+
+#### メンバー追加ができない
+
+症状: `POST /api/groups/{group_id}/members` でエラーが返る
+
+確認手順:
+
+1. admin ロールで操作しているか確認 (上記参照)
+2. 対象のグループが存在するか確認
+   - グループが見つからない場合 `404 Not Found` (`"Group not found"`) が返る
+3. リクエストボディの形式を確認:
+   ```json
+   {"user_id": "<target_user_id>"}
+   ```
+4. 追加対象の `user_id` が `bi_users` テーブルに存在するユーザであるか確認
+5. `GroupMemberRepository.add_member()` は DynamoDB の `put_item` を使用しているため、既に同一メンバーが存在する場合は上書きされる (エラーにはならない)
+
+#### グループ経由の権限が反映されない
+
+症状: グループにダッシュボードを共有したが、グループメンバーがアクセスできない
+
+確認手順:
+
+1. ダッシュボードの共有設定を確認
+   ```bash
+   curl -s -H "Authorization: Bearer <owner_token>" \
+     http://localhost:8000/api/dashboards/<dashboard_id>/shares | jq .
+   ```
+   - `shared_to_type` が `"group"` で、`shared_to_id` が対象グループのIDであること
+
+2. ユーザがグループに所属しているか確認
+   ```bash
+   curl -s -H "Authorization: Bearer <admin_token>" \
+     http://localhost:8000/api/groups/<group_id> | jq '.data.members'
+   ```
+   - `members` 配列にユーザの `user_id` が含まれていること
+
+3. `PermissionService` の権限判定フロー (5.9 参照) を確認
+   - `GroupMemberRepository.list_groups_for_user()` が `MembersByUser` GSI を使ってユーザの所属グループを取得する
+   - 取得したグループ一覧に共有先グループが含まれていれば、そのグループ共有の権限が適用される
+   - 複数の経路 (直接共有 + グループ共有) で権限がある場合、最も高い権限レベルが採用される
 
 ---
 
@@ -551,7 +698,7 @@ aws ecs update-service \
 | セキュリティインシデント | セキュリティチームにエスカレーション |
 | データ損失 | DBA / インフラチームに連絡 |
 
-**エスカレーション判断基準:**
+エスカレーション判断基準:
 
 | 重大度 | 条件 | 対応時間 |
 |--------|------|---------|
@@ -601,7 +748,7 @@ aws ecs update-service \
 
 ### 11.1 現在のカバレッジ (Phase Q4 + Q5 完了時点)
 
-**フロントエンド ユニットテスト (frontend/):**
+フロントエンド ユニットテスト (frontend/):
 
 | メトリクス | 値 |
 |-----------|-----|
@@ -610,7 +757,7 @@ aws ecs update-service \
 | Statements | 83.07% |
 | フレームワーク | Vitest 1.x + @testing-library/react 14.x |
 
-**フロントエンド E2Eテスト (frontend/e2e/):**
+フロントエンド E2Eテスト (frontend/e2e/):
 
 | メトリクス | 値 |
 |-----------|-----|
@@ -619,7 +766,7 @@ aws ecs update-service \
 | フレームワーク | Playwright 1.58+ (Chromium) |
 | テストユーザ | e2e@example.com (scripts/seed_test_user.py でSeed) |
 
-**テスト対象カバレッジ内訳:**
+テスト対象カバレッジ内訳:
 
 | レイヤー | ファイル数 | テスト対象 |
 |---------|-----------|-----------|
@@ -631,6 +778,6 @@ aws ecs update-service \
 | Stores | 1 | auth-store |
 | Types | 1 | type-guards |
 
-**バックエンド (backend/):**
+バックエンド (backend/):
 - テストフレームワーク: pytest 7.x + moto 5.0
 - テスト対象: API routes, core, db, models, repositories, services

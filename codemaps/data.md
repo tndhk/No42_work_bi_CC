@@ -1,7 +1,7 @@
 # データモデルとスキーマ コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
-**データベース:** DynamoDB (NoSQL) + S3 (Parquet)
+最終更新: 2026-02-03 (FR-7 Dashboard Sharing / Group Management)
+データベース: DynamoDB (NoSQL) + S3 (Parquet)
 
 ---
 
@@ -9,12 +9,16 @@
 
 テーブルプレフィックス: `bi_` (設定可能)
 
-| テーブル名 | PK | GSI | 用途 |
-|-----------|-----|-----|------|
-| bi_users | userId (S) | UsersByEmail (email) | ユーザー |
-| bi_datasets | datasetId (S) | DatasetsByOwner (ownerId + createdAt) | データセット |
-| bi_cards | cardId (S) | CardsByOwner (ownerId + createdAt) | カード |
-| bi_dashboards | dashboardId (S) | DashboardsByOwner (ownerId + createdAt) | ダッシュボード |
+| テーブル名 | PK | SK | GSI | 用途 |
+|-----------|-----|-----|-----|------|
+| bi_users | userId (S) | - | UsersByEmail (email) | ユーザー |
+| bi_datasets | datasetId (S) | - | DatasetsByOwner (ownerId + createdAt) | データセット |
+| bi_cards | cardId (S) | - | CardsByOwner (ownerId + createdAt) | カード |
+| bi_dashboards | dashboardId (S) | - | DashboardsByOwner (ownerId + createdAt) | ダッシュボード |
+| bi_filter_views | filterViewId (S) | - | FilterViewsByDashboard (dashboardId + createdAt) | フィルタービュー |
+| bi_groups | groupId (S) | - | GroupsByName (name) | グループ |
+| bi_group_members | groupId (S) | userId (S) | MembersByUser (userId) | グループメンバー |
+| bi_dashboard_shares | shareId (S) | - | SharesByDashboard (dashboardId), SharesByTarget (sharedToId) | ダッシュボード共有 |
 
 BillingMode: PAY_PER_REQUEST (全テーブル)
 
@@ -29,6 +33,7 @@ BillingMode: PAY_PER_REQUEST (全テーブル)
 | userId | PK | S | UUID |
 | email | GSI-PK | S | メールアドレス (一意) |
 | hashedPassword | - | S | bcrypt ハッシュ |
+| role | - | S | ロール ("user" / "admin", デフォルト "user") |
 | createdAt | - | N | UNIX タイムスタンプ |
 | updatedAt | - | N | UNIX タイムスタンプ |
 
@@ -91,6 +96,57 @@ GSI: `CardsByOwner` (PK: ownerId, SK: createdAt, Projection: ALL)
 
 GSI: `DashboardsByOwner` (PK: ownerId, SK: createdAt, Projection: ALL)
 
+### bi_filter_views
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| filterViewId | PK | S | UUID |
+| dashboardId | GSI-PK | S | 対象ダッシュボード ID |
+| name | - | S | ビュー名 |
+| values | - | M | フィルタ値 |
+| ownerId | - | S | 作成者 ID |
+| createdAt | GSI-SK | N | UNIX タイムスタンプ |
+| updatedAt | - | N | UNIX タイムスタンプ |
+
+GSI: `FilterViewsByDashboard` (PK: dashboardId, SK: createdAt, Projection: ALL)
+
+### bi_groups [FR-7]
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| groupId | PK | S | UUID |
+| name | GSI-PK | S | グループ名 (一意) |
+| createdAt | - | N | UNIX タイムスタンプ |
+| updatedAt | - | N | UNIX タイムスタンプ |
+
+GSI: `GroupsByName` (PK: name, Projection: ALL)
+
+### bi_group_members [FR-7]
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| groupId | PK | S | グループ ID |
+| userId | SK / GSI-PK | S | ユーザー ID (複合キー) |
+| addedAt | - | N | UNIX タイムスタンプ |
+
+PK + SK の複合キーテーブル (groupId + userId)
+GSI: `MembersByUser` (PK: userId, Projection: ALL)
+
+### bi_dashboard_shares [FR-7]
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| shareId | PK | S | UUID |
+| dashboardId | GSI-PK | S | 共有対象ダッシュボード ID |
+| sharedToType | - | S | "user" または "group" |
+| sharedToId | GSI-PK | S | 共有先ユーザー/グループ ID |
+| permission | - | S | "owner" / "editor" / "viewer" |
+| sharedBy | - | S | 共有実行ユーザー ID |
+| createdAt | - | N | UNIX タイムスタンプ |
+
+GSI-1: `SharesByDashboard` (PK: dashboardId, Projection: ALL)
+GSI-2: `SharesByTarget` (PK: sharedToId, Projection: ALL)
+
 ---
 
 ## S3 ストレージ
@@ -137,12 +193,14 @@ class UserInDB:            # DB保存用 (hashedPassword含む)
     id: str
     email: str
     hashed_password: str
+    role: str = "user"     # [FR-7] "user" / "admin"
     created_at: datetime
     updated_at: datetime
 
 class User:                # 公開用 (hashedPassword除外)
     id: str
     email: str
+    role: str = "user"     # [FR-7] "user" / "admin"
     created_at: datetime
     updated_at: datetime
 
@@ -258,9 +316,58 @@ class Dashboard(TimestampMixin):
     default_filter_view_id: str | None
 ```
 
+### dashboard_share.py [FR-7]
+
+```python
+class Permission(str, Enum):
+    OWNER = "owner"
+    EDITOR = "editor"
+    VIEWER = "viewer"
+
+class SharedToType(str, Enum):
+    USER = "user"
+    GROUP = "group"
+
+class DashboardShare:
+    id: str
+    dashboard_id: str
+    shared_to_type: SharedToType
+    shared_to_id: str
+    permission: Permission
+    shared_by: str
+    created_at: datetime
+
+class DashboardShareCreate:
+    shared_to_type: SharedToType
+    shared_to_id: str
+    permission: Permission
+
+class DashboardShareUpdate:
+    permission: Permission
+```
+
+### group.py [FR-7]
+
+```python
+class Group(TimestampMixin):
+    id: str
+    name: str
+
+class GroupCreate:
+    name: str              # min_length=1, 空白バリデーション
+
+class GroupUpdate:
+    name: str | None       # min_length=1, 空白バリデーション
+
+class GroupMember:
+    group_id: str
+    user_id: str
+    added_at: datetime
+```
+
 ---
 
-## APIレスポンスヘルパー (Backend) [NEW]
+## APIレスポンスヘルパー (Backend)
 
 ```python
 # api/response.py
@@ -327,7 +434,7 @@ interface PaginationParams { limit?: number; offset?: number }
 ### user.ts
 
 ```typescript
-interface User { user_id: string; email: string; name?: string; created_at: string }
+interface User { user_id: string; email: string; name?: string; role?: string; created_at: string }
 interface UserWithGroups extends User { groups: GroupRef[] }
 interface GroupRef { group_id: string; name: string }
 interface LoginRequest { email: string; password: string }
@@ -368,6 +475,24 @@ interface Dashboard { dashboard_id: string; name: string; card_count: number; ow
 interface DashboardDetail extends Omit<Dashboard, 'card_count'> { layout: DashboardLayout; filters: FilterDefinition[]; default_filter_view_id?: string; description?: string }
 interface DashboardCreateRequest { name: string }
 interface DashboardUpdateRequest { name?: string; layout?: DashboardLayout; filters?: FilterDefinition[] }
+
+// [FR-7] Sharing 型
+type Permission = 'owner' | 'editor' | 'viewer'
+type SharedToType = 'user' | 'group'
+interface DashboardShare { id: string; dashboard_id: string; shared_to_type: SharedToType; shared_to_id: string; permission: Permission; shared_by: string; created_at: string }
+interface ShareCreateRequest { shared_to_type: SharedToType; shared_to_id: string; permission: Permission }
+interface ShareUpdateRequest { permission: Permission }
+```
+
+### group.ts [FR-7]
+
+```typescript
+interface Group { id: string; name: string; created_at: string; updated_at: string }
+interface GroupDetail extends Group { members: GroupMember[] }
+interface GroupMember { group_id: string; user_id: string; added_at: string }
+interface GroupCreateRequest { name: string }
+interface GroupUpdateRequest { name?: string }
+interface AddMemberRequest { user_id: string }
 ```
 
 ---
@@ -383,12 +508,31 @@ interface DashboardUpdateRequest { name?: string; layout?: DashboardLayout; filt
 | `isCard()` | card.ts | Card |
 | `isDashboard()` | dashboard.ts | Dashboard |
 | `isLayoutItem()` | dashboard.ts | LayoutItem |
+| `isGroup()` | group.ts | Group |
 | `isApiErrorResponse()` | api.ts | ApiErrorResponse |
 | `isPagination()` | api.ts | Pagination |
 
 ---
 
 ## エンティティ関係図
+
+```mermaid
+erDiagram
+    User ||--o{ Dataset : "owns"
+    User ||--o{ Card : "owns"
+    User ||--o{ Dashboard : "owns"
+    User }o--o{ Group : "belongs to (via GroupMember)"
+    Dashboard ||--o{ DashboardShare : "shared via"
+    DashboardShare }o--|| User : "shared to (user)"
+    DashboardShare }o--|| Group : "shared to (group)"
+    Group ||--o{ GroupMember : "has"
+    GroupMember }o--|| User : "member"
+    Dashboard ||--o{ LayoutItem : "contains"
+    Dashboard ||--o{ FilterDefinition : "has"
+    LayoutItem }o--|| Card : "references"
+    Card }o--|| Dataset : "uses"
+    Dataset ||--|| S3_Parquet : "stored in"
+```
 
 ```
   User (bi_users)
@@ -400,20 +544,46 @@ interface DashboardUpdateRequest { name?: string; layout?: DashboardLayout; filt
     |               +-- dataset_id --> Dataset
     |
     +--< owns >-- Dashboard (bi_dashboards)
-                    |
-                    +-- layout[].card_id --> Card
-                    +-- filters[] --> FilterDefinition (options --> Dataset column values)
-                    +-- clone --> new Dashboard (owner=current_user)
+    |               |
+    |               +-- layout[].card_id --> Card
+    |               +-- filters[] --> FilterDefinition (options --> Dataset column values)
+    |               +-- clone --> new Dashboard (owner=current_user)
+    |               |
+    |               +--< shared via >-- DashboardShare (bi_dashboard_shares)
+    |                                     |
+    |                                     +-- shared_to_type="user"  --> User
+    |                                     +-- shared_to_type="group" --> Group
+    |
+    +--< member of >-- GroupMember (bi_group_members)
+                          |
+                          +-- group_id --> Group (bi_groups)
 ```
+
+## Permission モデル [FR-7]
+
+ダッシュボードのアクセス権限は以下の順序で解決される:
+
+```
+1. Owner (ダッシュボード作成者)         --> permission = "owner"
+2. DashboardShare (user 直接共有)       --> permission = "editor" | "viewer"
+3. DashboardShare (group 経由共有)      --> permission = "editor" | "viewer"
+4. 上記いずれにも該当しない             --> アクセス不可
+```
+
+Permission の優先度: owner > editor > viewer
+複数の共有 (user + group) がある場合、最も高い権限が適用される。
 
 ## DynamoDB キーパターン (camelCase)
 
 BaseRepository で自動変換:
 - Python: `snake_case` (created_at) <--> DynamoDB: `camelCase` (createdAt)
-- Python: `id` <--> DynamoDB: テーブル固有PK名 (userId, datasetId, etc.)
+- Python: `id` <--> DynamoDB: テーブル固有PK名 (userId, datasetId, groupId, shareId, etc.)
 - Python: `datetime` <--> DynamoDB: `Number` (UNIX timestamp)
 
-## Backend <--> Frontend レスポンスマッピング [NEW]
+例外: GroupMemberRepository は BaseRepository を継承せず、独自の変換ロジックを使用
+(複合キー groupId + userId を直接操作)
+
+## Backend <--> Frontend レスポンスマッピング
 
 | Backend レスポンス | Frontend 型 | 備考 |
 |-------------------|------------|------|

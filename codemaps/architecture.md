@@ -1,8 +1,8 @@
 # 全体アーキテクチャ コードマップ
 
-**最終更新:** 2026-02-01 (Phase Q4 E2E + Q5 + フィルタ機能)
-**プロジェクト:** BI Tool (社内BI・Pythonカード MVP)
-**ステージ:** MVP
+最終更新: 2026-02-03 (FR-7 Dashboard Sharing / Group Management 追加)
+プロジェクト: BI Tool (社内BI・Pythonカード MVP)
+ステージ: MVP
 
 ---
 
@@ -23,11 +23,11 @@
                        |  :8000           |
                        +---+---------+----+
                            |         |
-              +------------+    +----+-----------+
+              +------------+----+----+-----------+
               |                 |                 |
      +--------+------+  +------+------+  +-------+-------+
      |  DynamoDB     |  |    S3       |  |   Executor    |
-     |  (メタデータ) |  | (Parquet)   |  |  (Python実行) |
+     |  (8テーブル)  |  | (Parquet)   |  |  (Python実行) |
      |  :8001        |  | MinIO :9000 |  |  :8080        |
      +---------------+  +-------------+  +---------------+
 ```
@@ -69,8 +69,8 @@ work_BI_ClaudeCode/
       core/            # 設定、セキュリティ、ログ
       db/              # DynamoDB / S3 接続
       models/          # Pydantic モデル
-      repositories/    # DynamoDB リポジトリ (CRUD)
-      services/        # ビジネスロジック
+      repositories/    # DynamoDB リポジトリ (CRUD, 8リポジトリ)
+      services/        # ビジネスロジック (permission_service 含む)
     tests/             # pytest テスト (37ファイル)
   frontend/            # React SPA
     src/
@@ -109,7 +109,10 @@ work_BI_ClaudeCode/
     |                                       +--> POST /execute/card --> [Executor :8080]
     |                                       +--> DynamoDB (cache)
     |                                       +--> S3 (dataset)
-    +--> POST /api/dashboards/:id/clone --> [Backend :8000] --> [DynamoDB] [NEW]
+    +--> POST /api/dashboards/:id/clone --> [Backend :8000] --> [DynamoDB]
+    +--> GET/POST /api/dashboards/:id/shares/* --> [Backend :8000] --> [DynamoDB] [FR-7]
+    +--> GET/POST /api/groups/*    --> [Backend :8000] --> [DynamoDB] [FR-7]
+    +--> GET /api/users?q=...      --> [Backend :8000] --> [DynamoDB] [FR-7]
 ```
 
 ## 認証フロー
@@ -121,6 +124,65 @@ work_BI_ClaudeCode/
 4. ブラウザ: Zustand ストアに token 保存
 5. 以降のリクエスト: Authorization: Bearer <JWT>
 6. Backend: deps.get_current_user() で JWT 検証
+```
+
+## 認可レイヤー (Permission / Authorization) [FR-7]
+
+FR-7 で追加された認可は 2 つのレベルで機能する。
+
+### 1. ロールベース認可 (require_admin 依存性)
+
+```
+app/api/deps.py :: require_admin()
+
+  get_current_user() で JWT を検証した後、user.role == "admin" を確認。
+  admin でなければ HTTP 403 を返す。
+
+  適用先:
+    - /api/groups/*           (グループ CRUD + メンバー管理)
+```
+
+グループ管理は管理者専用操作であるため、全エンドポイントで require_admin を Depends に指定している。
+
+### 2. ダッシュボード権限 (PermissionService)
+
+```
+app/services/permission_service.py :: PermissionService
+
+  権限レベル (低 -> 高):
+    VIEWER (1) < EDITOR (2) < OWNER (3)
+
+  権限解決フロー (get_user_permission):
+    1. dashboard.owner_id == user_id --> OWNER を即返却
+    2. bi_dashboard_shares テーブルから該当ダッシュボードの全 share を取得
+    3. bi_group_members テーブルからユーザが所属する全グループ ID を取得
+    4. share を走査し、以下のいずれかに該当する share の権限を収集:
+       - shared_to_type == USER かつ shared_to_id == user_id (直接共有)
+       - shared_to_type == GROUP かつ shared_to_id がユーザ所属グループに含まれる (グループ共有)
+    5. 収集した権限のうち最も高いレベルを返却 (該当なしなら None)
+
+  メソッド:
+    - get_user_permission(dashboard, user_id, dynamodb) -> Optional[Permission]
+    - check_permission(dashboard, user_id, required, dynamodb) -> bool
+    - assert_permission(dashboard, user_id, required, dynamodb) -> None (403 raise)
+```
+
+### ダッシュボード共有の管理
+
+```
+app/api/routes/dashboard_shares.py
+
+  全操作はダッシュボードオーナーのみ実行可能 (_get_dashboard_as_owner で検証)。
+
+  エンドポイント:
+    GET    /api/dashboards/{id}/shares       -- 共有一覧取得
+    POST   /api/dashboards/{id}/shares       -- 共有作成 (重複時 409)
+    PUT    /api/dashboards/{id}/shares/{sid}  -- 権限レベル変更
+    DELETE /api/dashboards/{id}/shares/{sid}  -- 共有解除
+
+  共有ターゲット (SharedToType):
+    - USER  -- 特定ユーザへの直接共有
+    - GROUP -- グループ単位の共有
 ```
 
 ## データフロー: CSV インポート
@@ -157,7 +219,47 @@ work_BI_ClaudeCode/
 6. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
 ```
 
-## APIレスポンス標準化 [NEW]
+## DynamoDB テーブル一覧 (8テーブル)
+
+| テーブル名 | PK | 主な GSI | 用途 |
+|-----------|-----|---------|------|
+| bi_users | userId | UsersByEmail | ユーザ認証・プロフィール |
+| bi_datasets | datasetId | DatasetsByOwner | データセットメタデータ |
+| bi_cards | cardId | CardsByOwner | カード (Pythonコード + 設定) |
+| bi_dashboards | dashboardId | DashboardsByOwner | ダッシュボード定義 |
+| bi_filter_views | filterViewId | FilterViewsByDashboard | フィルタビュー保存 |
+| bi_groups | groupId | GroupsByName | グループ定義 [FR-7] |
+| bi_group_members | groupId + userId (複合キー) | MembersByUser | グループメンバーシップ [FR-7] |
+| bi_dashboard_shares | shareId | SharesByDashboard, SharesByTarget | ダッシュボード共有設定 [FR-7] |
+
+## リポジトリ一覧 (8リポジトリ)
+
+| リポジトリ | 対象テーブル | ベースクラス | 備考 |
+|-----------|-------------|-------------|------|
+| UserRepository | bi_users | BaseRepository | email GSI 検索, scan_by_email_prefix |
+| DatasetRepository | bi_datasets | BaseRepository | owner 別一覧 |
+| CardRepository | bi_cards | BaseRepository | owner 別一覧 |
+| DashboardRepository | bi_dashboards | BaseRepository | owner 別一覧 |
+| FilterViewRepository | bi_filter_views | BaseRepository | dashboard 別一覧 |
+| GroupRepository | bi_groups | BaseRepository | name ユニーク検証 [FR-7] |
+| GroupMemberRepository | bi_group_members | (独自実装) | 複合キー操作, MembersByUser GSI [FR-7] |
+| DashboardShareRepository | bi_dashboard_shares | BaseRepository | dashboard 別/target 別検索, 重複検出 [FR-7] |
+
+## APIルーター一覧
+
+| プレフィックス | タグ | モジュール | 認可 |
+|---------------|------|-----------|------|
+| /api/auth | auth | auth.py | なし (ログイン/登録) |
+| /api/datasets | datasets | datasets.py | get_current_user |
+| /api/dashboards | dashboards | dashboards.py | get_current_user |
+| /api/cards | cards | cards.py | get_current_user |
+| /api/dashboards/{id}/filter-views | filter-views | filter_views.py | get_current_user |
+| /api/filter-views | filter-views | filter_view_detail.py | get_current_user |
+| /api/users | users | users.py | get_current_user [FR-7] |
+| /api/dashboards/{id}/shares | dashboard-shares | dashboard_shares.py | get_current_user + owner検証 [FR-7] |
+| /api/groups | groups | groups.py | require_admin [FR-7] |
+
+## APIレスポンス標準化
 
 全APIルートが `api/response.py` のヘルパーを使用:
 

@@ -1,4 +1,6 @@
-# 社内BI・Pythonカード セキュリティ実装ガイド v0.1
+# 社内BI・Pythonカード セキュリティ実装ガイド v0.2
+
+Last Updated: 2026-02-03
 
 ## 1. セキュリティ概要
 
@@ -10,16 +12,18 @@
 | XSS（クロスサイトスクリプティング） | セッションハイジャック、情報窃取 | iframe分離、CSP |
 | 不正アクセス | データ漏洩 | 認証・認可 |
 | 権限昇格 | 不正操作 | 権限チェック |
+| Permission bypass (ダッシュボード) | 未認可ユーザーが非公開ダッシュボードの閲覧・編集・削除を実行 | `PermissionService` による3段階アクセス制御 (owner / direct share / group share) |
+| Permission bypass (管理機能) | admin 以外のユーザーがグループ管理・ユーザー検索にアクセス | `require_admin` 依存性注入による admin ロール必須チェック |
 | データ露出 | 意図しないデータ共有 | Dataset可視化、監査ログ |
 | S3バケット不正アクセス | S3 Import機能で意図しない外部バケットにアクセス | IAMポリシーによるバケット制限、バケット名バリデーション |
 | CSVインジェクション | S3経由で悪意あるCSVデータを取り込み | CSVパース時のサニタイズ、ファイルサイズ制限 |
 
 ### 1.2 セキュリティ原則
 
-1. **最小権限の原則**: 必要最小限の権限のみ付与
-2. **多層防御**: 複数のセキュリティレイヤで保護
-3. **デフォルト拒否**: 明示的に許可されていないものは拒否
-4. **監査可能性**: 全ての重要操作をログに記録
+1. `最小権限の原則`: 必要最小限の権限のみ付与
+2. `多層防御`: 複数のセキュリティレイヤで保護
+3. `デフォルト拒否`: 明示的に許可されていないものは拒否
+4. `監査可能性`: 全ての重要操作をログに記録
 
 ---
 
@@ -327,12 +331,12 @@ class ResourceLimiter:
 
 ### 2.8 S3 Import セキュリティ考慮事項
 
-**S3バケットアクセス制御:**
+S3バケットアクセス制御:
 - IAMポリシーで許可バケットを明示的に制限
 - ワイルドカードによる全バケットアクセスを禁止
 - 本番環境では許可バケットリストを環境変数で管理
 
-**S3キーのパストラバーサル防止:**
+S3キーのパストラバーサル防止:
 ```python
 import re
 
@@ -350,17 +354,17 @@ def validate_s3_key(s3_key: str) -> bool:
     return True
 ```
 
-**CSVインジェクション対策:**
+CSVインジェクション対策:
 - 既存のCSV解析処理 (`CsvParser`) でサニタイズ
 - 数式プレフィックス (`=`, `+`, `-`, `@`) の検出と無害化
 - ファイルサイズ上限の適用 (デフォルト: 100MB)
 
-**ファイルサイズ制限:**
+ファイルサイズ制限:
 - S3 Import時のファイルサイズ上限: 100MB (設定可能)
 - `Content-Length` ヘッダまたは `HeadObject` で事前チェック
 - 上限超過時は 400 `VALIDATION_ERROR` を返却
 
-**監査ログ:**
+監査ログ:
 - S3 Import操作は `DATASET_IMPORTED` イベントとして記録
 - `source_type: "s3_csv"` と `source_config` (バケット名、キー) を `details` に含む
 
@@ -624,87 +628,125 @@ class PasswordPolicy:
 
 ### 4.4 認可チェック
 
+#### 4.4.1 `get_current_user` -- 認証済みユーザー取得
+
+全ての保護されたエンドポイントで使用される FastAPI 依存性注入。
+JWT トークンからユーザーIDを取得し、DynamoDB からユーザーレコードを検索する。
+戻り値は `User` モデル（`hashed_password` を含まない公開モデル）。
+
+- トークンが無効またはユーザーが存在しない場合: `401 Unauthorized`
+
+ソース: `backend/app/api/deps.py` -- `get_current_user()`
+
+#### 4.4.2 `require_admin` -- admin ロール必須チェック
+
+`get_current_user` に依存し、ユーザーの `role` が `"admin"` であることを検証する FastAPI 依存性注入。
+admin 以外のユーザーがアクセスした場合は `403 Forbidden` を返す。
+
+使用箇所:
+- `GET/POST/PUT/DELETE /api/groups/**` -- グループ CRUD 全操作
+- `POST/DELETE /api/groups/{group_id}/members/**` -- グループメンバー管理
+
 ```python
-# backend/app/api/deps.py
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
-security = HTTPBearer()
-
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    auth_service: AuthService = Depends(),
-    user_repo: UserRepository = Depends(),
-) -> User:
-    """現在のユーザを取得"""
-    try:
-        payload = auth_service.verify_token(credentials.credentials)
-        user_id = payload["sub"]
-    except ValueError:
+# backend/app/api/deps.py (実装抜粋)
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "admin":
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
         )
-    
-    user = await user_repo.get_by_id(user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    
-    return user
-
-class PermissionChecker:
-    """権限チェッカー"""
-    
-    def __init__(
-        self,
-        dashboard_repo: DashboardRepository,
-        share_repo: DashboardShareRepository,
-        group_repo: GroupRepository,
-    ):
-        self.dashboard_repo = dashboard_repo
-        self.share_repo = share_repo
-        self.group_repo = group_repo
-    
-    async def check_dashboard_permission(
-        self,
-        user: User,
-        dashboard_id: str,
-        required_permission: str,  # "viewer", "editor", "owner"
-    ) -> bool:
-        """Dashboard権限チェック"""
-        dashboard = await self.dashboard_repo.get_by_id(dashboard_id)
-        if not dashboard:
-            return False
-        
-        # Owner
-        if dashboard.owner_id == user.user_id:
-            return True
-        
-        # 共有権限
-        shares = await self.share_repo.get_by_dashboard(dashboard_id)
-        
-        for share in shares:
-            # ユーザ直接共有
-            if share.shared_to_type == "user" and share.shared_to_id == user.user_id:
-                if self._permission_satisfies(share.permission, required_permission):
-                    return True
-            
-            # グループ共有
-            if share.shared_to_type == "group":
-                is_member = await self.group_repo.is_member(share.shared_to_id, user.user_id)
-                if is_member and self._permission_satisfies(share.permission, required_permission):
-                    return True
-        
-        return False
-    
-    def _permission_satisfies(self, actual: str, required: str) -> bool:
-        """権限レベル比較"""
-        levels = {"viewer": 1, "editor": 2, "owner": 3}
-        return levels.get(actual, 0) >= levels.get(required, 0)
+    return current_user
 ```
+
+#### 4.4.3 `PermissionService` -- ダッシュボード権限サービス
+
+ダッシュボードへのアクセス権限を判定するサービスクラス。
+`backend/app/services/permission_service.py` に実装。
+
+主要メソッド:
+
+| メソッド | 説明 | 戻り値 |
+|----------|------|--------|
+| `get_user_permission()` | ユーザーが持つ最高権限レベルを返す | `Permission` or `None` |
+| `check_permission()` | 指定権限以上を持つか判定 | `bool` |
+| `assert_permission()` | 権限不足の場合 `403 Forbidden` を送出 | `None` (例外送出) |
+
+#### 4.4.4 パーミッション階層
+
+`Permission` enum と数値レベルの対応（`backend/app/models/dashboard_share.py`）:
+
+| レベル | 値 | 数値 | 許可される操作 |
+|--------|-----|------|----------------|
+| `VIEWER` | `"viewer"` | 1 | ダッシュボード閲覧、クローン |
+| `EDITOR` | `"editor"` | 2 | 閲覧 + ダッシュボード編集（名前、レイアウト、フィルタ） |
+| `OWNER`  | `"owner"`  | 3 | 閲覧 + 編集 + 共有管理（追加/変更/削除）+ ダッシュボード削除 |
+
+権限判定は数値比較で行われる。`PERMISSION_LEVELS` 辞書で enum を数値にマッピングし、
+`actual_level >= required_level` で判定する。
+
+```python
+# backend/app/services/permission_service.py (実装抜粋)
+PERMISSION_LEVELS = {
+    Permission.VIEWER: 1,
+    Permission.EDITOR: 2,
+    Permission.OWNER: 3,
+}
+```
+
+#### 4.4.5 パーミッションチェックフロー
+
+`PermissionService.get_user_permission()` は以下の順序でユーザーの権限を解決する:
+
+```
+1. Owner チェック
+   dashboard.owner_id == user_id の場合 -> OWNER を即座に返却
+
+2. 全共有レコード取得
+   DashboardShareRepository.list_by_dashboard() で対象ダッシュボードの全共有を取得
+
+3. ユーザーの所属グループ取得
+   GroupMemberRepository.list_groups_for_user() でユーザーのグループ ID 一覧を取得
+
+4. 共有レコードを走査し、最高権限を算出
+   各共有レコードについて:
+   - shared_to_type == "user" かつ shared_to_id == user_id の場合: 直接共有として権限を取得
+   - shared_to_type == "group" かつ shared_to_id がユーザーの所属グループに含まれる場合: グループ共有として権限を取得
+   -> 全一致レコードの中から最も高い permission level を返却
+
+5. 一致なし -> None を返却 (アクセス権なし)
+```
+
+フロー図:
+
+```
+Request -> get_user_permission(dashboard, user_id)
+  |
+  +-- user_id == dashboard.owner_id ?
+  |     YES -> return OWNER
+  |     NO  -> continue
+  |
+  +-- Fetch all shares for this dashboard
+  +-- Fetch user's group memberships
+  |
+  +-- For each share:
+  |     +-- (type=user, id matches)  -> record permission level
+  |     +-- (type=group, id in user groups) -> record permission level
+  |
+  +-- Any matches found?
+        YES -> return highest permission level
+        NO  -> return None (403 Forbidden on assert)
+```
+
+各エンドポイントが要求する権限レベル:
+
+| エンドポイント | 要求権限 |
+|----------------|----------|
+| `GET /dashboards/{id}` | VIEWER |
+| `GET /dashboards/{id}/referenced-datasets` | VIEWER |
+| `POST /dashboards/{id}/clone` | VIEWER |
+| `PUT /dashboards/{id}` | EDITOR |
+| `DELETE /dashboards/{id}` | OWNER |
+| `GET/POST/PUT/DELETE /dashboards/{id}/shares/**` | OWNER (owner_id 直接比較) |
 
 ---
 
@@ -826,6 +868,25 @@ async def add_share(
 ## 6. データ保護
 
 ### 6.1 データ露出防止
+
+#### `my_permission` フィールド
+
+ダッシュボード一覧 API (`GET /api/dashboards`) は、各ダッシュボードに `my_permission` フィールドを付与して返却する。
+このフィールドはリクエストユーザーが対象ダッシュボードに対して持つ実効権限を示す文字列で、
+値は `"owner"`, `"editor"`, `"viewer"` のいずれか。
+
+`my_permission` の算出ロジック（`backend/app/api/routes/dashboards.py` -- `list_dashboards()`）:
+
+1. ユーザーが所有するダッシュボード -> `"owner"`
+2. ユーザー直接共有 -> 共有レコードの `permission` 値
+3. グループ共有 -> 共有レコードの `permission` 値
+4. 複数の共有が存在する場合は最も高い権限レベルが採用される
+
+フロントエンドはこのフィールドを参照して UI の表示制御を行う（編集ボタンの表示/非表示、共有メニューの可否など）。
+サーバーサイドの権限チェックは各操作エンドポイントで独立して実施されるため、
+`my_permission` は UI ヒントとしてのみ使用される。サーバーサイドの認可を代替するものではない。
+
+#### 参照 Dataset の可視化
 
 ```python
 # backend/app/services/dashboard_service.py

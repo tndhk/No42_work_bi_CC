@@ -1,7 +1,7 @@
 """API routes initialization."""
 from fastapi import APIRouter
 
-from app.api.routes import auth, datasets, dashboards, cards, filter_views, filter_view_detail, users, groups, dashboard_shares
+from app.api.routes import auth, datasets, dashboards, cards, filter_views, filter_view_detail, users, groups, dashboard_shares, transforms
 
 # Create main API router
 api_router = APIRouter()
@@ -44,3 +44,6 @@ api_router.include_router(
 
 # Include groups routes
 api_router.include_router(groups.router, prefix="/groups", tags=["groups"])
+
+# Include transforms routes
+api_router.include_router(transforms.router, prefix="/transforms", tags=["transforms"])

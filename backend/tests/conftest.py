@@ -307,6 +307,36 @@ def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
         )
         tables['dashboard_shares'] = dashboard_shares_table
 
+        # Transforms table
+        transforms_table_name = f"{settings.dynamodb_table_prefix}transforms"
+        transforms_table = dynamodb.create_table(
+            TableName=transforms_table_name,
+            KeySchema=[
+                {'AttributeName': 'transformId', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'transformId', 'AttributeType': 'S'},
+                {'AttributeName': 'ownerId', 'AttributeType': 'S'},
+                {'AttributeName': 'createdAt', 'AttributeType': 'N'}
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'TransformsByOwner',
+                    'KeySchema': [
+                        {'AttributeName': 'ownerId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'createdAt', 'KeyType': 'RANGE'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['transforms'] = transforms_table
+
         yield (tables, dynamodb)
+
+
+# Alias for transform tests - same fixture, different name for clarity
+dynamodb_tables_with_transforms = dynamodb_tables
 
 

@@ -1,6 +1,6 @@
 # 社内BI・Pythonカード 実装進捗
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-04
 
 要件定義書 (docs/requirements.md) および設計書 (docs/design.md) に基づく全機能の実装ステータス。
 
@@ -16,9 +16,9 @@ Last Updated: 2026-02-03
 
 ### FR-2: Transform (PythonベースETL)
 
-- [ ] FR-2.1 Transform定義 (モデル・リポジトリ・API・フロントエンド画面)
-- [ ] FR-2.2 Transform実行 (手動実行・スケジュール実行・実行履歴)
-- [ ] FR-2.3 Transform実行制約 (Executor連携、5分タイムアウト)
+- [ ] FR-2.1 Transform定義 (バックエンド実装済み: Transform model, TransformRepository, Transforms API。フロントエンド画面: 未実装)
+- [ ] FR-2.2 Transform実行 (手動実行API実装済み: POST /transforms/{id}/execute。スケジュール実行・実行履歴: 未実装)
+- [x] FR-2.3 Transform実行制約 (Executor連携: TransformRunner, 300秒タイムアウト, 4096MBメモリ制限)
 
 ### FR-3: Card (PythonベースHTMLカード)
 
@@ -113,6 +113,7 @@ Last Updated: 2026-02-03
 | FR-5/6 + FR-1.2 | フィルタUI + FilterView CRUD + S3 Import | (WIP) | 2026-02-02 |
 | FR-7 | Dashboard共有/権限 + グループ管理 + User検索API | -- | 2026-02-03 |
 | FR-1.3 | Dataset再取り込み (スキーマ変化検知・警告) | -- | 2026-02-03 |
+| FR-2 (Backend) | Transform定義・実行バックエンド (API/Repository/ExecutionService/TransformRunner) | -- | 2026-02-04 |
 
 ## 次期フェーズ候補
 

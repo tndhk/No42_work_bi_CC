@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Executor
     executor_url: str = "http://localhost:8001"
     executor_timeout_seconds: int = 10
+    transform_timeout_seconds: int = 300  # 5分（Transform処理用）
 
     # Cache
     cache_ttl_seconds: int = 3600

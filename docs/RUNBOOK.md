@@ -1,6 +1,6 @@
 # 運用ランブック (RUNBOOK)
 
-最終更新: 2026-02-03
+最終更新: 2026-02-04
 
 ---
 
@@ -182,6 +182,7 @@ docker compose run --rm dynamodb-init
 - `bi_cards` - カード (GSI: CardsByOwner)
 - `bi_dashboards` - ダッシュボード (GSI: DashboardsByOwner)
 - `bi_filter_views` - フィルタビュー (GSI: FilterViewsByDashboard)
+- `bi_transforms` - Transform (GSI: TransformsByOwner)
 
 ### FilterView可視性
 
@@ -198,6 +199,22 @@ docker compose run --rm dynamodb-init
 | 403 | オーナー以外が共有管理 | オーナーでログイン |
 | 404 | ダッシュボード/共有が存在しない | ID確認 |
 | 409 | 同一対象への共有が既存 | PUT で権限更新 |
+
+### Transform実行エラー
+
+| HTTPステータス | 原因 | 対策 |
+|---------------|------|------|
+| 400 | 入力Datasetが見つからない/データなし | Dataset ID確認、データ再取り込み |
+| 403 | オーナー以外が実行 | オーナーでログイン |
+| 404 | Transformが見つからない | Transform ID確認 |
+| 500 | Executor実行失敗 | Executorログ確認、コードレビュー |
+
+| 原因 | 診断 | 対策 |
+|------|------|------|
+| transform関数が未定義 | エラーメッセージ確認 | コードに`def transform(inputs, params):`を定義 |
+| 戻り値がDataFrameでない | エラーメッセージ確認 | DataFrameを返すように修正 |
+| タイムアウト (300秒超過) | Executorログ確認 | コードの最適化、データ量削減 |
+| メモリ超過 (4096MB) | リソースモニタリング | データ量削減、処理の分割 |
 
 ### グループ管理
 
@@ -326,7 +343,7 @@ docker scan bi-api:latest
 |------|-----|
 | 実行ユーザー | 非root (appuser) |
 | タイムアウト | カード 10秒, Transform 300秒 |
-| メモリ | 2048MB |
+| メモリ | カード 2048MB, Transform 4096MB |
 | ネットワーク | S3 VPCエンドポイントのみ |
 | ブロックモジュール | `os`, `sys`, `subprocess`, `socket`, `http`, `requests`, `pickle` 等 |
 

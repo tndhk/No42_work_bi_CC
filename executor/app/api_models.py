@@ -26,3 +26,19 @@ class ExecuteErrorResponse(BaseModel):
     """エラーレスポンス"""
     error: str
     detail: Optional[str] = None
+
+
+class ExecuteTransformRequest(BaseModel):
+    """POST /execute/transform リクエストボディ"""
+    transform_id: str
+    code: str
+    input_datasets: dict[str, list[dict[str, Any]]]  # {dataset_id: rows}
+    params: dict[str, Any] = {}
+
+
+class ExecuteTransformResponse(BaseModel):
+    """POST /execute/transform レスポンスボディ"""
+    output_rows: list[dict[str, Any]]
+    row_count: int
+    column_names: list[str]
+    execution_time_ms: float

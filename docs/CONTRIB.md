@@ -1,6 +1,6 @@
 # 開発者ガイド (CONTRIB)
 
-最終更新: 2026-02-03
+最終更新: 2026-02-04
 
 ---
 
@@ -183,6 +183,7 @@ cd frontend && npm run e2e
 | `bi_cards` | cardId | CardsByOwner |
 | `bi_dashboards` | dashboardId | DashboardsByOwner |
 | `bi_filter_views` | filterViewId | FilterViewsByDashboard |
+| `bi_transforms` | transformId | TransformsByOwner |
 
 ---
 
@@ -249,6 +250,7 @@ work_BI_ClaudeCode/
       models/           # Pydanticモデル
       repositories/     # データアクセス層
       services/         # ビジネスロジック
+        transform_execution_service.py  # Transform実行
     tests/              # pytestテスト
   executor/             # Python Sandbox (カード/Transform実行)
   frontend/             # React SPA

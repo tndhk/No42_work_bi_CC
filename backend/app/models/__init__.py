@@ -4,6 +4,7 @@ from app.models.user import User, UserCreate, UserInDB, UserUpdate
 from app.models.dataset import Dataset, DatasetCreate, DatasetUpdate, ColumnSchema
 from app.models.card import Card, CardCreate, CardUpdate
 from app.models.dashboard import Dashboard, DashboardCreate, DashboardUpdate, LayoutItem, FilterDefinition
+from app.models.transform import Transform, TransformCreate, TransformUpdate
 
 __all__ = [
     "BaseResponse",
@@ -24,4 +25,7 @@ __all__ = [
     "DashboardUpdate",
     "LayoutItem",
     "FilterDefinition",
+    "Transform",
+    "TransformCreate",
+    "TransformUpdate",
 ]

@@ -1,6 +1,6 @@
 # 社内BI・Pythonカード API詳細仕様書 v0.1
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-04
 
 ## 1. 概要
 
@@ -691,6 +691,33 @@ Response (200):
 ---
 
 ## 6. Transforms API
+
+Last Updated: 2026-02-04
+
+認証: JWT Bearer (全エンドポイント)
+認可: 全エンドポイントでオーナーのみが操作可能 (list は自身のTransformのみ返す)。
+
+実装ステータス:
+- 実装済み: GET/POST /transforms, GET/PUT/DELETE /transforms/{id}, POST /transforms/{id}/execute
+- 未実装: GET /transforms/{id}/executions (実行履歴)
+
+実装上の注意:
+- executeのレスポンスは仕様書では202 (非同期) だが、現在の実装では200 (同期) で結果を返す
+- list APIのデフォルトlimitは仕様書では20だが、実装では50
+- schedule フィールドは現在のモデルに未実装 (将来対応予定)
+
+Transform モデル (実装済み):
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| id | string | Transform ID |
+| name | string | Transform名 |
+| owner_id | string | オーナーユーザーID |
+| input_dataset_ids | list[string] | 入力Dataset IDリスト (1つ以上必須) |
+| output_dataset_id | string / null | 出力Dataset ID (実行後に設定) |
+| code | string | Pythonコード (transform関数を含む) |
+| created_at | string (ISO 8601) | 作成日時 |
+| updated_at | string (ISO 8601) | 更新日時 |
 
 ### GET /api/transforms
 

@@ -57,8 +57,8 @@ vi.mock('@/components/dashboard/ShareDialog', () => ({
 }));
 
 vi.mock('@/components/dashboard/FilterViewSelector', () => ({
-  FilterViewSelector: ({ views, selectedViewId, onSelect, onSave, onOverwrite, onDelete }: any) => (
-    <div data-testid="filter-view-selector">
+  FilterViewSelector: ({ views, selectedViewId, onSelect, onSave, onOverwrite, onDelete, permission }: any) => (
+    <div data-testid="filter-view-selector" data-permission={permission}>
       <button aria-label="ビュー" onClick={() => {}}>ビュー</button>
       <span data-testid="view-count">{views.length}</span>
       {selectedViewId && <span data-testid="selected-view-id">{selectedViewId}</span>}
@@ -67,7 +67,7 @@ vi.mock('@/components/dashboard/FilterViewSelector', () => ({
           {v.name}
         </button>
       ))}
-      <button data-testid="save-view" onClick={() => onSave('New View')}>Save</button>
+      <button data-testid="save-view" onClick={() => onSave('New View', { is_shared: true })}>Save</button>
       {selectedViewId && (
         <>
           <button data-testid="overwrite-view" onClick={() => onOverwrite(selectedViewId)}>Overwrite</button>
@@ -445,6 +445,7 @@ describe('DashboardViewPage', () => {
         data: {
           name: 'New View',
           filter_state: {},
+          is_shared: true,
         },
       });
     });
@@ -854,6 +855,59 @@ describe('DashboardViewPage', () => {
 
       // 後方互換: 全ボタン表示
       expect(screen.getByRole('button', { name: /編集/ })).toBeInTheDocument();
+    });
+
+    it('FilterViewSelectorにpermissionが渡される', () => {
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'editor',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: {
+          ...dashboard,
+          cards: [],
+          filters: [{ id: 'f1', type: 'category', column: 'region', label: 'Region', options: ['East'] }],
+        },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      const filterViewSelector = screen.getByTestId('filter-view-selector');
+      expect(filterViewSelector).toHaveAttribute('data-permission', 'EDITOR');
+    });
+
+    it('handleSaveViewがis_sharedオプションを渡す', async () => {
+      const user = userEvent.setup();
+      const dashboard = createMockDashboard({
+        dashboard_id: 'dashboard-1',
+        name: 'Test Dashboard',
+        my_permission: 'editor',
+      });
+
+      mockUseDashboard.mockReturnValue({
+        data: {
+          ...dashboard,
+          cards: [],
+          filters: [{ id: 'f1', type: 'category', column: 'region', label: 'Region', options: ['East'] }],
+        },
+        isLoading: false,
+      } as any);
+
+      renderViewPage();
+
+      await user.click(screen.getByTestId('save-view'));
+
+      expect(mockCreateFilterView).toHaveBeenCalledWith({
+        dashboardId: 'dashboard-1',
+        data: {
+          name: 'New View',
+          filter_state: {},
+          is_shared: true,
+        },
+      });
     });
   });
 });

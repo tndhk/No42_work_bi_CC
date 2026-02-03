@@ -12,7 +12,7 @@ Last Updated: 2026-02-03
 
 - [x] FR-1.1 Local CSV Import (ファイルアップロード、プレビュー、スキーマ推定、Parquet変換)
 - [x] FR-1.2 S3 CSV Import (バケット/キー指定、S3ImportForm UI、Parquet変換)
-- [ ] FR-1.3 Dataset再取り込み (スキーマ変化検知・警告、中止/続行選択)
+- [x] FR-1.3 Dataset再取り込み (スキーマ変化検知・警告、中止/続行選択)
 
 ### FR-2: Transform (PythonベースETL)
 
@@ -42,7 +42,7 @@ Last Updated: 2026-02-03
 ### FR-6: FilterView (フィルタ状態の保存)
 
 - [x] FR-6.1 FilterView操作 (CRUD API、FilterViewRepository、FilterViewSelector UI)
-- [ ] FR-6.2 FilterView共有 (個人用/共有ビュー、デフォルトビュー)
+- [x] FR-6.2 FilterView共有 (個人用/共有ビュー、デフォルトビュー)
 
 ### FR-7: 共有/権限 (Dashboardのみ)
 
@@ -112,13 +112,13 @@ Last Updated: 2026-02-03
 | Docs | コードマップ・開発ガイド更新 | 5c728e8 | 2026-01-31 |
 | FR-5/6 + FR-1.2 | フィルタUI + FilterView CRUD + S3 Import | (WIP) | 2026-02-02 |
 | FR-7 | Dashboard共有/権限 + グループ管理 + User検索API | -- | 2026-02-03 |
+| FR-1.3 | Dataset再取り込み (スキーマ変化検知・警告) | -- | 2026-02-03 |
 
 ## 次期フェーズ候補
 
 | 優先度 | 機能群 | 依存関係 | 複雑度 |
 |--------|--------|----------|--------|
-| 高 | FilterView共有機能 (FR-6.2) | FR-6.1完了 | 小 |
 | 高 | Transform (ETL) | Executor基盤あり | 大 |
-| 中 | S3 CSV Import 再取り込み (FR-1.3) | FR-1.2完了 | 小 |
-| 低 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
-| 低 | 監査ログ | 他機能に依存しない | 中 |
+| 中 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
+| 中 | 監査ログ | 他機能に依存しない | 中 |
+| 低 | パーティションプルーニング | NFR-1 | 中 |

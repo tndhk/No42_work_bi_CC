@@ -70,13 +70,14 @@ export function DashboardViewPage() {
     setSelectedViewId(view.id);
   }, []);
 
-  const handleSaveView = useCallback(async (name: string) => {
+  const handleSaveView = useCallback(async (name: string, options?: { is_shared: boolean }) => {
     if (!id) return;
     await createFilterView.mutateAsync({
       dashboardId: id,
       data: {
         name,
         filter_state: filterValues,
+        is_shared: options?.is_shared ?? false,
       },
     });
   }, [id, filterValues, createFilterView]);
@@ -106,7 +107,7 @@ export function DashboardViewPage() {
   }
 
   const myPermission = dashboard.my_permission;
-  const hasFilters = dashboard.filters && dashboard.filters.length > 0;
+  const hasFilters = (dashboard.filters?.length ?? 0) > 0;
   const activeFilterCount = Object.keys(filterValues).length;
 
   return (
@@ -123,6 +124,7 @@ export function DashboardViewPage() {
                 onSave={handleSaveView}
                 onOverwrite={handleOverwriteView}
                 onDelete={handleDeleteView}
+                permission={myPermission?.toUpperCase() as 'OWNER' | 'EDITOR' | 'VIEWER'}
               />
               <Button
                 variant="outline"

@@ -1,833 +1,369 @@
 # 運用ランブック (RUNBOOK)
 
 最終更新: 2026-02-03
-プロジェクト: 社内BI・Pythonカード MVP
-フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management + FilterView Visibility 実装中
 
 ---
 
 ## 1. 環境一覧
 
-| 環境 | 用途 | フロントエンドURL | API URL |
-|------|------|------------------|---------|
-| local | 開発 | http://localhost:3000 | http://localhost:8000 |
-| staging | 検証 | https://bi-staging.internal.company.com | 内部ALB |
-| production | 本番 | https://bi.internal.company.com | 内部ALB |
+| 環境 | フロントエンド | API | 用途 |
+|------|---------------|-----|------|
+| local | http://localhost:3000 | http://localhost:8000 | 開発・テスト |
+| staging | https://bi-staging.internal.company.com | 内部ALB | 検証環境 |
+| production | https://bi.internal.company.com | 内部ALB | 本番環境 |
 
-サービス構成:
+### ローカル環境サービス一覧
 
-| サービス | テクノロジー | ポート (local) | AWS (staging/prod) |
-|---------|------------|---------|------------------|
-| Frontend | React 18 + Vite 5 | 3000 | S3 + CloudFront |
-| API | FastAPI 0.109 + Uvicorn | 8000 | ECS Fargate |
-| Executor | Python 3.11 サンドボックス | 8080 | ECS Fargate (ネットワーク隔離) |
-| Database | DynamoDB | 8001 (DynamoDB Local) | DynamoDB (オンデマンド) |
-| Storage | S3 | 9000/9001 (MinIO) | S3 (バージョニング有効) |
+| サービス | ポート | 用途 |
+|---------|--------|------|
+| frontend | 3000 | React SPA (Vite) |
+| api | 8000 | FastAPI |
+| executor | 8080 | Python Sandbox |
+| dynamodb-local | 8001 (外部) / 8000 (内部) | DynamoDB互換DB |
+| minio | 9000 (API) / 9001 (Console) | S3互換ストレージ |
 
 ---
 
-## 2. デプロイ手順
+## 2. デプロイ
 
-### 2.1 ローカル開発環境
+### ローカル
 
 ```bash
 # 起動
 docker compose up --build
 
+# バックグラウンド起動
+docker compose up -d --build
+
 # 停止
 docker compose down
 
-# データをリセットして起動 (DynamoDB / MinIO のデータを削除)
-docker compose down -v && docker compose up --build
+# 停止 + データ削除 (DynamoDB/MinIO)
+docker compose down -v
 ```
 
-### 2.2 AWS ステージング / 本番デプロイ
-
-本番環境は AWS ECS Fargate 上で稼働します。デプロイは以下のコンポーネント単位で行います。
-
-#### 2.2.1 前提条件
-
-- AWS CLI が設定済みであること
-- ECR リポジトリが作成済みであること
-- ECS クラスタ、サービス、タスク定義が設定済みであること
-- 必要なシークレットが Secrets Manager に登録されていること
-  - `JWT_SECRET_KEY` (最低32文字のランダム文字列)
-  - `VERTEX_AI_PROJECT_ID`
-
-#### 2.2.2 バックエンド (API) デプロイ
+### AWS (ECS Fargate)
 
 ```bash
-# 1. Docker イメージをビルド
+# API
 docker build -t bi-api:latest -f backend/Dockerfile.dev backend/
-
-# 2. ECR にタグ付けしてプッシュ
-aws ecr get-login-password --region ap-northeast-1 | \
-  docker login --username AWS --password-stdin <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com
 docker tag bi-api:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:$(git rev-parse --short HEAD)
 docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-api:$(git rev-parse --short HEAD)
+aws ecs update-service --cluster bi-cluster --service bi-api-service --force-new-deployment
 
-# 3. ECS サービスを更新 (新リビジョンのタスク定義でデプロイ)
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-api-service \
-  --force-new-deployment
-
-# 4. デプロイ完了を待機
-aws ecs wait services-stable \
-  --cluster bi-cluster \
-  --services bi-api-service
-```
-
-#### 2.2.3 Executor デプロイ
-
-```bash
-# 1. Docker イメージをビルド
+# Executor
 docker build -t bi-executor:latest -f executor/Dockerfile executor/
-
-# 2. ECR にプッシュ
 docker tag bi-executor:latest <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:$(git rev-parse --short HEAD)
 docker push <account-id>.dkr.ecr.ap-northeast-1.amazonaws.com/bi-executor:$(git rev-parse --short HEAD)
+aws ecs update-service --cluster bi-cluster --service bi-executor-service --force-new-deployment
 
-# 3. ECS サービスを更新
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-executor-service \
-  --force-new-deployment
-
-# 4. デプロイ完了を待機
-aws ecs wait services-stable \
-  --cluster bi-cluster \
-  --services bi-executor-service
-```
-
-#### 2.2.4 フロントエンドデプロイ
-
-```bash
-# 1. プロダクションビルド
-cd frontend
-npm ci
-npm run build
-
-# 2. S3 にアップロード
+# フロントエンド
+cd frontend && npm ci && npm run build
 aws s3 sync dist/ s3://bi-static-<env>/ --delete
-
-# 3. CloudFront キャッシュを無効化
-aws cloudfront create-invalidation \
-  --distribution-id <distribution-id> \
-  --paths "/*"
+aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 ```
 
-#### 2.2.5 DynamoDB テーブル初期化 (初回のみ)
+### デプロイ前チェック
 
-```bash
-# ローカルから直接実行する場合
-cd scripts
-pip install boto3
-python init_tables.py
-
-# Docker で実行する場合
-docker compose run --rm dynamodb-init
-```
-
-作成されるテーブル (10テーブル):
-- `bi_users`, `bi_groups`, `bi_group_members`, `bi_datasets`, `bi_transforms`
-- `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
-
-#### 2.2.6 デプロイ前チェックリスト
-
-| チェック項目 | コマンド | 基準 |
-|-------------|---------|------|
-| フロントエンド lint | `cd frontend && npm run lint` | エラー 0 |
-| フロントエンド typecheck | `cd frontend && npm run typecheck` | エラー 0 |
-| フロントエンド ユニットテスト | `cd frontend && npm run test:coverage` | 83%+ coverage, 290+ tests pass |
-| フロントエンド E2Eテスト | `cd frontend && npm run e2e` | 全テスト pass (Auth: 5, Dataset: 3, Card/Dashboard: 5) |
-| バックエンド lint | `cd backend && ruff check app/` | エラー 0 |
-| バックエンド typecheck | `cd backend && mypy app/` | エラー 0 |
-| バックエンド テスト | `cd backend && pytest --cov=app` | pass |
-| Executor テスト | `cd executor && pytest --cov=app` | pass |
-| ビルド | `cd frontend && npm run build` | 成功 |
+| チェック | コマンド | 基準 |
+|---------|---------|------|
+| フロントエンド lint | `npm run lint` | エラーなし |
+| フロントエンド type | `npm run typecheck` | エラーなし |
+| フロントエンド test | `npm run test:coverage` | 83%+ |
+| バックエンド lint | `ruff check app/` | エラーなし |
+| バックエンド type | `mypy app/` | エラーなし |
+| バックエンド test | `pytest --cov=app` | pass |
 
 ---
 
 ## 3. ヘルスチェック
 
-### 3.1 エンドポイント
-
-| サービス | エンドポイント | 期待レスポンス |
-|---------|---------------|---------------|
+| サービス | エンドポイント | 期待値 |
+|---------|---------------|--------|
 | API | `GET /api/health` | `{"status": "ok"}` |
 | Executor | `GET /health` | `{"status": "ok"}` |
 
-### 3.2 ヘルスチェック実行
-
 ```bash
-# API サーバ
+# ローカル環境
 curl -s http://localhost:8000/api/health | jq .
-
-# Executor
 curl -s http://localhost:8080/health | jq .
 
-# 全サービスの簡易チェック
-for port in 8000 8080; do
-  echo "Port $port: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:$port/health 2>/dev/null || echo 'FAILED')"
-done
-```
-
-### 3.3 依存サービス確認
-
-```bash
-# DynamoDB Local テーブル確認
-aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northeast-1
-
-# MinIO バケット確認
-curl -s http://localhost:9000/minio/health/live
-
-# MinIO Console: http://localhost:9001 (minioadmin / minioadmin)
+# Docker内部
+docker compose exec api curl -s http://localhost:8000/api/health
+docker compose exec executor curl -s http://localhost:8080/health
 ```
 
 ---
 
-## 4. 監視項目
+## 4. 監視
 
-### 4.1 メトリクス (CloudWatch)
+### メトリクス (CloudWatch)
 
-| メトリクス | 閾値 | アラート | 対応 |
-|-----------|------|---------|------|
-| API レスポンスタイム (p95) | > 5秒 | Warning | APIログでスロークエリを確認 |
-| API レスポンスタイム (p99) | > 10秒 | Critical | スケールアウトを検討 |
-| API エラーレート (5xx) | > 5% | Critical | エラーログを確認、ロールバック検討 |
-| Executor タイムアウト率 | > 10% | Warning | カードコードの最適化を促進 |
-| Executor タイムアウト率 | > 20% | Critical | Executorリソース増強を検討 |
-| ECS CPU使用率 | > 80% | Warning | タスク数増加を検討 |
-| ECS メモリ使用率 | > 80% | Warning | メモリリーク調査 |
-| DynamoDB スロットリング | > 0 | Warning | キャパシティ設定確認 |
-| S3 エラーレート | > 1% | Warning | VPCエンドポイント / IAMロール確認 |
+| メトリクス | Warning | Critical | 対応 |
+|-----------|---------|----------|------|
+| API レスポンスタイム (p95) | > 5秒 | > 10秒 | スケールアップ/クエリ最適化 |
+| API エラーレート (5xx) | > 5% | > 10% | ログ確認/ロールバック検討 |
+| Executor タイムアウト率 | > 10% | > 20% | カードコード見直し |
+| ECS CPU使用率 | > 80% | > 90% | タスク数増加 |
+| ECS メモリ使用率 | > 80% | > 90% | タスク数増加/メモリ増加 |
 
-### 4.2 ログ
+### ログ
 
-| サービス | ログ出力先 | フォーマット |
-|---------|-----------|-------------|
-| API | CloudWatch Logs (`/ecs/bi-<env>-api`) | JSON (structlog) |
-| Executor | CloudWatch Logs (`/ecs/bi-<env>-executor`) | 標準出力 |
-| フロントエンド | ブラウザコンソール | - |
-
-ログには以下の情報が含まれます:
-- リクエストID (`request_id`)
-- ユーザID (`user_id`、認証済みリクエスト)
-- エンドポイント
-- レスポンスステータス
-- 処理時間 (`duration_ms`)
-
-ログ検索コマンド:
+| サービス | 出力先 | フォーマット |
+|---------|--------|-------------|
+| API | CloudWatch `/ecs/bi-<env>-api` | JSON |
+| Executor | CloudWatch `/ecs/bi-<env>-executor` | JSON |
+| フロントエンド | CloudFront / S3 Access Logs | CLF |
 
 ```bash
-# CloudWatch Logs (本番)
+# ログ確認
 aws logs tail /ecs/bi-production-api --follow
 
-# エラーのみフィルタ
-aws logs filter-log-events \
-  --log-group-name /ecs/bi-production-api \
-  --start-time $(date -d '1 hour ago' +%s)000 \
-  --filter-pattern "ERROR"
+# エラーのみ抽出
+aws logs filter-log-events --log-group-name /ecs/bi-production-api \
+  --filter-pattern "ERROR" --start-time $(date -d '1 hour ago' +%s)000
 ```
-
-### 4.3 重要な監査ログ
-
-| イベント | ログフィールド | DynamoDBテーブル |
-|---------|--------------|-----------------|
-| ログイン成功/失敗 | `login_success` / `login_failed` + email, user_id, ip | `bi_audit_logs` |
-| データセット作成 | dataset_id, owner_id | `bi_audit_logs` |
-| カード実行 | card_id, execution_time_ms, cached | `bi_audit_logs` |
-| ダッシュボード共有変更 | dashboard_id, shared_with, permission | `bi_audit_logs` |
-| ダッシュボード共有作成 | dashboard_id, shared_to_type, shared_to_id, permission, shared_by | `bi_audit_logs` |
-| ダッシュボード共有削除 | dashboard_id, share_id, deleted_by | `bi_audit_logs` |
-| グループ作成/更新/削除 | group_id, group_name, action, admin_user_id | `bi_audit_logs` |
-| グループメンバー追加/削除 | group_id, user_id, action, admin_user_id | `bi_audit_logs` |
-| Transform実行成功/失敗 | transform_id, duration_ms, status | `bi_audit_logs` |
-
-監査ログのGSI:
-- `LogsByTimestamp` -- 時系列検索
-- `LogsByTarget` -- 対象リソース別検索
 
 ---
 
 ## 5. トラブルシューティング
 
-### 5.1 APIサーバが起動しない
+### API起動失敗
 
-症状: `docker compose logs api` でエラーが表示される
-
-確認手順:
-
-1. 環境変数を確認
-   ```bash
-   docker compose exec api env | sort
-   ```
-
-2. DynamoDB への接続を確認
-   ```bash
-   docker compose logs dynamodb-local
-   docker compose logs dynamodb-init
-   ```
-
-3. 依存パッケージの問題
-   ```bash
-   docker compose build --no-cache api
-   ```
-
-### 5.2 カード実行がタイムアウトする
-
-症状: カードプレビュー/実行時に408エラーが返る
-
-原因と対策:
-
-| 原因 | 対策 |
-|------|------|
-| Pythonコードが重い (大量ループ等) | コードを最適化。pandas のベクトル演算を使用 |
-| データセットが大きすぎる | フィルタで絞り込む。必要な列のみ使用 |
-| 無限ループ | タイムアウト (10秒) で自動停止される |
-| Executor のリソース不足 | ECS タスクの CPU/メモリを増やす |
-
-Executor ログの確認:
 ```bash
-docker compose logs -f executor
+# ログ確認
+docker compose logs api
+
+# 環境変数確認
+docker compose exec api env | sort
+
+# DynamoDB接続確認
+docker compose exec api python -c "from app.db.dynamodb import get_table; print(get_table('bi_users'))"
 ```
 
-Executor リソース設定 (環境変数):
-- `EXECUTOR_TIMEOUT_CARD=10` (秒)
-- `EXECUTOR_TIMEOUT_TRANSFORM=300` (秒)
-- `EXECUTOR_MAX_CONCURRENT_CARDS=10`
-- `EXECUTOR_MAX_CONCURRENT_TRANSFORMS=5`
+### カード実行タイムアウト
 
-### 5.3 CSVインポートが失敗する
+| 原因 | 診断 | 対策 |
+|------|------|------|
+| Pythonコードが重い | 実行時間ログ確認 | pandasベクトル演算を使用 |
+| データセットが大きい | row_count確認 | フィルタで絞り込む |
+| Executorリソース不足 | ECS メトリクス | CPU/メモリ増加 |
+| 無限ループ | タイムアウトログ | コードレビュー |
 
-症状: データセット作成APIが422エラーを返す
+### CSVインポート失敗
 
-確認手順:
+| 原因 | エラーメッセージ | 対策 |
+|------|----------------|------|
+| ファイルサイズ超過 | "File too large" | 100MB以下に分割 |
+| 文字コード | "Encoding error" | utf-8/shift_jis/cp932 を明示指定 |
+| 不正なCSV形式 | "CSV parse error" | 区切り文字・ヘッダ設定確認 |
 
-1. ファイルサイズ制限 (最大100MB) を超えていないか確認
-2. 文字コードが正しいか確認 (自動推定が失敗する場合は `encoding` パラメータを明示指定)
-3. 区切り文字が正しいか確認 (デフォルトはカンマ)
+### JWT認証エラー (401)
 
-サポートされる文字コード:
-- `utf-8` (デフォルト)
-- `shift_jis` / `cp932` (日本語Windows)
-- 自動推定は chardet ライブラリを使用
+| 原因 | 確認方法 | 対策 |
+|------|---------|------|
+| トークン有効期限切れ | jwt decode | 再ログイン |
+| SECRET_KEY不一致 | 環境変数比較 | 全サービスで同一キーを設定 |
+| トークン形式不正 | Authorization header | "Bearer <token>" 形式確認 |
 
-### 5.4 フロントエンドが API に接続できない
+### DynamoDBテーブルが見つからない
 
-症状: ブラウザコンソールに CORS エラー / Network Error が表示される
-
-確認手順:
-
-1. APIサーバが起動しているか確認
-   ```bash
-   curl http://localhost:8000/api/health
-   ```
-
-2. CORS設定を確認 (backend/app/core/config.py)
-   - `cors_origins` にフロントエンドのURLが含まれているか
-
-3. Vite のプロキシ設定を確認 (docker-compose.yml)
-   - `VITE_API_URL` が正しいか
-
-### 5.5 DynamoDB テーブルが見つからない
-
-症状: APIレスポンスで "Table not found" エラー
-
-対策:
 ```bash
-# テーブルの存在確認
+# テーブル一覧確認
 aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northeast-1
 
-# テーブルを再作成
+# テーブル再作成
 docker compose run --rm dynamodb-init
 ```
 
-作成されるべきテーブル (10テーブル):
-`bi_users`, `bi_groups`, `bi_group_members`, `bi_datasets`, `bi_transforms`, `bi_cards`, `bi_dashboards`, `bi_dashboard_shares`, `bi_filter_views`, `bi_audit_logs`
+現在のテーブル一覧:
+- `bi_users` - ユーザー (GSI: UsersByEmail)
+- `bi_datasets` - データセット (GSI: DatasetsByOwner)
+- `bi_cards` - カード (GSI: CardsByOwner)
+- `bi_dashboards` - ダッシュボード (GSI: DashboardsByOwner)
+- `bi_filter_views` - フィルタビュー (GSI: FilterViewsByDashboard)
 
-### 5.6 MinIO / S3 のファイルアクセスエラー
-
-症状: データセットのプレビューやカード実行でS3関連エラー
-
-確認手順:
-
-1. MinIOが起動しているか確認
-   ```bash
-   curl http://localhost:9000/minio/health/live
-   ```
-
-2. バケットが存在するか確認
-   - MinIO Console (http://localhost:9001) にログイン
-   - ユーザ: `minioadmin` / パスワード: `minioadmin`
-
-3. バケットを再作成
-   ```bash
-   docker compose run --rm minio-init
-   ```
-
-必要なバケット:
-- `bi-datasets` -- Parquetデータ格納
-- `bi-static` -- 静的アセット (Plotly等)
-
-### 5.7 JWT認証エラー
-
-症状: 401 Unauthorized エラー
-
-確認手順:
-
-1. トークンの有効期限が切れていないか確認 (デフォルト24時間)
-2. `JWT_SECRET_KEY` が全サービスで同じ値か確認
-3. フロントエンドのトークンストレージを確認 (ブラウザの開発者ツール)
-
-### 5.8 フロントエンドテストの失敗
-
-症状: CI/CDパイプラインでテストが失敗する
-
-確認手順:
-
-```bash
-cd frontend
-
-# 全テスト実行 (詳細出力)
-npx vitest --reporter=verbose
-
-# 特定のテストファイルをデバッグ
-npx vitest src/__tests__/pages/LoginPage.test.tsx --reporter=verbose
-
-# UIモードで視覚的にデバッグ
-npx vitest --ui
-```
-
-現在のテスト基準:
-- 46テストファイル、290+テストケースが全て合格すること
-- Statement coverage 83%+ を維持すること
-
-### 5.9 FilterView Visibility Issues
-
-#### FilterViewが見えない
-
-症状: `GET /api/filter-views/{filter_view_id}` で 403 または 404 エラーが返る
-
-FilterView可視性ルール (`backend/app/api/routes/filter_view_detail.py`):
+### FilterView可視性
 
 | 条件 | 結果 |
 |------|------|
-| FilterViewのowner | 常に可視 (is_sharedに関係なく) |
-| FilterViewのowner以外 + is_shared=false | 不可視 (403 Forbidden) |
-| FilterViewのowner以外 + is_shared=true + Dashboard権限あり | 可視 |
-| FilterViewのowner以外 + is_shared=true + Dashboard権限なし | 不可視 (403 Forbidden) |
+| owner | 常に可視 |
+| owner以外 + is_shared=false | 不可視 (403) |
+| owner以外 + is_shared=true + Dashboard権限あり | 可視 |
 
-確認手順:
+### Dashboard共有エラー
 
-1. FilterViewのownerか確認
-   ```bash
-   curl -s -H "Authorization: Bearer <token>" \
-     http://localhost:8000/api/filter-views/<filter_view_id> | jq '.data.owner_id'
-   ```
+| HTTPステータス | 原因 | 対策 |
+|---------------|------|------|
+| 403 | オーナー以外が共有管理 | オーナーでログイン |
+| 404 | ダッシュボード/共有が存在しない | ID確認 |
+| 409 | 同一対象への共有が既存 | PUT で権限更新 |
 
-2. is_shared属性を確認
-   - owner以外が見る場合は `is_shared=true` が必要
+### グループ管理
 
-3. Dashboard権限を確認
-   - is_shared=trueの場合、対象Dashboardへの VIEWER 以上の権限が必要
-
-#### FilterViewの更新ができない
-
-症状: `PUT /api/filter-views/{filter_view_id}` で 403 エラーが返る
-
-更新権限ルール:
-
-| 操作 | 必要権限 |
-|------|---------|
-| FilterView更新 (一般) | FilterViewのownerのみ |
-| is_shared属性の変更 | FilterViewのowner + DashboardへのEDITOR権限 |
-
-#### デフォルトFilterViewの優先順位
-
-フロントエンド (`frontend/src/hooks/use-filter-views.ts`) のデフォルトビュー選択ロジック:
-
-1. 自分がownerの `is_default=true` のFilterView (最優先)
-2. 共有されている (`is_shared=true`) かつ `is_default=true` のFilterView
-3. なければ `undefined` を返す
+| HTTPステータス | 原因 | 対策 |
+|---------------|------|------|
+| 403 | admin以外がアクセス | adminユーザーでログイン |
+| 409 | 同名グループが既存 | 別名を使用 |
 
 ---
 
-### 5.10 Dashboard Sharing Issues
+## 6. ロールバック
 
-#### 共有が作成できない
-
-症状: `POST /api/dashboards/{dashboard_id}/shares` で 403 または 409 エラーが返る
-
-確認手順:
-
-1. ダッシュボードのオーナーであるか確認
-   - 共有の作成・更新・削除はダッシュボードのオーナー (`dashboard.owner_id == current_user.id`) のみ可能
-   - オーナー以外が操作した場合、`403 Forbidden` (`"Only dashboard owner can manage shares"`) が返る
-   - `_get_dashboard_as_owner()` ヘルパー関数 (`backend/app/api/routes/dashboard_shares.py`) で検証
-
-2. 重複する共有が既に存在しないか確認
-   - 同一ダッシュボード + 同一 `shared_to_type` + 同一 `shared_to_id` の組み合わせが既にある場合、`409 Conflict` (`"Share already exists"`) が返る
-   - `DashboardShareRepository.find_share()` で既存の共有を検索し、存在すれば拒否
-   - 権限レベルを変更したい場合は `PUT /api/dashboards/{dashboard_id}/shares/{share_id}` で更新する
-
-3. ダッシュボードが存在するか確認
-   - ダッシュボードが見つからない場合、`404 Not Found` (`"Dashboard not found"`) が返る
-
-権限レベル (`Permission` enum / `backend/app/models/dashboard_share.py`):
-
-| 権限 | enum値 | 数値レベル | 説明 |
-|------|--------|-----------|------|
-| `VIEWER` | `"viewer"` | 1 | 閲覧のみ |
-| `EDITOR` | `"editor"` | 2 | 閲覧 + 編集 |
-| `OWNER` | `"owner"` | 3 | 全操作 (ダッシュボード作成者に自動付与) |
-
-共有対象タイプ (`SharedToType` enum):
-- `USER` (`"user"`) -- 特定のユーザに直接共有
-- `GROUP` (`"group"`) -- グループ全体に共有
-
-#### 共有したのにアクセスできない
-
-症状: 共有を作成したが、対象ユーザがダッシュボードにアクセスできない
-
-確認手順 (`PermissionService` フロー / `backend/app/services/permission_service.py`):
-
-1. `PermissionService.get_user_permission()` の判定順序を確認:
-   - (1) ダッシュボードの `owner_id` がユーザIDと一致するか → `OWNER` を返す
-   - (2) `DashboardShareRepository.list_by_dashboard()` で全共有を取得
-   - (3) `GroupMemberRepository.list_groups_for_user()` でユーザの所属グループ一覧を取得
-   - (4) 各共有について、ユーザ直接共有 (`shared_to_type == USER` かつ `shared_to_id == user_id`) またはグループ共有 (`shared_to_type == GROUP` かつ `shared_to_id` がユーザの所属グループに含まれる) をチェック
-   - (5) 該当する共有のうち最も高い権限レベルを返す (該当なしの場合 `None`)
-
-2. グループ経由の共有の場合、ユーザがグループに所属しているか確認
-   - `bi_group_members` テーブルの `MembersByUser` GSI で確認可能
-   - メンバー追加は `POST /api/groups/{group_id}/members` で実行 (admin 権限が必要)
-
-3. 権限不足の場合は `403 Forbidden` (`"Requires {required} permission or higher"`) が返る
-
-#### 409 Conflict エラーの対処
-
-`POST /api/dashboards/{dashboard_id}/shares` で `409 Conflict` が返る場合:
+### ECS
 
 ```bash
-# 既存の共有一覧を確認
-curl -s -H "Authorization: Bearer <token>" \
-  http://localhost:8000/api/dashboards/<dashboard_id>/shares | jq .
+# 前のリビジョンを確認
+aws ecs list-task-definitions --family-prefix bi-api --sort DESC --max-items 5
 
-# 既存の共有の権限を変更する場合は PUT を使用
-curl -s -X PUT -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"permission": "editor"}' \
-  http://localhost:8000/api/dashboards/<dashboard_id>/shares/<share_id> | jq .
+# ロールバック
+aws ecs update-service --cluster bi-cluster --service bi-api-service --task-definition bi-api:<revision>
+
+# デプロイ状況確認
+aws ecs describe-services --cluster bi-cluster --services bi-api-service \
+  --query 'services[0].deployments'
 ```
 
-### 5.11 Group Management Issues
-
-#### グループが作成/更新/削除できない
-
-症状: `POST /api/groups` 等で 403 エラーが返る
-
-確認手順:
-
-1. 操作ユーザが `admin` ロールを持っているか確認
-   - グループ関連の全エンドポイント (一覧取得、作成、取得、更新、削除、メンバー管理) は `require_admin` 依存関係 (`backend/app/api/deps.py`) で保護されている
-   - `current_user.role != "admin"` の場合、`403 Forbidden` (`"Admin access required"`) が返る
-   - ユーザの `role` は `bi_users` テーブルの `role` フィールドで管理 (デフォルト値: `"user"`)
-
-2. グループが見つからない場合
-   - `GET /api/groups/{group_id}` で `404 Not Found` (`"Group not found"`) が返る場合、グループIDが正しいか確認
-
-#### グループ名の重複 (409 Conflict)
-
-症状: `POST /api/groups` または `PUT /api/groups/{group_id}` で `409 Conflict` が返る
-
-原因: 同名のグループが既に存在する
-
-確認手順:
-
-1. `GroupRepository.get_by_name()` で既存グループを名前で検索している
-2. 作成時: 同名グループが存在すれば `409 Conflict` (`"Group name already exists"`) を返す
-3. 更新時: 同名グループが存在し、かつそのグループIDが更新対象と異なる場合に `409 Conflict` を返す (自身のIDと一致する場合は許可)
+### フロントエンド
 
 ```bash
-# グループ一覧を取得して既存名を確認
-curl -s -H "Authorization: Bearer <admin_token>" \
-  http://localhost:8000/api/groups | jq '.data[].name'
-```
-
-#### メンバー追加ができない
-
-症状: `POST /api/groups/{group_id}/members` でエラーが返る
-
-確認手順:
-
-1. admin ロールで操作しているか確認 (上記参照)
-2. 対象のグループが存在するか確認
-   - グループが見つからない場合 `404 Not Found` (`"Group not found"`) が返る
-3. リクエストボディの形式を確認:
-   ```json
-   {"user_id": "<target_user_id>"}
-   ```
-4. 追加対象の `user_id` が `bi_users` テーブルに存在するユーザであるか確認
-5. `GroupMemberRepository.add_member()` は DynamoDB の `put_item` を使用しているため、既に同一メンバーが存在する場合は上書きされる (エラーにはならない)
-
-#### グループ経由の権限が反映されない
-
-症状: グループにダッシュボードを共有したが、グループメンバーがアクセスできない
-
-確認手順:
-
-1. ダッシュボードの共有設定を確認
-   ```bash
-   curl -s -H "Authorization: Bearer <owner_token>" \
-     http://localhost:8000/api/dashboards/<dashboard_id>/shares | jq .
-   ```
-   - `shared_to_type` が `"group"` で、`shared_to_id` が対象グループのIDであること
-
-2. ユーザがグループに所属しているか確認
-   ```bash
-   curl -s -H "Authorization: Bearer <admin_token>" \
-     http://localhost:8000/api/groups/<group_id> | jq '.data.members'
-   ```
-   - `members` 配列にユーザの `user_id` が含まれていること
-
-3. `PermissionService` の権限判定フロー (5.9 参照) を確認
-   - `GroupMemberRepository.list_groups_for_user()` が `MembersByUser` GSI を使ってユーザの所属グループを取得する
-   - 取得したグループ一覧に共有先グループが含まれていれば、そのグループ共有の権限が適用される
-   - 複数の経路 (直接共有 + グループ共有) で権限がある場合、最も高い権限レベルが採用される
-
----
-
-## 6. ロールバック手順
-
-### 6.1 ECS サービスのロールバック
-
-```bash
-# 1. 現在のタスク定義リビジョンを確認
-aws ecs describe-services \
-  --cluster bi-cluster \
-  --services bi-api-service \
-  --query 'services[0].taskDefinition'
-
-# 2. タスク定義のリビジョン一覧を確認
-aws ecs list-task-definitions \
-  --family-prefix bi-api \
-  --sort DESC \
-  --max-items 5
-
-# 3. 前のリビジョンを指定してサービスを更新
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-api-service \
-  --task-definition bi-api:<previous-revision>
-
-# 4. ロールバック完了を待機
-aws ecs wait services-stable \
-  --cluster bi-cluster \
-  --services bi-api-service
-```
-
-Executorのロールバックも同様の手順で実行:
-```bash
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-executor-service \
-  --task-definition bi-executor:<previous-revision>
-```
-
-### 6.2 フロントエンドのロールバック
-
-```bash
-# S3 のバージョニングから前のバージョンを復元
-# または、前のビルド成果物を再アップロード
+# バックアップから復元
 aws s3 sync s3://bi-static-<env>-backup/ s3://bi-static-<env>/ --delete
+
+# CloudFrontキャッシュ無効化
 aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
 ```
 
-### 6.3 DynamoDB データのリストア
+### データベース (DynamoDB)
 
-DynamoDB はポイントインタイムリカバリ (PITR) が有効な場合:
-
+- Point-in-Time Recovery (PITR) が有効な場合:
 ```bash
-# 特定時点のデータに復元
 aws dynamodb restore-table-to-point-in-time \
   --source-table-name bi_dashboards \
   --target-table-name bi_dashboards_restored \
-  --restore-date-time <timestamp>
-
-# 復元されたテーブルのデータを確認後、テーブル名を変更して本番適用
-```
-
-### 6.4 S3データのリストア
-
-S3バージョニングが有効な場合:
-
-```bash
-# 特定バージョンのオブジェクトを復元
-aws s3api get-object \
-  --bucket bi-datasets-production \
-  --key datasets/<dataset-id>/data/part-0000.parquet \
-  --version-id "<version-id>" \
-  restored-file.parquet
+  --restore-date-time 2026-02-03T10:00:00Z
 ```
 
 ---
 
 ## 7. スケーリング
 
-### 7.1 ECS サービスのスケーリング
+### 推奨構成
+
+| 同時ユーザ | API タスク | Executor タスク | CPU/メモリ |
+|-----------|-----------|----------------|-----------|
+| ~10 | 2 | 2 | 0.5vCPU / 1GB |
+| 10-30 | 4 | 4 | 1vCPU / 2GB |
+| 30-50 | 6 | 8 | 2vCPU / 4GB |
 
 ```bash
-# APIサービスのタスク数を変更
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-api-service \
-  --desired-count 4
+# API スケール
+aws ecs update-service --cluster bi-cluster --service bi-api-service --desired-count 4
 
-# Executorサービスのタスク数を変更
-aws ecs update-service \
-  --cluster bi-cluster \
-  --service bi-executor-service \
-  --desired-count 4
+# Executor スケール
+aws ecs update-service --cluster bi-cluster --service bi-executor-service --desired-count 4
 ```
 
-### 7.2 リソースサイジング目安
+### Auto Scaling設定
 
-| 同時ユーザ数 | API タスク数 | Executor タスク数 |
-|-------------|-------------|-----------------|
-| ~10 | 2 | 2 |
-| 10-30 | 4 | 4 |
-| 30-50 | 6 | 8 |
-
-### 7.3 ECS タスクリソース設定
-
-| サービス | CPU | メモリ |
-|---------|-----|-------|
-| API | 0.5 vCPU | 1 GB |
-| Executor (Card) | 1 vCPU | 2 GB |
-| Executor (Transform) | 2 vCPU | 4 GB |
+```bash
+# Target Tracking Policy (CPU 70%)
+aws application-autoscaling register-scalable-target \
+  --service-namespace ecs \
+  --scalable-dimension ecs:service:DesiredCount \
+  --resource-id service/bi-cluster/bi-api-service \
+  --min-capacity 2 \
+  --max-capacity 10
+```
 
 ---
 
 ## 8. 定期メンテナンス
 
-### 8.1 日次
+| 頻度 | タスク | 担当 |
+|------|--------|------|
+| 日次 | エラーログ確認、監視アラート確認 | 運用担当 |
+| 週次 | `pip audit` / `npm audit`、ストレージ使用量確認 | 開発担当 |
+| 月次 | 依存パッケージ更新、セキュリティパッチ適用 | 開発担当 |
+| 四半期 | コスト最適化レビュー、性能テスト | チーム |
 
-| タスク | 方法 |
-|--------|------|
-| ログ確認 | CloudWatch Logs でエラーログを確認 |
-| ヘルスチェック | 監視アラートの確認 |
+### セキュリティ監査コマンド
 
-### 8.2 週次
+```bash
+# Python依存関係
+cd backend && pip-audit
 
-| タスク | 方法 |
-|--------|------|
-| 依存パッケージの脆弱性確認 | `pip audit` / `npm audit` |
-| ディスク使用量確認 | S3 / DynamoDB のストレージ使用量 |
-| パフォーマンス確認 | CloudWatch メトリクスダッシュボード |
-| テストカバレッジ確認 | フロントエンド 83%+ / バックエンド pass を維持 |
+# Node.js依存関係
+cd frontend && npm audit
 
-### 8.3 月次
-
-| タスク | 方法 |
-|--------|------|
-| 依存パッケージの更新検討 | Dependabot / 手動確認 |
-| セキュリティパッチの適用 | Docker ベースイメージの更新 |
-| コスト確認 | AWS Cost Explorer |
-| 監査ログレビュー | `bi_audit_logs` テーブルの確認 |
-| Executor ホワイトリストライブラリの更新確認 | pandas, plotly 等のバージョン |
+# Dockerイメージスキャン
+docker scan bi-api:latest
+```
 
 ---
 
-## 9. 連絡先・エスカレーション
+## 9. セキュリティ
 
-| 状況 | 対応 |
+### 秘匿情報管理
+
+| 環境 | 管理方法 |
+|------|---------|
+| ローカル | `.env` ファイル (Gitignore) |
+| ステージング/本番 | AWS Secrets Manager |
+
+### 必須セキュリティ設定
+
+| 項目 | 要件 |
 |------|------|
-| サービス障害 | 開発チームに連絡 |
-| セキュリティインシデント | セキュリティチームにエスカレーション |
-| データ損失 | DBA / インフラチームに連絡 |
+| `JWT_SECRET_KEY` | 32文字以上のランダム文字列 |
+| S3バケット | パブリックアクセスブロック有効 |
+| DynamoDB | 暗号化有効 (AWS managed key) |
+| CloudFront | HTTPS強制、TLS 1.2以上 |
 
-エスカレーション判断基準:
+### Executor サンドボックス
 
-| 重大度 | 条件 | 対応時間 |
-|--------|------|---------|
-| Critical | API/Executor 全面停止、データ損失 | 即時 |
-| High | 5xx エラーレート 10%超、主要機能障害 | 1時間以内 |
-| Medium | パフォーマンス劣化、一部機能障害 | 営業時間内 |
-| Low | 軽微なUI問題、非重要機能の障害 | 次営業日 |
-
----
-
-## 10. セキュリティに関する注意事項
-
-### 10.1 秘匿情報の管理
-
-- `.env` ファイルは Git にコミットしない (`.gitignore` に含まれている)
-- 本番環境の秘匿情報は AWS Secrets Manager で管理
-- `JWT_SECRET_KEY` は最低32文字のランダム文字列を使用
-- MinIO のデフォルト認証情報 (`minioadmin`) は本番環境では使用しない
-- GCPサービスアカウントキー (`GOOGLE_APPLICATION_CREDENTIALS`) は Secrets Manager で管理
-
-### 10.2 Executor のセキュリティ
-
-- Executor コンテナは非rootユーザ (`executor`) で実行
-- ファイルシステムは読み取り専用 (`/tmp/workdir` のみ書き込み可能)
-- ブロックされたモジュール: `os`, `sys`, `subprocess`, `socket`, `http`, `urllib`, `requests`, `httpx`, `ftplib`, `smtplib`, `telnetlib`, `pickle`, `shelve`, `marshal`, `ctypes`, `multiprocessing`
-- ブロックされた組み込み関数: `open`, `exec`, `eval`, `compile`, `__import__` (カスタムフック経由)
-- カード実行タイムアウト: 10秒 (SIGALRM)
-- Transform実行タイムアウト: 300秒
-- メモリ制限: 2048MB (Linux環境)
-- ネットワーク: S3 VPCエンドポイント経由のみ許可、外部通信完全遮断
-
-### 10.3 セキュリティチェックリスト (デプロイ前)
-
-- [ ] JWT_SECRET_KEY が32文字以上で十分にランダム
-- [ ] パスワードハッシュのワークファクターが12以上 (bcrypt)
-- [ ] CSP設定が適用されている
-- [ ] iframe sandbox属性が設定されている
-- [ ] Executorのセキュリティグループが外部通信を遮断している
-- [ ] Executorが非rootユーザで実行されている
-- [ ] 読み取り専用ファイルシステムが有効
-- [ ] 監査ログが有効
-- [ ] シークレットがSecrets Managerで管理されている
+| 制限 | 値 |
+|------|-----|
+| 実行ユーザー | 非root (appuser) |
+| タイムアウト | カード 10秒, Transform 300秒 |
+| メモリ | 2048MB |
+| ネットワーク | S3 VPCエンドポイントのみ |
+| ブロックモジュール | `os`, `sys`, `subprocess`, `socket`, `http`, `requests`, `pickle` 等 |
 
 ---
 
-## 11. テスト品質ダッシュボード
+## 10. エスカレーション
 
-### 11.1 現在のカバレッジ (Phase Q4 + Q5 完了時点)
+| 重大度 | 条件 | 対応時間 | 連絡先 |
+|--------|------|---------|--------|
+| Critical | 全面停止、データ損失 | 即時 | オンコール担当 |
+| High | 5xxエラー 10%超、主要機能停止 | 1時間以内 | 開発リード |
+| Medium | パフォーマンス劣化、一部機能障害 | 営業時間内 | 運用担当 |
+| Low | 軽微なUI問題、非重要機能 | 次営業日 | チケット起票 |
 
-フロントエンド ユニットテスト (frontend/):
+---
 
-| メトリクス | 値 |
-|-----------|-----|
-| テストファイル | 46 |
-| テストケース | 290+ |
-| Statements | 83.07% |
-| フレームワーク | Vitest 1.x + @testing-library/react 14.x |
+## 11. バックアップ・リカバリ
 
-フロントエンド E2Eテスト (frontend/e2e/):
+### DynamoDB
 
-| メトリクス | 値 |
-|-----------|-----|
-| テストスイート | 3 (auth.spec.ts, dataset.spec.ts, card-dashboard.spec.ts) |
-| テストケース | 13 (Auth: 5, Dataset: 3, Card/Dashboard: 5) |
-| フレームワーク | Playwright 1.58+ (Chromium) |
-| テストユーザ | e2e@example.com (scripts/seed_test_user.py でSeed) |
+| 設定 | 値 |
+|------|-----|
+| Point-in-Time Recovery | 有効 (35日間) |
+| オンデマンドバックアップ | 週次 (日曜深夜) |
 
-テスト対象カバレッジ内訳:
+### S3
 
-| レイヤー | ファイル数 | テスト対象 |
-|---------|-----------|-----------|
-| Pages | 9 | 全9ページ (Login, Dashboard x3, Dataset x3, Card x2) |
-| Components | 21 | Common (8), Dashboard (8), Dashboard/filters (2), Dataset (1), Card (2) |
-| Hooks | 5 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views |
-| API Layer | 5 | auth, cards, dashboards, datasets, filter-views |
-| Lib/Utils | 3 | api-client, utils, layout-utils |
-| Stores | 1 | auth-store |
-| Types | 1 | type-guards |
+| バケット | バージョニング | ライフサイクル |
+|---------|--------------|---------------|
+| bi-datasets | 有効 | 90日後にGlacier移行 |
+| bi-static | 無効 | - |
+| bi-static-backup | 有効 | 30日後に削除 |
 
-バックエンド (backend/):
-- テストフレームワーク: pytest 7.x + moto 5.0
-- テスト対象: API routes, core, db, models, repositories, services
+### リカバリ手順
+
+1. 障害発生時刻を特定
+2. PITR で復元テーブル作成
+3. 復元テーブルの整合性確認
+4. テーブル名をリネーム or アプリ設定変更
+5. 正常性確認

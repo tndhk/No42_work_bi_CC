@@ -7,15 +7,15 @@ from typing import Any, Dict, List
 
 
 def api_response(data: Any) -> Dict[str, Any]:
-    """単体レスポンスを { data: T } 形式でラップ
+    """単体レスポンスを { status: "success", data: T } 形式でラップ
 
     Args:
         data: レスポンスデータ
 
     Returns:
-        { "data": data } 形式の辞書
+        { "status": "success", "data": data } 形式の辞書
     """
-    return {"data": data}
+    return {"status": "success", "data": data}
 
 
 def paginated_response(

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,15 +6,45 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
-import { useDataset, useDatasetPreview } from '@/hooks';
+import { useDataset, useDatasetPreview, useReimportDryRun, useReimportDataset } from '@/hooks';
+import { SchemaChangeWarningDialog } from '@/components/datasets/SchemaChangeWarningDialog';
+import type { SchemaChange } from '@/types/reimport';
 
 export function DatasetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: dataset, isLoading } = useDataset(id!);
   const { data: preview, isLoading: previewLoading } = useDatasetPreview(id!, 100);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [changes, setChanges] = useState<SchemaChange[]>([]);
+
+  const { mutateAsync: dryRunMutateAsync, isPending: isDryRunPending } = useReimportDryRun();
+  const { mutateAsync: reimportMutateAsync, isPending: isReimportPending } = useReimportDataset();
+
+  const isPending = isDryRunPending || isReimportPending;
+
+  const handleReimport = async () => {
+    const result = await dryRunMutateAsync(id!);
+    if (result.has_schema_changes) {
+      setChanges(result.changes);
+      setDialogOpen(true);
+    } else {
+      await reimportMutateAsync({ datasetId: id!, force: false });
+    }
+  };
+
+  const handleConfirm = async () => {
+    await reimportMutateAsync({ datasetId: id!, force: true });
+    setDialogOpen(false);
+  };
+
+  const handleCancel = () => {
+    setDialogOpen(false);
+    setChanges([]);
+  };
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>;
@@ -29,6 +60,17 @@ export function DatasetDetailPage() {
         <Button variant="ghost" size="sm" onClick={() => navigate('/datasets')}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        {dataset.source_type === 's3_csv' && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReimport}
+            disabled={isPending}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            再取り込み
+          </Button>
+        )}
         <div>
           <h1 className="text-2xl font-bold">{dataset.name}</h1>
           <p className="text-sm text-muted-foreground">
@@ -103,6 +145,13 @@ export function DatasetDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <SchemaChangeWarningDialog
+        open={dialogOpen}
+        changes={changes}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

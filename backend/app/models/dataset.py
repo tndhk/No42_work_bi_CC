@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.common import TimestampMixin
+from app.models.schema_change import SchemaChange
 
 
 class ColumnSchema(BaseModel):
@@ -95,3 +96,22 @@ class Dataset(TimestampMixin, BaseModel):
     last_import_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+
+class ReimportDryRunResponse(BaseModel):
+    """Response model for reimport dry-run."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    has_schema_changes: bool
+    changes: list[SchemaChange]
+    new_row_count: int
+    new_column_count: int
+
+
+class ReimportRequest(BaseModel):
+    """Request model for reimport."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    force: bool = False

@@ -501,3 +501,211 @@ class TestGetColumnValues:
             "/api/datasets/ds_abc123456789/columns/name/values",
         )
         assert response.status_code == 403
+
+
+class TestReimportDryRun:
+    """Tests for POST /api/datasets/{dataset_id}/reimport/dry-run."""
+
+    @pytest.fixture
+    def s3_csv_dataset(self, sample_dataset: Dataset) -> Dataset:
+        """Create sample S3 CSV dataset."""
+        return Dataset(
+            **{
+                **sample_dataset.model_dump(by_alias=True),
+                'source_type': 's3_csv',
+                'source_config': {
+                    's3_bucket': 'test-bucket',
+                    's3_key': 'data/test.csv',
+                    'has_header': True,
+                    'delimiter': ',',
+                },
+            }
+        )
+
+    def test_reimport_dry_run_success(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test POST /api/datasets/{id}/reimport/dry-run successfully executes."""
+        dry_run_result = {
+            'has_schema_changes': False,
+            'changes': [],
+            'new_row_count': 150,
+            'new_column_count': 2,
+        }
+
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.reimport_dry_run') as mock_dry_run:
+            mock_get.return_value = s3_csv_dataset
+            mock_dry_run.return_value = dry_run_result
+
+            response = authenticated_client.post(
+                f"/api/datasets/{s3_csv_dataset.id}/reimport/dry-run",
+            )
+
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["status"] == "success"
+            assert "data" in response_data
+            data = response_data["data"]
+            assert data["has_schema_changes"] is False
+            assert data["changes"] == []
+            assert data["new_row_count"] == 150
+            assert data["new_column_count"] == 2
+
+    def test_reimport_dry_run_not_found(
+        self, authenticated_client: TestClient, mock_user: User
+    ) -> None:
+        """Test reimport dry-run returns 404 for non-existent dataset."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = None
+
+            response = authenticated_client.post(
+                "/api/datasets/nonexistent/reimport/dry-run",
+            )
+
+            assert response.status_code == 404
+
+    def test_reimport_dry_run_not_s3_csv(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test reimport dry-run returns 422 for non-s3_csv source_type."""
+        # sample_dataset has source_type="csv", not "s3_csv"
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = sample_dataset
+
+            response = authenticated_client.post(
+                f"/api/datasets/{sample_dataset.id}/reimport/dry-run",
+            )
+
+            assert response.status_code == 422
+
+    def test_reimport_dry_run_unauthorized(
+        self, unauthenticated_client: TestClient
+    ) -> None:
+        """Test reimport dry-run returns 401/403 without authentication."""
+        response = unauthenticated_client.post(
+            "/api/datasets/ds_abc123456789/reimport/dry-run",
+        )
+        assert response.status_code == 403
+
+
+class TestReimportExecute:
+    """Tests for POST /api/datasets/{dataset_id}/reimport."""
+
+    @pytest.fixture
+    def s3_csv_dataset(self, sample_dataset: Dataset) -> Dataset:
+        """Create sample S3 CSV dataset."""
+        return Dataset(
+            **{
+                **sample_dataset.model_dump(by_alias=True),
+                'source_type': 's3_csv',
+                'source_config': {
+                    's3_bucket': 'test-bucket',
+                    's3_key': 'data/test.csv',
+                    'has_header': True,
+                    'delimiter': ',',
+                },
+            }
+        )
+
+    def test_reimport_execute_success(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test POST /api/datasets/{id}/reimport successfully executes."""
+        updated_dataset = Dataset(
+            **{
+                **s3_csv_dataset.model_dump(by_alias=True),
+                'row_count': 200,
+            }
+        )
+
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.reimport_execute') as mock_reimport:
+            mock_get.return_value = s3_csv_dataset
+            mock_reimport.return_value = updated_dataset
+
+            response = authenticated_client.post(
+                f"/api/datasets/{s3_csv_dataset.id}/reimport",
+                json={"force": False},
+            )
+
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["status"] == "success"
+            assert "data" in response_data
+            data = response_data["data"]
+            assert data["id"] == s3_csv_dataset.id
+            assert data["row_count"] == 200
+
+    def test_reimport_execute_with_force(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test reimport execute with force=True successfully executes."""
+        updated_dataset = Dataset(
+            **{
+                **s3_csv_dataset.model_dump(by_alias=True),
+                'row_count': 200,
+                'column_count': 3,
+            }
+        )
+
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.reimport_execute') as mock_reimport:
+            mock_get.return_value = s3_csv_dataset
+            mock_reimport.return_value = updated_dataset
+
+            response = authenticated_client.post(
+                f"/api/datasets/{s3_csv_dataset.id}/reimport",
+                json={"force": True},
+            )
+
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["status"] == "success"
+            assert "data" in response_data
+            data = response_data["data"]
+            assert data["row_count"] == 200
+            assert data["column_count"] == 3
+
+    def test_reimport_execute_not_found(
+        self, authenticated_client: TestClient, mock_user: User
+    ) -> None:
+        """Test reimport execute returns 404 for non-existent dataset."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = None
+
+            response = authenticated_client.post(
+                "/api/datasets/nonexistent/reimport",
+                json={"force": False},
+            )
+
+            assert response.status_code == 404
+
+    def test_reimport_execute_schema_changes_no_force(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test reimport execute returns 422 when schema changes exist and force=False."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.reimport_execute') as mock_reimport:
+            mock_get.return_value = s3_csv_dataset
+            # Simulate service raising error for schema changes without force
+            mock_reimport.side_effect = ValueError(
+                "Schema changes detected. Use force=True to proceed."
+            )
+
+            response = authenticated_client.post(
+                f"/api/datasets/{s3_csv_dataset.id}/reimport",
+                json={"force": False},
+            )
+
+            assert response.status_code == 422
+
+    def test_reimport_execute_unauthorized(
+        self, unauthenticated_client: TestClient
+    ) -> None:
+        """Test reimport execute returns 401/403 without authentication."""
+        response = unauthenticated_client.post(
+            "/api/datasets/ds_abc123456789/reimport",
+            json={"force": False},
+        )
+        assert response.status_code == 403

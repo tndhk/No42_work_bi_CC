@@ -9,6 +9,7 @@ import type {
   DatasetPreview,
   S3ImportRequest,
 } from '@/types';
+import type { ReimportDryRunResponse } from '@/types/reimport';
 
 export const datasetsApi = {
   list: async (params?: PaginationParams & { owner?: string }): Promise<PaginatedResponse<Dataset>> => {
@@ -52,6 +53,16 @@ export const datasetsApi = {
 
   s3Import: async (data: S3ImportRequest): Promise<DatasetDetail> => {
     const response = await apiClient.post('datasets/s3-import', { json: data }).json<ApiResponse<DatasetDetail>>();
+    return response.data;
+  },
+
+  reimportDryRun: async (datasetId: string): Promise<ReimportDryRunResponse> => {
+    const response = await apiClient.post(`datasets/${datasetId}/reimport/dry-run`).json<ApiResponse<ReimportDryRunResponse>>();
+    return response.data;
+  },
+
+  reimport: async (datasetId: string, force: boolean = false): Promise<DatasetDetail> => {
+    const response = await apiClient.post(`datasets/${datasetId}/reimport`, { json: { force } }).json<ApiResponse<DatasetDetail>>();
     return response.data;
   },
 };

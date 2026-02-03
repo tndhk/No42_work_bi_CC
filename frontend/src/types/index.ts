@@ -72,3 +72,11 @@ export type {
   PaginationParams,
 } from './api';
 export { isApiErrorResponse, isPagination } from './api';
+
+export type {
+  SchemaChangeType,
+  SchemaChange,
+  ReimportDryRunResponse,
+  ReimportRequest,
+} from './reimport';
+export { isSchemaChange, isReimportDryRunResponse } from './reimport';

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
-from app.models.dataset import Dataset, DatasetUpdate, S3ImportRequest
+from app.models.dataset import Dataset, DatasetUpdate, ReimportDryRunResponse, ReimportRequest, S3ImportRequest
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.dataset_service import DatasetService
@@ -376,3 +376,111 @@ async def get_dataset_preview(
         )
 
     return api_response(preview)
+
+
+@router.post("/{dataset_id}/reimport/dry-run")
+async def reimport_dry_run(
+    dataset_id: str,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Perform a dry run of reimport to check for schema changes.
+
+    Args:
+        dataset_id: Dataset ID
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client
+
+    Returns:
+        ReimportDryRunResponse with schema changes info
+
+    Raises:
+        HTTPException: 404 if not found, 422 if not s3_csv source type
+    """
+    repo = DatasetRepository()
+    dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    # Check source type
+    if dataset.source_type != "s3_csv":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Reimport is only supported for s3_csv datasets",
+        )
+
+    service = DatasetService()
+
+    try:
+        result = await service.reimport_dry_run(
+            dataset_id=dataset_id,
+            user_id=current_user.id,
+            dynamodb=dynamodb,
+            s3_client=s3_client,
+            source_s3_client=s3_client,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return api_response(result)
+
+
+@router.post("/{dataset_id}/reimport")
+async def reimport_execute(
+    dataset_id: str,
+    request_body: ReimportRequest,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Execute reimport of a dataset from its S3 source.
+
+    Args:
+        dataset_id: Dataset ID
+        request_body: ReimportRequest with force flag
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client
+
+    Returns:
+        Updated Dataset
+
+    Raises:
+        HTTPException: 404 if not found, 422 if schema changes and force=False
+    """
+    repo = DatasetRepository()
+    dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    service = DatasetService()
+
+    try:
+        updated_dataset = await service.reimport_execute(
+            dataset_id=dataset_id,
+            user_id=current_user.id,
+            dynamodb=dynamodb,
+            s3_client=s3_client,
+            source_s3_client=s3_client,
+            force=request_body.force,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    return api_response(updated_dataset.model_dump())

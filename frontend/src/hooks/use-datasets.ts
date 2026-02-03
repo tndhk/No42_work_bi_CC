@@ -70,3 +70,22 @@ export function useS3ImportDataset() {
     },
   });
 }
+
+export function useReimportDryRun() {
+  return useMutation({
+    mutationFn: (datasetId: string) => datasetsApi.reimportDryRun(datasetId),
+  });
+}
+
+export function useReimportDataset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ datasetId, force }: { datasetId: string; force?: boolean }) =>
+      datasetsApi.reimport(datasetId, force),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['datasets'] });
+      queryClient.invalidateQueries({ queryKey: ['datasets', variables.datasetId] });
+    },
+  });
+}

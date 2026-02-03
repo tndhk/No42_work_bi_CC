@@ -6,10 +6,11 @@ from typing import Any
 import pandas as pd
 
 from app.core.config import settings
-from app.models.dataset import Dataset
+from app.models.dataset import ColumnSchema, Dataset
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.csv_parser import CsvImportOptions, parse_full
 from app.services.parquet_storage import ParquetConverter, ParquetReader
+from app.services.schema_comparator import compare_schemas
 from app.services.type_inferrer import infer_schema
 
 
@@ -427,3 +428,196 @@ class DatasetService:
             'total_rows': total_rows,
             'preview_rows': len(df),
         }
+
+    async def reimport_dry_run(
+        self,
+        dataset_id: str,
+        user_id: str,
+        dynamodb: Any,
+        s3_client: Any,
+        source_s3_client: Any,
+    ) -> dict[str, Any]:
+        """Perform a dry run of reimport to check for schema changes.
+
+        Args:
+            dataset_id: Dataset ID to reimport
+            user_id: User performing the reimport
+            dynamodb: DynamoDB resource
+            s3_client: S3 client for Parquet storage
+            source_s3_client: S3 client for source CSV retrieval
+
+        Returns:
+            Dictionary with:
+                - has_schema_changes: bool
+                - changes: list of SchemaChange
+                - new_row_count: int
+                - new_column_count: int
+
+        Raises:
+            ValueError: If dataset not found, not s3_csv type, or S3 file not found
+        """
+        # Get dataset from DynamoDB
+        repo = DatasetRepository()
+        dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+        if not dataset:
+            raise ValueError("Dataset not found")
+
+        # Check source type
+        if dataset.source_type != 's3_csv':
+            raise ValueError("Reimport is only supported for s3_csv datasets")
+
+        # Get source config
+        source_config = dataset.source_config or {}
+        s3_bucket = source_config.get('s3_bucket')
+        s3_key = source_config.get('s3_key')
+
+        # Fetch CSV from S3
+        file_bytes = await self._fetch_s3_csv(
+            source_s3_client, s3_bucket, s3_key
+        )
+
+        # Parse CSV and infer schema
+        csv_options = self._build_csv_options(
+            source_config.get('encoding'),
+            source_config.get('delimiter', ','),
+        )
+        df = parse_full(file_bytes, csv_options)
+        new_schema = infer_schema(df)
+
+        # Compare schemas
+        old_schema = dataset.columns or []
+        compare_result = compare_schemas(old_schema, new_schema)
+
+        return {
+            'has_schema_changes': compare_result.has_changes,
+            'changes': compare_result.changes,
+            'new_row_count': len(df),
+            'new_column_count': len(df.columns),
+        }
+
+    async def reimport_execute(
+        self,
+        dataset_id: str,
+        user_id: str,
+        dynamodb: Any,
+        s3_client: Any,
+        source_s3_client: Any,
+        force: bool = False,
+    ) -> Dataset:
+        """Execute reimport of a dataset from its S3 source.
+
+        Args:
+            dataset_id: Dataset ID to reimport
+            user_id: User performing the reimport
+            dynamodb: DynamoDB resource
+            s3_client: S3 client for Parquet storage
+            source_s3_client: S3 client for source CSV retrieval
+            force: If True, proceed even with schema changes
+
+        Returns:
+            Updated Dataset instance
+
+        Raises:
+            ValueError: If dataset not found, not s3_csv type, S3 file not found,
+                        or schema changes detected without force=True
+        """
+        # Get dataset from DynamoDB
+        repo = DatasetRepository()
+        dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+        if not dataset:
+            raise ValueError("Dataset not found")
+
+        # Check source type
+        if dataset.source_type != 's3_csv':
+            raise ValueError("Reimport is only supported for s3_csv datasets")
+
+        # Get source config
+        source_config = dataset.source_config or {}
+        s3_bucket = source_config.get('s3_bucket')
+        s3_key = source_config.get('s3_key')
+
+        # Fetch CSV from S3
+        file_bytes = await self._fetch_s3_csv(
+            source_s3_client, s3_bucket, s3_key
+        )
+
+        # Parse CSV and infer schema
+        csv_options = self._build_csv_options(
+            source_config.get('encoding'),
+            source_config.get('delimiter', ','),
+        )
+        df = parse_full(file_bytes, csv_options)
+        new_schema = infer_schema(df)
+
+        # Compare schemas
+        old_schema = dataset.columns or []
+        compare_result = compare_schemas(old_schema, new_schema)
+
+        # Check for schema changes
+        if compare_result.has_changes and not force:
+            raise ValueError("Schema changes detected. Use force=True to proceed.")
+
+        # Save to S3 (overwrite existing path)
+        storage_result = self._save_to_s3(
+            df, dataset_id, s3_client, dataset.partition_column
+        )
+
+        # Update metadata in DynamoDB (full overwrite via put_item)
+        now = datetime.now(timezone.utc)
+        updated_data = {
+            'id': dataset.id,
+            'name': dataset.name,
+            'description': dataset.description,
+            'source_type': dataset.source_type,
+            'row_count': len(df),
+            'column_count': len(df.columns),
+            'schema': [col.model_dump() for col in new_schema],
+            'owner_id': dataset.owner_id,
+            's3_path': storage_result.s3_path,
+            'partition_column': dataset.partition_column,
+            'source_config': dataset.source_config,
+            'last_import_at': now,
+            'last_import_by': user_id,
+            'created_at': dataset.created_at,
+            'updated_at': now,
+        }
+
+        updated_dataset = await repo.create(updated_data, dynamodb)
+        return updated_dataset
+
+    async def _fetch_s3_csv(
+        self,
+        source_s3_client: Any,
+        s3_bucket: str,
+        s3_key: str,
+    ) -> bytes:
+        """Fetch CSV file from S3.
+
+        Args:
+            source_s3_client: S3 client for source bucket
+            s3_bucket: S3 bucket name
+            s3_key: S3 object key
+
+        Returns:
+            CSV file bytes
+
+        Raises:
+            ValueError: If S3 file not found
+        """
+        try:
+            response = source_s3_client.get_object(
+                Bucket=s3_bucket, Key=s3_key
+            )
+            body = response['Body']
+            # Handle both sync and async read
+            read_result = body.read()
+            if hasattr(read_result, '__await__'):
+                return await read_result
+            return read_result
+        except Exception as e:
+            error_str = str(e)
+            if 'NoSuchKey' in error_str or 'Not Found' in error_str or '404' in error_str:
+                raise ValueError(f"S3 file not found: s3://{s3_bucket}/{s3_key}")
+            raise ValueError(f"S3 error retrieving s3://{s3_bucket}/{s3_key}: {error_str}")

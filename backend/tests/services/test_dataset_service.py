@@ -681,3 +681,449 @@ class TestDatasetServiceGetColumnValues:
                     column_name='nonexistent',
                     s3_client=mock_s3_client,
                 )
+
+
+class TestReimportDryRun:
+    """Tests for reimport_dry_run method."""
+
+    @pytest.fixture
+    def existing_dataset(self) -> Dataset:
+        """Create a dataset that was imported from S3."""
+        return Dataset(
+            id='ds_123456789abc',
+            name='S3 Dataset',
+            source_type='s3_csv',
+            schema=[
+                ColumnSchema(name='name', data_type='string', nullable=False),
+                ColumnSchema(name='age', data_type='int64', nullable=False),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            source_config={
+                's3_bucket': 'source-bucket',
+                's3_key': 'data/input.csv',
+                'has_header': True,
+                'delimiter': ',',
+                'encoding': 'utf-8',
+            },
+            row_count=100,
+            column_count=2,
+            owner_id='user_123',
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    @pytest.fixture
+    def mock_source_s3_client(self) -> Any:
+        """Create mock S3 client for source bucket."""
+        return MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_reimport_dry_run_success(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_dry_run succeeds and returns SchemaCompareResult with counts.
+
+        Verifies:
+        - Returns has_schema_changes flag
+        - Returns changes list
+        - Returns new_row_count
+        - Returns new_column_count
+        """
+        # Arrange
+        service = DatasetService()
+        new_csv_content = b"name,age\nAlice,30\nBob,25\nCharlie,35\n"
+
+        # Mock DynamoDB to return existing dataset
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': existing_dataset.id,
+                'name': existing_dataset.name,
+                'source_type': existing_dataset.source_type,
+                'schema': [col.model_dump() for col in existing_dataset.columns],
+                's3_path': existing_dataset.s3_path,
+                'source_config': existing_dataset.source_config,
+                'row_count': existing_dataset.row_count,
+                'column_count': existing_dataset.column_count,
+                'owner_id': existing_dataset.owner_id,
+                'created_at': existing_dataset.created_at.isoformat(),
+                'updated_at': existing_dataset.updated_at.isoformat(),
+            }
+        }
+
+        # Mock source S3 to return new CSV
+        mock_source_s3_client.get_object.return_value = {
+            'Body': MagicMock(read=MagicMock(return_value=new_csv_content))
+        }
+
+        # Act
+        result = await service.reimport_dry_run(
+            dataset_id=existing_dataset.id,
+            user_id='user_123',
+            dynamodb=mock_dynamodb,
+            s3_client=mock_s3_client,
+            source_s3_client=mock_source_s3_client,
+        )
+
+        # Assert
+        assert 'has_schema_changes' in result
+        assert 'changes' in result
+        assert 'new_row_count' in result
+        assert 'new_column_count' in result
+        assert isinstance(result['has_schema_changes'], bool)
+        assert isinstance(result['changes'], list)
+        assert result['new_row_count'] == 3
+        assert result['new_column_count'] == 2
+
+    @pytest.mark.asyncio
+    async def test_reimport_dry_run_dataset_not_found(
+        self,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_dry_run raises ValueError when dataset_id not found."""
+        # Arrange
+        service = DatasetService()
+
+        # Mock DynamoDB to return no item
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {}
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Dataset not found"):
+            await service.reimport_dry_run(
+                dataset_id='ds_nonexistent00',
+                user_id='user_123',
+                dynamodb=mock_dynamodb,
+                s3_client=mock_s3_client,
+                source_s3_client=mock_source_s3_client,
+            )
+
+    @pytest.mark.asyncio
+    async def test_reimport_dry_run_not_s3_csv(
+        self,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_dry_run raises ValueError when source_type is not s3_csv."""
+        # Arrange
+        service = DatasetService()
+
+        # Mock DynamoDB to return dataset with csv source type
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': 'ds_123456789abc',
+                'name': 'CSV Upload Dataset',
+                'source_type': 'csv',  # Not s3_csv
+                'schema': [],
+                'row_count': 10,
+                'column_count': 2,
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+            }
+        }
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="only supported for s3_csv"):
+            await service.reimport_dry_run(
+                dataset_id='ds_123456789abc',
+                user_id='user_123',
+                dynamodb=mock_dynamodb,
+                s3_client=mock_s3_client,
+                source_s3_client=mock_source_s3_client,
+            )
+
+    @pytest.mark.asyncio
+    async def test_reimport_dry_run_s3_file_not_found(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_dry_run raises ValueError when S3 file not found."""
+        # Arrange
+        service = DatasetService()
+        from botocore.exceptions import ClientError
+
+        # Mock DynamoDB to return existing dataset
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': existing_dataset.id,
+                'name': existing_dataset.name,
+                'source_type': existing_dataset.source_type,
+                'schema': [col.model_dump() for col in existing_dataset.columns],
+                's3_path': existing_dataset.s3_path,
+                'source_config': existing_dataset.source_config,
+                'row_count': existing_dataset.row_count,
+                'column_count': existing_dataset.column_count,
+                'owner_id': existing_dataset.owner_id,
+                'created_at': existing_dataset.created_at.isoformat(),
+                'updated_at': existing_dataset.updated_at.isoformat(),
+            }
+        }
+
+        # Mock source S3 to raise NoSuchKey error
+        mock_source_s3_client.get_object.side_effect = ClientError(
+            {'Error': {'Code': 'NoSuchKey', 'Message': 'The specified key does not exist.'}},
+            'GetObject'
+        )
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="S3 file not found"):
+            await service.reimport_dry_run(
+                dataset_id=existing_dataset.id,
+                user_id='user_123',
+                dynamodb=mock_dynamodb,
+                s3_client=mock_s3_client,
+                source_s3_client=mock_source_s3_client,
+            )
+
+
+class TestReimportExecute:
+    """Tests for reimport_execute method."""
+
+    @pytest.fixture
+    def existing_dataset(self) -> Dataset:
+        """Create a dataset that was imported from S3."""
+        return Dataset(
+            id='ds_123456789abc',
+            name='S3 Dataset',
+            source_type='s3_csv',
+            schema=[
+                ColumnSchema(name='name', data_type='string', nullable=False),
+                ColumnSchema(name='age', data_type='int64', nullable=False),
+            ],
+            s3_path='datasets/ds_123456789abc/data/part-0000.parquet',
+            source_config={
+                's3_bucket': 'source-bucket',
+                's3_key': 'data/input.csv',
+                'has_header': True,
+                'delimiter': ',',
+                'encoding': 'utf-8',
+            },
+            row_count=100,
+            column_count=2,
+            owner_id='user_123',
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    @pytest.fixture
+    def mock_source_s3_client(self) -> Any:
+        """Create mock S3 client for source bucket."""
+        return MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_reimport_execute_success(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_execute succeeds and updates Dataset.
+
+        Verifies:
+        - Dataset is updated in DynamoDB
+        - New parquet is uploaded to S3
+        - Returns updated Dataset
+        """
+        # Arrange
+        service = DatasetService()
+        new_csv_content = b"name,age\nAlice,30\nBob,25\nCharlie,35\n"
+
+        # Mock DynamoDB to return existing dataset
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': existing_dataset.id,
+                'name': existing_dataset.name,
+                'source_type': existing_dataset.source_type,
+                'schema': [col.model_dump() for col in existing_dataset.columns],
+                's3_path': existing_dataset.s3_path,
+                'source_config': existing_dataset.source_config,
+                'row_count': existing_dataset.row_count,
+                'column_count': existing_dataset.column_count,
+                'owner_id': existing_dataset.owner_id,
+                'created_at': existing_dataset.created_at.isoformat(),
+                'updated_at': existing_dataset.updated_at.isoformat(),
+            }
+        }
+
+        # Mock source S3 to return new CSV (same schema)
+        mock_source_s3_client.get_object.return_value = {
+            'Body': MagicMock(read=MagicMock(return_value=new_csv_content))
+        }
+
+        # Act
+        result = await service.reimport_execute(
+            dataset_id=existing_dataset.id,
+            user_id='user_123',
+            dynamodb=mock_dynamodb,
+            s3_client=mock_s3_client,
+            source_s3_client=mock_source_s3_client,
+            force=False,
+        )
+
+        # Assert
+        assert isinstance(result, Dataset)
+        assert result.id == existing_dataset.id
+        assert result.row_count == 3
+        assert result.last_import_by == 'user_123'
+
+        # Verify S3 upload was called
+        mock_s3_client.put_object.assert_called()
+
+        # Verify DynamoDB update was called
+        mock_table.put_item.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_reimport_execute_with_schema_changes_no_force(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_execute raises ValueError when schema changes and force=False."""
+        # Arrange
+        service = DatasetService()
+        # CSV with different schema (added 'email' column)
+        new_csv_content = b"name,age,email\nAlice,30,alice@example.com\nBob,25,bob@example.com\n"
+
+        # Mock DynamoDB to return existing dataset
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': existing_dataset.id,
+                'name': existing_dataset.name,
+                'source_type': existing_dataset.source_type,
+                'schema': [col.model_dump() for col in existing_dataset.columns],
+                's3_path': existing_dataset.s3_path,
+                'source_config': existing_dataset.source_config,
+                'row_count': existing_dataset.row_count,
+                'column_count': existing_dataset.column_count,
+                'owner_id': existing_dataset.owner_id,
+                'created_at': existing_dataset.created_at.isoformat(),
+                'updated_at': existing_dataset.updated_at.isoformat(),
+            }
+        }
+
+        # Mock source S3 to return CSV with different schema
+        mock_source_s3_client.get_object.return_value = {
+            'Body': MagicMock(read=MagicMock(return_value=new_csv_content))
+        }
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Schema changes detected"):
+            await service.reimport_execute(
+                dataset_id=existing_dataset.id,
+                user_id='user_123',
+                dynamodb=mock_dynamodb,
+                s3_client=mock_s3_client,
+                source_s3_client=mock_source_s3_client,
+                force=False,
+            )
+
+    @pytest.mark.asyncio
+    async def test_reimport_execute_with_schema_changes_force_true(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_execute succeeds with schema changes when force=True."""
+        # Arrange
+        service = DatasetService()
+        # CSV with different schema (added 'email' column)
+        new_csv_content = b"name,age,email\nAlice,30,alice@example.com\nBob,25,bob@example.com\n"
+
+        # Mock DynamoDB to return existing dataset
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': existing_dataset.id,
+                'name': existing_dataset.name,
+                'source_type': existing_dataset.source_type,
+                'schema': [col.model_dump() for col in existing_dataset.columns],
+                's3_path': existing_dataset.s3_path,
+                'source_config': existing_dataset.source_config,
+                'row_count': existing_dataset.row_count,
+                'column_count': existing_dataset.column_count,
+                'owner_id': existing_dataset.owner_id,
+                'created_at': existing_dataset.created_at.isoformat(),
+                'updated_at': existing_dataset.updated_at.isoformat(),
+            }
+        }
+
+        # Mock source S3 to return CSV with different schema
+        mock_source_s3_client.get_object.return_value = {
+            'Body': MagicMock(read=MagicMock(return_value=new_csv_content))
+        }
+
+        # Act
+        result = await service.reimport_execute(
+            dataset_id=existing_dataset.id,
+            user_id='user_123',
+            dynamodb=mock_dynamodb,
+            s3_client=mock_s3_client,
+            source_s3_client=mock_source_s3_client,
+            force=True,
+        )
+
+        # Assert
+        assert isinstance(result, Dataset)
+        assert result.id == existing_dataset.id
+        assert result.row_count == 2
+        assert result.column_count == 3
+        assert len(result.columns) == 3
+
+        # Verify S3 upload was called
+        mock_s3_client.put_object.assert_called()
+
+        # Verify DynamoDB update was called
+        mock_table.put_item.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_reimport_execute_dataset_not_found(
+        self,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_execute raises ValueError when dataset_id not found."""
+        # Arrange
+        service = DatasetService()
+
+        # Mock DynamoDB to return no item
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {}
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Dataset not found"):
+            await service.reimport_execute(
+                dataset_id='ds_nonexistent00',
+                user_id='user_123',
+                dynamodb=mock_dynamodb,
+                s3_client=mock_s3_client,
+                source_s3_client=mock_source_s3_client,
+                force=False,
+            )

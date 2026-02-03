@@ -7,6 +7,8 @@ export {
   useUpdateDataset,
   useDeleteDataset,
   useS3ImportDataset,
+  useReimportDryRun,
+  useReimportDataset,
 } from './use-datasets';
 export {
   useCards,

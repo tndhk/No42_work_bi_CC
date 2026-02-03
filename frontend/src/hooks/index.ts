@@ -36,6 +36,7 @@ export {
   useCreateFilterView,
   useUpdateFilterView,
   useDeleteFilterView,
+  getDefaultFilterView,
 } from './use-filter-views';
 export {
   useGroups,

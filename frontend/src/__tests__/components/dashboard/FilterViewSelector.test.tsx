@@ -134,7 +134,7 @@ describe('FilterViewSelector', () => {
     await user.click(screen.getByRole('button', { name: /^保存$/i }));
 
     await waitFor(() => {
-      expect(mockOnSave).toHaveBeenCalledWith('New View');
+      expect(mockOnSave).toHaveBeenCalledWith('New View', { is_shared: false });
     });
   });
 
@@ -188,5 +188,169 @@ describe('FilterViewSelector', () => {
     );
 
     expect(screen.getByRole('button', { name: /ビュー/i })).toBeInTheDocument();
+  });
+
+  describe('share checkbox visibility based on permission', () => {
+    it('shows share checkbox when permission is EDITOR', async () => {
+      const user = userEvent.setup();
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="EDITOR"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      expect(screen.getByRole('checkbox', { name: /共有/i })).toBeInTheDocument();
+    });
+
+    it('shows share checkbox when permission is OWNER', async () => {
+      const user = userEvent.setup();
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="OWNER"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      expect(screen.getByRole('checkbox', { name: /共有/i })).toBeInTheDocument();
+    });
+
+    it('hides share checkbox when permission is VIEWER', async () => {
+      const user = userEvent.setup();
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="VIEWER"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      expect(screen.queryByRole('checkbox', { name: /共有/i })).not.toBeInTheDocument();
+    });
+
+    it('hides share checkbox when permission is not provided', async () => {
+      const user = userEvent.setup();
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      expect(screen.queryByRole('checkbox', { name: /共有/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('onSave with is_shared parameter', () => {
+    it('calls onSave with is_shared: false when checkbox is unchecked', async () => {
+      const user = userEvent.setup();
+      mockOnSave.mockResolvedValue(undefined);
+
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="EDITOR"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      const input = screen.getByPlaceholderText(/ビュー名/i);
+      await user.type(input, 'Test View');
+      await user.click(screen.getByRole('button', { name: /^保存$/i }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('Test View', { is_shared: false });
+      });
+    });
+
+    it('calls onSave with is_shared: true when checkbox is checked', async () => {
+      const user = userEvent.setup();
+      mockOnSave.mockResolvedValue(undefined);
+
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="EDITOR"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      const input = screen.getByPlaceholderText(/ビュー名/i);
+      await user.type(input, 'Shared View');
+
+      const checkbox = screen.getByRole('checkbox', { name: /共有/i });
+      await user.click(checkbox);
+
+      await user.click(screen.getByRole('button', { name: /^保存$/i }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('Shared View', { is_shared: true });
+      });
+    });
+
+    it('calls onSave with name only when permission is VIEWER (no is_shared option)', async () => {
+      const user = userEvent.setup();
+      mockOnSave.mockResolvedValue(undefined);
+
+      render(
+        <FilterViewSelector
+          views={mockViews}
+          onSelect={mockOnSelect}
+          onSave={mockOnSave}
+          onOverwrite={mockOnOverwrite}
+          onDelete={mockOnDelete}
+          permission="VIEWER"
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /ビュー/i }));
+      await user.click(screen.getByText(/名前を付けて保存/i));
+
+      const input = screen.getByPlaceholderText(/ビュー名/i);
+      await user.type(input, 'Personal View');
+      await user.click(screen.getByRole('button', { name: /^保存$/i }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith('Personal View', { is_shared: false });
+      });
+    });
   });
 });

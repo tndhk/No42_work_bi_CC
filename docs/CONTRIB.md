@@ -2,7 +2,7 @@
 
 最終更新: 2026-02-03
 プロジェクト: 社内BI・Pythonカード MVP
-フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management 実装中
+フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management + FilterView Visibility 実装中
 
 > 実装進捗: 全機能の実装ステータスは [PROGRESS.md](./PROGRESS.md) を参照
 
@@ -379,14 +379,14 @@ npx vitest --ui
 
 | テストカテゴリ | ファイル数 | 対象 |
 |---------------|-----------|------|
-| `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage, DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
+| `__tests__/pages/` | 9 | LoginPage, DashboardListPage, DashboardViewPage (+ FilterView統合), DashboardEditPage, DatasetListPage, DatasetDetailPage, DatasetImportPage, CardListPage, CardEditPage |
 | `__tests__/components/common/` | 8 | AuthGuard, ErrorBoundary, ConfirmDialog, Header, Sidebar, Layout, LoadingSpinner, Pagination |
-| `__tests__/components/dashboard/` | 9 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, ShareDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector |
+| `__tests__/components/dashboard/` | 9 | DashboardViewer, DashboardEditor, AddCardDialog, CardContainer, ShareDialog, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector (+ 可視性ルール) |
 | `__tests__/components/dashboard/filters/` | 2 | CategoryFilter, DateRangeFilter |
 | `__tests__/components/dataset/` | 1 | S3ImportForm |
 | `__tests__/components/card/` | 2 | CardEditor, CardPreview |
 | `__tests__/components/group/` | 4 | GroupCreateDialog, GroupDetailPanel, GroupListPage, MemberAddDialog |
-| `__tests__/hooks/` | 7 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-dashboard-shares, use-groups |
+| `__tests__/hooks/` | 7 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views (+ getDefaultFilterView), use-dashboard-shares, use-groups |
 | `__tests__/lib/api/` | 5 | auth, cards, dashboards, datasets, filter-views |
 | `__tests__/lib/` | 3 | api-client, utils, layout-utils |
 | `__tests__/stores/` | 1 | auth-store |

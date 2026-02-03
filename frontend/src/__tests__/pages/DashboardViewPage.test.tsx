@@ -3,7 +3,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DashboardViewPage } from '@/pages/DashboardViewPage';
-import { createWrapper, createMockDashboard } from '@/__tests__/helpers/test-utils';
+import { createWrapper, createMockDashboard, setupAuthState, createMockUser, clearAuthState } from '@/__tests__/helpers/test-utils';
 
 const mockNavigate = vi.fn();
 const mockExecuteCard = vi.fn();
@@ -20,14 +20,18 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/hooks', () => ({
-  useDashboard: vi.fn(),
-  useExecuteCard: vi.fn(() => ({ mutateAsync: mockExecuteCard })),
-  useFilterViews: vi.fn(() => ({ data: [], isLoading: false })),
-  useCreateFilterView: vi.fn(() => ({ mutateAsync: mockCreateFilterView })),
-  useUpdateFilterView: vi.fn(() => ({ mutateAsync: mockUpdateFilterView })),
-  useDeleteFilterView: vi.fn(() => ({ mutateAsync: mockDeleteFilterView })),
-}));
+vi.mock('@/hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks')>();
+  return {
+    ...actual,
+    useDashboard: vi.fn(),
+    useExecuteCard: vi.fn(() => ({ mutateAsync: mockExecuteCard })),
+    useFilterViews: vi.fn(() => ({ data: [], isLoading: false })),
+    useCreateFilterView: vi.fn(() => ({ mutateAsync: mockCreateFilterView })),
+    useUpdateFilterView: vi.fn(() => ({ mutateAsync: mockUpdateFilterView })),
+    useDeleteFilterView: vi.fn(() => ({ mutateAsync: mockDeleteFilterView })),
+  };
+});
 
 vi.mock('@/components/dashboard/DashboardViewer', () => ({
   DashboardViewer: ({ dashboard, filters }: any) => (
@@ -612,6 +616,122 @@ describe('DashboardViewPage', () => {
 
       // selectedViewId should be cleared
       expect(screen.queryByTestId('selected-view-id')).not.toBeInTheDocument();
+    });
+
+    it('初回ロード時にデフォルトビューが自動適用される', () => {
+      const currentUserId = 'user-1';
+
+      // 現在のユーザーをセットアップ
+      setupAuthState('test-token', createMockUser({ user_id: currentUserId }));
+
+      const mockViews = [
+        {
+          id: 'view-normal',
+          dashboard_id: 'dashboard-1',
+          name: 'Normal View',
+          owner_id: currentUserId,
+          filter_state: { f1: 'Normal' },
+          is_shared: false,
+          is_default: false,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 'view-default',
+          dashboard_id: 'dashboard-1',
+          name: 'Default View',
+          owner_id: currentUserId,
+          filter_state: { f1: 'DefaultValue' },
+          is_shared: false,
+          is_default: true,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ];
+
+      mockUseFilterViews.mockReturnValue({ data: mockViews, isLoading: false });
+      mockUseDashboard.mockReturnValue({
+        data: dashboardWithFilters(),
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1']}>
+          <Routes>
+            <Route path="/dashboards/:dashboardId" element={<DashboardViewPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      // デフォルトビューが自動的に選択される
+      expect(screen.getByTestId('selected-view-id')).toHaveTextContent('view-default');
+
+      // デフォルトビューのフィルタ値が適用される
+      expect(screen.getByTestId('dashboard-viewer').getAttribute('data-filters')).toBe(
+        JSON.stringify({ f1: 'DefaultValue' })
+      );
+
+      // クリーンアップ
+      clearAuthState();
+    });
+
+    it('自分のデフォルトビューが共有デフォルトより優先される', () => {
+      const currentUserId = 'current-user';
+
+      // 現在のユーザーをセットアップ
+      setupAuthState('test-token', createMockUser({ user_id: currentUserId }));
+
+      const mockViews = [
+        {
+          id: 'view-shared-default',
+          dashboard_id: 'dashboard-1',
+          name: 'Shared Default View',
+          owner_id: 'other-user',
+          filter_state: { f1: 'SharedDefault' },
+          is_shared: true,
+          is_default: true,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 'view-own-default',
+          dashboard_id: 'dashboard-1',
+          name: 'My Default View',
+          owner_id: currentUserId,
+          filter_state: { f1: 'OwnDefault' },
+          is_shared: false,
+          is_default: true,
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+        },
+      ];
+
+      mockUseFilterViews.mockReturnValue({ data: mockViews, isLoading: false });
+      mockUseDashboard.mockReturnValue({
+        data: dashboardWithFilters(),
+        isLoading: false,
+      } as any);
+
+      render(
+        <MemoryRouter initialEntries={['/dashboards/dashboard-1']}>
+          <Routes>
+            <Route path="/dashboards/:dashboardId" element={<DashboardViewPage />} />
+          </Routes>
+        </MemoryRouter>,
+        { wrapper: createWrapper() }
+      );
+
+      // 自分のデフォルトビューが優先される
+      expect(screen.getByTestId('selected-view-id')).toHaveTextContent('view-own-default');
+
+      // 自分のデフォルトビューのフィルタ値が適用される
+      expect(screen.getByTestId('dashboard-viewer').getAttribute('data-filters')).toBe(
+        JSON.stringify({ f1: 'OwnDefault' })
+      );
+
+      // クリーンアップ
+      clearAuthState();
     });
   });
 

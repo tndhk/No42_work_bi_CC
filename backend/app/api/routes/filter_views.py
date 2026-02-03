@@ -46,7 +46,17 @@ async def list_filter_views(
 
     repo = FilterViewRepository()
     filter_views = await repo.list_by_dashboard(dashboard_id, dynamodb)
-    return api_response([fv.model_dump() for fv in filter_views])
+
+    # Apply visibility filter:
+    # - owner_id == current_user.id: always visible (regardless of is_shared)
+    # - is_shared=True: visible (user already has dashboard permission from assert_permission above)
+    # - is_shared=False + owner != current_user: not visible
+    visible_filter_views = [
+        fv for fv in filter_views
+        if fv.owner_id == current_user.id or fv.is_shared
+    ]
+
+    return api_response([fv.model_dump() for fv in visible_filter_views])
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -58,7 +68,9 @@ async def create_filter_view(
 ) -> dict[str, Any]:
     """Create a new filter view for a dashboard.
 
-    Requires editor permission or higher on the dashboard.
+    Permission requirements:
+    - Private view (is_shared=False): VIEWER or higher
+    - Shared view (is_shared=True): EDITOR or higher
 
     Args:
         dashboard_id: Dashboard ID from URL path
@@ -78,7 +90,9 @@ async def create_filter_view(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dashboard not found")
 
     permission_service = PermissionService()
-    await permission_service.assert_permission(dashboard, current_user.id, Permission.EDITOR, dynamodb)
+    # Shared view requires EDITOR permission, private view requires VIEWER
+    required_permission = Permission.EDITOR if filter_view_data.is_shared else Permission.VIEWER
+    await permission_service.assert_permission(dashboard, current_user.id, required_permission, dynamodb)
 
     create_data = {
         'id': f"fv_{uuid.uuid4().hex[:12]}",

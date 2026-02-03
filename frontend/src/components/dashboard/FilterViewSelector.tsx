@@ -2,16 +2,20 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { BookmarkIcon } from 'lucide-react';
 import type { FilterView } from '@/types';
+
+type Permission = 'VIEWER' | 'EDITOR' | 'OWNER';
 
 interface FilterViewSelectorProps {
   views: FilterView[];
   selectedViewId?: string;
   onSelect: (view: FilterView) => void;
-  onSave: (name: string) => void | Promise<void>;
+  onSave: (name: string, options?: { is_shared: boolean }) => void | Promise<void>;
   onOverwrite: (viewId: string) => void | Promise<void>;
   onDelete: (viewId: string) => void | Promise<void>;
+  permission?: Permission;
 }
 
 export function FilterViewSelector({
@@ -21,15 +25,20 @@ export function FilterViewSelector({
   onSave,
   onOverwrite,
   onDelete,
+  permission,
 }: FilterViewSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newName, setNewName] = useState('');
+  const [isShared, setIsShared] = useState(false);
+
+  const canShare = permission === 'EDITOR' || permission === 'OWNER';
 
   const handleSave = async () => {
     if (!newName.trim()) return;
-    await onSave(newName.trim());
+    await onSave(newName.trim(), { is_shared: canShare ? isShared : false });
     setNewName('');
+    setIsShared(false);
     setIsSaving(false);
     setIsOpen(false);
   };
@@ -70,19 +79,37 @@ export function FilterViewSelector({
 
           <div className="border-t pt-2 mt-2 space-y-1">
             {isSaving ? (
-              <div className="flex gap-2 px-1">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="ビュー名"
-                  className="h-8 text-sm"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSave();
-                  }}
-                />
-                <Button size="sm" className="h-8" onClick={handleSave}>
-                  保存
-                </Button>
+              <div className="space-y-2 px-1">
+                <div className="flex gap-2">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="ビュー名"
+                    className="h-8 text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSave();
+                    }}
+                  />
+                  <Button size="sm" className="h-8" onClick={handleSave}>
+                    保存
+                  </Button>
+                </div>
+                {canShare && (
+                  <div className="flex items-center gap-2 px-1">
+                    <Checkbox
+                      id="share-checkbox"
+                      checked={isShared}
+                      onCheckedChange={(checked) => setIsShared(checked === true)}
+                      aria-label="共有する"
+                    />
+                    <label
+                      htmlFor="share-checkbox"
+                      className="text-sm cursor-pointer"
+                    >
+                      共有する
+                    </label>
+                  </div>
+                )}
               </div>
             ) : (
               <button

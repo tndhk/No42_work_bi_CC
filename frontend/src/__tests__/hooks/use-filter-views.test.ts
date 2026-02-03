@@ -26,6 +26,7 @@ import {
   useCreateFilterView,
   useUpdateFilterView,
   useDeleteFilterView,
+  getDefaultFilterView,
 } from '@/hooks/use-filter-views';
 
 function createMockFilterView(overrides?: Partial<FilterView>): FilterView {
@@ -199,5 +200,87 @@ describe('useDeleteFilterView', () => {
 
     expect(result.current.error).toBeInstanceOf(Error);
     expect((result.current.error as Error).message).toBe('Permission denied');
+  });
+});
+
+describe('getDefaultFilterView', () => {
+  it('空の配列の場合はundefinedを返す', () => {
+    const result = getDefaultFilterView([], 'user-1');
+    expect(result).toBeUndefined();
+  });
+
+  it('currentUserIdがundefinedでもデフォルトビューを処理できる', () => {
+    const views = [
+      createMockFilterView({ id: 'fv-1', is_default: false }),
+      createMockFilterView({ id: 'fv-2', is_default: true, is_shared: true }),
+    ];
+    const result = getDefaultFilterView(views, undefined);
+    expect(result?.id).toBe('fv-2');
+  });
+
+  it('自分がownerのデフォルトビューを優先して返す', () => {
+    const currentUserId = 'current-user';
+    const views = [
+      createMockFilterView({
+        id: 'fv-shared-default',
+        owner_id: 'other-user',
+        is_default: true,
+        is_shared: true,
+      }),
+      createMockFilterView({
+        id: 'fv-own-default',
+        owner_id: currentUserId,
+        is_default: true,
+        is_shared: false,
+      }),
+    ];
+
+    const result = getDefaultFilterView(views, currentUserId);
+    expect(result?.id).toBe('fv-own-default');
+  });
+
+  it('自分のデフォルトがない場合は共有デフォルトを返す', () => {
+    const currentUserId = 'current-user';
+    const views = [
+      createMockFilterView({
+        id: 'fv-normal',
+        owner_id: currentUserId,
+        is_default: false,
+        is_shared: false,
+      }),
+      createMockFilterView({
+        id: 'fv-shared-default',
+        owner_id: 'other-user',
+        is_default: true,
+        is_shared: true,
+      }),
+    ];
+
+    const result = getDefaultFilterView(views, currentUserId);
+    expect(result?.id).toBe('fv-shared-default');
+  });
+
+  it('デフォルトビューがない場合はundefinedを返す', () => {
+    const views = [
+      createMockFilterView({ id: 'fv-1', is_default: false }),
+      createMockFilterView({ id: 'fv-2', is_default: false }),
+    ];
+
+    const result = getDefaultFilterView(views, 'current-user');
+    expect(result).toBeUndefined();
+  });
+
+  it('is_default=trueでもis_shared=falseかつownerが異なる場合は返さない', () => {
+    const views = [
+      createMockFilterView({
+        id: 'fv-other-default',
+        owner_id: 'other-user',
+        is_default: true,
+        is_shared: false,
+      }),
+    ];
+
+    const result = getDefaultFilterView(views, 'current-user');
+    expect(result).toBeUndefined();
   });
 });

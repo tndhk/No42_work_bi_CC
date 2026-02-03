@@ -2,7 +2,7 @@
 
 最終更新: 2026-02-03
 プロジェクト: 社内BI・Pythonカード MVP
-フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management 実装中
+フェーズ: Phase Q4 (E2E) + Q5 (クリーンアップ) + FilterView / S3 Import + Dashboard Sharing / Group Management + FilterView Visibility 実装中
 
 ---
 
@@ -404,7 +404,57 @@ npx vitest --ui
 - 46テストファイル、290+テストケースが全て合格すること
 - Statement coverage 83%+ を維持すること
 
-### 5.9 Dashboard Sharing Issues
+### 5.9 FilterView Visibility Issues
+
+#### FilterViewが見えない
+
+症状: `GET /api/filter-views/{filter_view_id}` で 403 または 404 エラーが返る
+
+FilterView可視性ルール (`backend/app/api/routes/filter_view_detail.py`):
+
+| 条件 | 結果 |
+|------|------|
+| FilterViewのowner | 常に可視 (is_sharedに関係なく) |
+| FilterViewのowner以外 + is_shared=false | 不可視 (403 Forbidden) |
+| FilterViewのowner以外 + is_shared=true + Dashboard権限あり | 可視 |
+| FilterViewのowner以外 + is_shared=true + Dashboard権限なし | 不可視 (403 Forbidden) |
+
+確認手順:
+
+1. FilterViewのownerか確認
+   ```bash
+   curl -s -H "Authorization: Bearer <token>" \
+     http://localhost:8000/api/filter-views/<filter_view_id> | jq '.data.owner_id'
+   ```
+
+2. is_shared属性を確認
+   - owner以外が見る場合は `is_shared=true` が必要
+
+3. Dashboard権限を確認
+   - is_shared=trueの場合、対象Dashboardへの VIEWER 以上の権限が必要
+
+#### FilterViewの更新ができない
+
+症状: `PUT /api/filter-views/{filter_view_id}` で 403 エラーが返る
+
+更新権限ルール:
+
+| 操作 | 必要権限 |
+|------|---------|
+| FilterView更新 (一般) | FilterViewのownerのみ |
+| is_shared属性の変更 | FilterViewのowner + DashboardへのEDITOR権限 |
+
+#### デフォルトFilterViewの優先順位
+
+フロントエンド (`frontend/src/hooks/use-filter-views.ts`) のデフォルトビュー選択ロジック:
+
+1. 自分がownerの `is_default=true` のFilterView (最優先)
+2. 共有されている (`is_shared=true`) かつ `is_default=true` のFilterView
+3. なければ `undefined` を返す
+
+---
+
+### 5.10 Dashboard Sharing Issues
 
 #### 共有が作成できない
 
@@ -472,7 +522,7 @@ curl -s -X PUT -H "Authorization: Bearer <token>" \
   http://localhost:8000/api/dashboards/<dashboard_id>/shares/<share_id> | jq .
 ```
 
-### 5.10 Group Management Issues
+### 5.11 Group Management Issues
 
 #### グループが作成/更新/削除できない
 

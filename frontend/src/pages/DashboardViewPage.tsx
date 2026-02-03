@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,9 @@ import {
   useCreateFilterView,
   useUpdateFilterView,
   useDeleteFilterView,
+  getDefaultFilterView,
 } from '@/hooks';
+import { useAuthStore } from '@/stores/auth-store';
 import { DashboardViewer } from '@/components/dashboard/DashboardViewer';
 import { FilterBar } from '@/components/dashboard/FilterBar';
 import { FilterViewSelector } from '@/components/dashboard/FilterViewSelector';
@@ -33,15 +35,28 @@ export function DashboardViewPage() {
   const updateFilterView = useUpdateFilterView();
   const deleteFilterView = useDeleteFilterView();
 
+  const currentUser = useAuthStore((state) => state.user);
+  const defaultViewAppliedRef = useRef(false);
+
+  // デフォルトビューの自動適用（初回のみ）
+  useEffect(() => {
+    if (defaultViewAppliedRef.current || !filterViews.length) return;
+
+    const defaultView = getDefaultFilterView(filterViews, currentUser?.user_id);
+    if (defaultView) {
+      setFilterValues(defaultView.filter_state as Record<string, unknown>);
+      setSelectedViewId(defaultView.id);
+      defaultViewAppliedRef.current = true;
+    }
+  }, [filterViews, currentUser?.user_id]);
+
   const handleFilterChange = useCallback((filterId: string, value: unknown) => {
     setFilterValues((prev) => {
-      const next = { ...prev };
       if (value === undefined) {
-        delete next[filterId];
-      } else {
-        next[filterId] = value;
+        const { [filterId]: _, ...rest } = prev;
+        return rest;
       }
-      return next;
+      return { ...prev, [filterId]: value };
     });
   }, []);
 

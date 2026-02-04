@@ -69,6 +69,26 @@ describe('dashboardsApi', () => {
       expect(searchParams.get('offset')).toBe('10');
       expect(searchParams.get('owner')).toBe('user-1');
     });
+
+    it('offset=0でもパラメータが送信される', async () => {
+      const mockResponse: PaginatedResponse<Dashboard> = {
+        items: [],
+        total: 0,
+        limit: 10,
+        offset: 0,
+      };
+
+      mockGet.mockReturnValue({
+        json: vi.fn().mockResolvedValue(mockResponse),
+      });
+
+      await dashboardsApi.list({ limit: 10, offset: 0 });
+
+      const call = mockGet.mock.calls[0];
+      const searchParams = call[1].searchParams as URLSearchParams;
+      expect(searchParams.get('limit')).toBe('10');
+      expect(searchParams.get('offset')).toBe('0');
+    });
   });
 
   describe('get', () => {

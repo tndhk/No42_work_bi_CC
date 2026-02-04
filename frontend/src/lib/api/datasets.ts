@@ -14,8 +14,8 @@ import type { ReimportDryRunResponse } from '@/types/reimport';
 export const datasetsApi = {
   list: async (params?: PaginationParams & { owner?: string }): Promise<PaginatedResponse<Dataset>> => {
     const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set('limit', String(params.limit));
-    if (params?.offset) searchParams.set('offset', String(params.offset));
+    if (params?.limit != null) searchParams.set('limit', String(params.limit));
+    if (params?.offset != null) searchParams.set('offset', String(params.offset));
     if (params?.owner) searchParams.set('owner', params.owner);
     return apiClient.get('datasets', { searchParams }).json<PaginatedResponse<Dataset>>();
   },

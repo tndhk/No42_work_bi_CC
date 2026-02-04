@@ -199,7 +199,7 @@ def test_logout_without_auth(client):
     """Test logout without authentication returns 401."""
     response = client.post("/api/auth/logout")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     data = response.json()
     assert "detail" in data
 
@@ -243,7 +243,7 @@ def test_get_me_without_auth(client):
     """Test getting current user without authentication returns 401."""
     response = client.get("/api/auth/me")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     data = response.json()
     assert "detail" in data
 

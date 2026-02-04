@@ -25,6 +25,10 @@ export function LoginPage() {
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: 'e2e@example.com',
+      password: 'Test@1234',
+    },
   });
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboards';

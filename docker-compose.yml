@@ -81,9 +81,7 @@ services:
     image: amazon/dynamodb-local:latest
     ports:
       - "8001:8000"
-    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /data"
-    volumes:
-      - dynamodb-data:/data
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
     healthcheck:
       test: ["CMD-SHELL", "exit 0"]
       interval: 10s
@@ -141,5 +139,4 @@ services:
     command: sh -c "python init_tables.py && python seed_test_user.py"
 
 volumes:
-  dynamodb-data:
   minio-data:

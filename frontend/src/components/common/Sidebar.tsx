@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { BarChart3, Database, LayoutDashboard, CreditCard, Users } from 'lucide-react';
+import { BarChart3, Database, LayoutDashboard, CreditCard, Users, Repeat } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 const navItems = [
   { to: '/dashboards', label: 'ダッシュボード', icon: LayoutDashboard },
   { to: '/datasets', label: 'データセット', icon: Database },
+  { to: '/transforms', label: 'Transform', icon: Repeat },
   { to: '/cards', label: 'カード', icon: CreditCard },
 ];
 

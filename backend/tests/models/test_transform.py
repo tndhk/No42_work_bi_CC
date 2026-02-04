@@ -305,3 +305,74 @@ class TestTransformUpdate:
         )
 
         assert update.input_dataset_ids == ["dataset-1"]
+
+
+class TestTransformSchedule:
+    """Test schedule_cron and schedule_enabled fields on Transform models."""
+
+    def test_transform_with_schedule(self):
+        """Test Transform with schedule_cron and schedule_enabled set."""
+        now = datetime.utcnow()
+        transform = Transform(
+            id="transform-123",
+            name="Scheduled Transform",
+            owner_id="user-456",
+            input_dataset_ids=["dataset-1"],
+            code="def transform(inputs, params): pass",
+            schedule_cron="0 0 * * *",
+            schedule_enabled=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        assert transform.schedule_cron == "0 0 * * *"
+        assert transform.schedule_enabled is True
+
+    def test_transform_default_schedule_disabled(self):
+        """Test Transform defaults: schedule_cron=None, schedule_enabled=False."""
+        now = datetime.utcnow()
+        transform = Transform(
+            id="transform-123",
+            name="Default Transform",
+            owner_id="user-456",
+            input_dataset_ids=["dataset-1"],
+            code="def transform(inputs, params): pass",
+            created_at=now,
+            updated_at=now,
+        )
+
+        assert transform.schedule_cron is None
+        assert transform.schedule_enabled is False
+
+    def test_transform_create_with_valid_cron(self):
+        """Test TransformCreate accepts a valid cron expression."""
+        tc = TransformCreate(
+            name="Cron Transform",
+            input_dataset_ids=["dataset-1"],
+            code="def transform(inputs, params): pass",
+            schedule_cron="0 0 * * *",
+            schedule_enabled=True,
+        )
+
+        assert tc.schedule_cron == "0 0 * * *"
+        assert tc.schedule_enabled is True
+
+    def test_transform_create_with_invalid_cron(self):
+        """Test TransformCreate rejects an invalid cron expression with ValidationError."""
+        with pytest.raises(ValidationError, match="Invalid cron expression"):
+            TransformCreate(
+                name="Bad Cron Transform",
+                input_dataset_ids=["dataset-1"],
+                code="def transform(inputs, params): pass",
+                schedule_cron="invalid",
+            )
+
+    def test_transform_update_schedule(self):
+        """Test TransformUpdate can update schedule_cron."""
+        update = TransformUpdate(
+            schedule_cron="30 2 * * 1",
+            schedule_enabled=True,
+        )
+
+        assert update.schedule_cron == "30 2 * * 1"
+        assert update.schedule_enabled is True

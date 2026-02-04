@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.dataset import ColumnSchema
 from app.models.transform import Transform
 from app.repositories.dataset_repository import DatasetRepository
+from app.repositories.transform_execution_repository import TransformExecutionRepository
 from app.repositories.transform_repository import TransformRepository
 from app.services.parquet_storage import ParquetConverter, ParquetReader
 
@@ -28,12 +29,14 @@ class TransformExecutionResult:
     """Immutable result from transform execution.
 
     Attributes:
+        execution_id: Unique ID for this execution record
         output_dataset_id: ID of the created output dataset
         row_count: Number of rows in the output
         column_names: List of column names in the output
         execution_time_ms: Total execution time in milliseconds
     """
 
+    execution_id: str
     output_dataset_id: str
     row_count: int
     column_names: list[str]
@@ -55,6 +58,7 @@ class TransformExecutionService:
         transform: Transform,
         dynamodb: Any,
         s3: Any,
+        triggered_by: str = "manual",
     ) -> TransformExecutionResult:
         """Execute a transform and create output dataset.
 
@@ -70,6 +74,7 @@ class TransformExecutionService:
             transform: Transform to execute
             dynamodb: DynamoDB resource instance
             s3: S3 client instance
+            triggered_by: How the execution was triggered (e.g. "manual", "schedule")
 
         Returns:
             TransformExecutionResult with execution details
@@ -79,86 +84,131 @@ class TransformExecutionService:
             RuntimeError: If executor fails after retries
         """
         start_time = time.perf_counter()
+        execution_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc)
 
-        # Step 1: Get input datasets
-        dataset_repo = DatasetRepository()
-        input_datasets = []
-        input_dataframes = []
+        # Create execution record (status=running)
+        execution_repo = TransformExecutionRepository()
+        await execution_repo.create({
+            "execution_id": execution_id,
+            "transform_id": transform.id,
+            "status": "running",
+            "started_at": now,
+            "triggered_by": triggered_by,
+        }, dynamodb)
 
-        for input_dataset_id in transform.input_dataset_ids:
-            dataset = await dataset_repo.get_by_id(input_dataset_id, dynamodb)
-            if dataset is None:
-                raise ValueError(f"Input dataset '{input_dataset_id}' not found")
-            if dataset.s3_path is None:
-                raise ValueError(f"Input dataset '{input_dataset_id}' has no data")
-            input_datasets.append(dataset)
+        try:
+            # Step 1: Get input datasets
+            dataset_repo = DatasetRepository()
+            input_datasets = []
+            input_dataframes = []
 
-        # Step 2: Read Parquet data from S3
-        parquet_reader = ParquetReader(s3, settings.s3_bucket_datasets)
-        for dataset in input_datasets:
-            df = parquet_reader.read_full(dataset.s3_path)  # type: ignore
-            input_dataframes.append(df)
+            for input_dataset_id in transform.input_dataset_ids:
+                dataset = await dataset_repo.get_by_id(input_dataset_id, dynamodb)
+                if dataset is None:
+                    raise ValueError(f"Input dataset '{input_dataset_id}' not found")
+                if dataset.s3_path is None:
+                    raise ValueError(f"Input dataset '{input_dataset_id}' has no data")
+                input_datasets.append(dataset)
 
-        # Step 3: Call Executor API
-        executor_result = await self._execute_with_retry(
-            transform=transform,
-            datasets=input_dataframes,
-        )
+            # Step 2: Read Parquet data from S3
+            parquet_reader = ParquetReader(s3, settings.s3_bucket_datasets)
+            for dataset in input_datasets:
+                df = parquet_reader.read_full(dataset.s3_path)  # type: ignore
+                input_dataframes.append(df)
 
-        # Step 4 & 5: Save output and create Dataset record
-        output_df = pd.DataFrame(executor_result["data"])
-        output_dataset_id = str(uuid.uuid4())
-
-        # Save to S3
-        parquet_converter = ParquetConverter(s3, settings.s3_bucket_datasets)
-        storage_result = parquet_converter.convert_and_save(
-            df=output_df,
-            dataset_id=output_dataset_id,
-        )
-
-        # Build column schema from output DataFrame
-        columns = []
-        for col_name in executor_result["columns"]:
-            col_dtype = str(output_df[col_name].dtype)
-            columns.append(
-                ColumnSchema(
-                    name=col_name,
-                    data_type=col_dtype,
-                    nullable=output_df[col_name].isnull().any(),
-                )
+            # Step 3: Call Executor API
+            executor_result = await self._execute_with_retry(
+                transform=transform,
+                datasets=input_dataframes,
             )
 
-        # Create Dataset record
-        now = datetime.now(timezone.utc)
-        dataset_dict = {
-            "id": output_dataset_id,
-            "name": f"Transform Output: {transform.name}",
-            "source_type": "transform",
-            "row_count": executor_result["row_count"],
-            "schema": [col.model_dump() for col in columns],
-            "owner_id": transform.owner_id,
-            "s3_path": storage_result.s3_path,
-            "column_count": len(columns),
-            "created_at": now,
-            "updated_at": now,
-        }
-        await dataset_repo.create(dataset_dict, dynamodb)
+            # Step 4 & 5: Save output and create Dataset record
+            output_df = pd.DataFrame(executor_result["data"])
+            output_dataset_id = str(uuid.uuid4())
 
-        # Step 6: Update Transform.output_dataset_id
-        transform_repo = TransformRepository()
-        await transform_repo.update(
-            transform.id,
-            {"output_dataset_id": output_dataset_id},
-            dynamodb,
-        )
+            # Save to S3
+            parquet_converter = ParquetConverter(s3, settings.s3_bucket_datasets)
+            storage_result = parquet_converter.convert_and_save(
+                df=output_df,
+                dataset_id=output_dataset_id,
+            )
 
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        return TransformExecutionResult(
-            output_dataset_id=output_dataset_id,
-            row_count=executor_result["row_count"],
-            column_names=executor_result["columns"],
-            execution_time_ms=elapsed_ms,
-        )
+            # Build column schema from output DataFrame
+            columns = []
+            for col_name in executor_result["columns"]:
+                col_dtype = str(output_df[col_name].dtype)
+                columns.append(
+                    ColumnSchema(
+                        name=col_name,
+                        data_type=col_dtype,
+                        nullable=output_df[col_name].isnull().any(),
+                    )
+                )
+
+            # Create Dataset record
+            dataset_now = datetime.now(timezone.utc)
+            dataset_dict = {
+                "id": output_dataset_id,
+                "name": f"Transform Output: {transform.name}",
+                "source_type": "transform",
+                "row_count": executor_result["row_count"],
+                "schema": [col.model_dump() for col in columns],
+                "owner_id": transform.owner_id,
+                "s3_path": storage_result.s3_path,
+                "column_count": len(columns),
+                "created_at": dataset_now,
+                "updated_at": dataset_now,
+            }
+            await dataset_repo.create(dataset_dict, dynamodb)
+
+            # Step 6: Update Transform.output_dataset_id
+            transform_repo = TransformRepository()
+            await transform_repo.update(
+                transform.id,
+                {"output_dataset_id": output_dataset_id},
+                dynamodb,
+            )
+
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+            # Update execution record to success
+            finished_at = datetime.now(timezone.utc)
+            await execution_repo.update_status(
+                transform.id, now,
+                {
+                    "status": "success",
+                    "finished_at": finished_at,
+                    "duration_ms": elapsed_ms,
+                    "output_row_count": executor_result["row_count"],
+                    "output_dataset_id": output_dataset_id,
+                },
+                dynamodb,
+            )
+
+            return TransformExecutionResult(
+                execution_id=execution_id,
+                output_dataset_id=output_dataset_id,
+                row_count=executor_result["row_count"],
+                column_names=executor_result["columns"],
+                execution_time_ms=elapsed_ms,
+            )
+
+        except Exception as e:
+            # Update execution record to failed
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            finished_at = datetime.now(timezone.utc)
+            await execution_repo.update_status(
+                transform.id, now,
+                {
+                    "status": "failed",
+                    "finished_at": finished_at,
+                    "duration_ms": elapsed_ms,
+                    "error": str(e),
+                },
+                dynamodb,
+            )
+            raise
 
     async def _execute_with_retry(
         self,

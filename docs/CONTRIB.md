@@ -94,6 +94,13 @@ docker compose up --build
 | `EXECUTOR_MAX_CONCURRENT_CARDS` | 10 | カード同時実行数上限 |
 | `EXECUTOR_MAX_CONCURRENT_TRANSFORMS` | 5 | Transform同時実行数上限 |
 
+### スケジューラー設定
+
+| 変数 | デフォルト | 説明 |
+|------|-----------|------|
+| `SCHEDULER_ENABLED` | false | Transformスケジューラー有効化フラグ |
+| `SCHEDULER_INTERVAL_SECONDS` | 60 | スケジューラーのチェック間隔 (秒) |
+
 ### ログ設定
 
 | 変数 | デフォルト | 説明 |
@@ -107,19 +114,19 @@ docker compose up --build
 
 ### フロントエンド (frontend/)
 
-| コマンド | 説明 |
-|---------|------|
-| `npm run dev` | 開発サーバ起動 (Vite HMR) |
-| `npm run build` | プロダクションビルド (tsc + vite build) |
-| `npm run preview` | ビルド結果プレビュー |
-| `npm run test` | Vitestテスト (ウォッチモード) |
-| `npm run test:coverage` | カバレッジ付きテスト (v8) |
-| `npm run lint` | ESLint実行 |
-| `npm run typecheck` | TypeScript型チェック (--noEmit) |
-| `npm run e2e` | Playwright E2Eテスト (ヘッドレス) |
-| `npm run e2e:ui` | Playwright E2Eテスト (UI モード) |
-| `npm run e2e:headed` | Playwright E2Eテスト (ブラウザ表示) |
-| `npm run e2e:report` | E2Eテストレポート表示 |
+| スクリプト名 | コマンド | 目的 |
+|-------------|---------|------|
+| `dev` | `vite` | 開発サーバ起動 (Vite HMR) |
+| `build` | `tsc && vite build` | プロダクションビルド (型チェック + バンドル) |
+| `preview` | `vite preview` | ビルド結果プレビュー |
+| `test` | `vitest` | Vitestテスト (ウォッチモード) |
+| `test:coverage` | `vitest --coverage` | カバレッジ付きテスト (v8) |
+| `lint` | `eslint . --ext ts,tsx` | ESLint実行 |
+| `typecheck` | `tsc --noEmit` | TypeScript型チェック (--noEmit) |
+| `e2e` | `playwright test` | Playwright E2Eテスト (ヘッドレス) |
+| `e2e:ui` | `playwright test --ui` | Playwright E2Eテスト (UI モード) |
+| `e2e:headed` | `playwright test --headed` | Playwright E2Eテスト (ブラウザ表示) |
+| `e2e:report` | `playwright show-report` | E2Eテストレポート表示 |
 
 ### バックエンド (backend/)
 
@@ -153,9 +160,22 @@ docker compose up --build
 
 | コンポーネント | 基準 |
 |---------------|------|
-| フロントエンド | 83%+ coverage, 340+ tests |
+| フロントエンド | 83%+ coverage, 64 テストファイル |
 | バックエンド | pytest pass |
 | E2E | 全テストpass |
+
+### フロントエンドテスト構成
+
+テストファイルは `src/__tests__/` 以下に、ソースコードと同じディレクトリ構造で配置される。
+
+| カテゴリ | テストファイル数 | 対象 |
+|---------|-----------------|------|
+| コンポーネント | 33 | card/ (2), common/ (7), dashboard/ (10), dataset/ (1), datasets/ (1), group/ (4), transform/ (5), その他 (App: 1), lib/utils系 (2) |
+| hooks | 8 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-groups, use-dashboard-shares, use-transforms |
+| lib/api | 7 | api-client, auth, cards, dashboards, datasets, filter-views, transforms |
+| pages | 11 | Login, DatasetList/Import/Detail, CardList/Edit, DashboardList/View/Edit, TransformList/Edit |
+| types | 2 | type-guards, transform-type-guards |
+| stores | 1 | auth-store |
 
 ### E2Eテスト実行
 
@@ -172,18 +192,37 @@ cd frontend && npm run e2e
 
 テストユーザ: `e2e@example.com` / `Test@1234`
 
+E2Eテストスイート:
+
+| ファイル | 対象機能 |
+|---------|---------|
+| `e2e/auth.spec.ts` | ログイン・ログアウト |
+| `e2e/dataset.spec.ts` | Dataset取り込み・一覧表示 |
+| `e2e/card-dashboard.spec.ts` | Card作成・Dashboard操作 |
+| `e2e/sharing.spec.ts` | Dashboard共有 |
+
 ### DynamoDBテーブル一覧
 
 初期化スクリプト (`scripts/init_tables.py`) で作成されるテーブル:
 
-| テーブル名 | パーティションキー | GSI |
-|-----------|-------------------|-----|
-| `bi_users` | userId | UsersByEmail |
-| `bi_datasets` | datasetId | DatasetsByOwner |
-| `bi_cards` | cardId | CardsByOwner |
-| `bi_dashboards` | dashboardId | DashboardsByOwner |
-| `bi_filter_views` | filterViewId | FilterViewsByDashboard |
-| `bi_transforms` | transformId | TransformsByOwner |
+| テーブル名 | パーティションキー | ソートキー | GSI |
+|-----------|-------------------|-----------|-----|
+| `bi_users` | userId | - | UsersByEmail |
+| `bi_datasets` | datasetId | - | DatasetsByOwner |
+| `bi_cards` | cardId | - | CardsByOwner |
+| `bi_dashboards` | dashboardId | - | DashboardsByOwner |
+| `bi_filter_views` | filterViewId | - | FilterViewsByDashboard |
+| `bi_transforms` | transformId | - | TransformsByOwner |
+| `bi_transform_executions` | transformId | startedAt | - |
+
+[注意] 以下のテーブルはバックエンドコードで参照されているが、`init_tables.py` に定義が存在しない。
+手動作成、または init_tables.py への追加が必要:
+
+| テーブル名 | パーティションキー | ソートキー | GSI | 参照元 |
+|-----------|-------------------|-----------|-----|--------|
+| `bi_groups` | groupId | - | GroupsByName | group_repository.py |
+| `bi_group_members` | groupId | userId | MembersByUser | group_member_repository.py |
+| `bi_dashboard_shares` | shareId | - | SharesByDashboard, SharesByTarget | dashboard_share_repository.py |
 
 ---
 
@@ -202,6 +241,7 @@ cd frontend && npm run e2e
 - UIライブラリ: shadcn/ui (Radix UI + Tailwind CSS 3.4)
 - 状態管理: TanStack Query v5 (サーバ) + Zustand v4 (クライアント)
 - フォーム: React Hook Form v7 + Zod バリデーション
+- コードエディタ: Monaco Editor (@monaco-editor/react)
 - パスエイリアス: `@/` = `src/`
 - テスト: Vitest + Testing Library + jsdom
 
@@ -244,30 +284,149 @@ cd backend && ruff check app/ && mypy app/ && pytest --cov=app
 work_BI_ClaudeCode/
   backend/              # FastAPI バックエンド
     app/
-      api/              # APIルート
-      core/             # 認証・設定
+      api/routes/       # APIルート (auth, datasets, dashboards, cards, filter_views,
+                        #   filter_view_detail, users, groups, dashboard_shares, transforms)
+      core/             # 認証・設定 (config, auth, dependencies)
       db/               # DynamoDB接続
-      models/           # Pydanticモデル
-      repositories/     # データアクセス層
+      models/           # Pydanticモデル (card, common, dashboard, dashboard_share,
+                        #   dataset, filter_view, group, schema_change, transform,
+                        #   transform_execution, user)
+      repositories/     # データアクセス層 (base + 9リポジトリ)
       services/         # ビジネスロジック
+        card_execution_service.py       # Card実行
+        csv_parser.py                   # CSVパーサー
+        dashboard_service.py            # Dashboard操作
+        dataset_service.py              # Dataset管理
+        parquet_storage.py              # Parquetストレージ
+        permission_service.py           # Dashboard権限チェック
+        schema_comparator.py            # スキーマ変更比較
         transform_execution_service.py  # Transform実行
+        transform_scheduler_service.py  # Transformスケジューラー
+        type_inferrer.py                # 型推論
     tests/              # pytestテスト
   executor/             # Python Sandbox (カード/Transform実行)
   frontend/             # React SPA
     src/
       components/       # UIコンポーネント
-      hooks/            # カスタムフック
-      lib/              # ユーティリティ・API
-      pages/            # ページコンポーネント
-      types/            # TypeScript型定義
-  scripts/              # 初期化スクリプト
+        card/           # Card編集 (CardEditor) ・プレビュー (CardPreview)
+        common/         # 共通レイアウト・認証・エラー処理 (Layout, Sidebar, Header, AuthGuard, ErrorBoundary 等)
+        dashboard/      # Dashboard閲覧・編集・フィルタ・共有 (DashboardViewer/Editor, FilterBar, ShareDialog 等)
+        dataset/        # S3ImportForm
+        datasets/       # SchemaChangeWarningDialog
+        group/          # グループ管理 (GroupCreateDialog, GroupDetailPanel, MemberAddDialog)
+        transform/      # Transform (TransformCodeEditor, DatasetMultiSelect, TransformExecutionResult, TransformExecutionHistory, TransformScheduleConfig)
+        ui/             # shadcn/ui 基盤コンポーネント
+      hooks/            # カスタムフック (use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-groups, use-dashboard-shares, use-transforms)
+      lib/              # ユーティリティ・APIクライアント
+        api/            # RESTful APIモジュール (auth, cards, dashboards, datasets, dashboard-shares, filter-views, groups, transforms)
+      pages/            # ページコンポーネント (12ページ)
+      stores/           # Zustand ストア (auth-store)
+      types/            # TypeScript型定義 (api, card, dashboard, dataset, filter-view, group, reimport, transform, user)
+    e2e/                # Playwright E2Eテスト
+    __tests__/          # Vitest単体テスト (src/__tests__/)
+  scripts/              # 初期化スクリプト (init_tables.py, seed_test_user.py)
   docs/                 # ドキュメント
   codemaps/             # アーキテクチャマップ
 ```
 
+### フロントエンド ページ一覧
+
+| ページ | ファイル | ルート |
+|--------|---------|--------|
+| ログイン | LoginPage.tsx | /login |
+| Dataset一覧 | DatasetListPage.tsx | /datasets |
+| Datasetインポート | DatasetImportPage.tsx | /datasets/import |
+| Dataset詳細 | DatasetDetailPage.tsx | /datasets/:id |
+| Card一覧 | CardListPage.tsx | /cards |
+| Card編集 | CardEditPage.tsx | /cards/:id |
+| Dashboard一覧 | DashboardListPage.tsx | /dashboards |
+| Dashboard閲覧 | DashboardViewPage.tsx | /dashboards/:id |
+| Dashboard編集 | DashboardEditPage.tsx | /dashboards/:id/edit |
+| Transform一覧 | TransformListPage.tsx | /transforms |
+| Transform編集 | TransformEditPage.tsx | /transforms/:id |
+| グループ管理 | GroupListPage.tsx | /admin/groups |
+
+### フロントエンド 主要依存パッケージ
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| react | ^18.2.0 | UIフレームワーク |
+| typescript | ^5.3.3 | 型安全性 |
+| vite | ^5.0.10 | ビルドツール |
+| @tanstack/react-query | ^5.17.0 | サーバ状態管理 |
+| zustand | ^4.4.7 | クライアント状態管理 |
+| react-router-dom | ^6.21.0 | ルーティング |
+| react-hook-form | ^7.71.1 | フォーム管理 |
+| zod | ^3.25.76 | バリデーション |
+| @monaco-editor/react | ^4.6.0 | Pythonコードエディタ |
+| react-grid-layout | ^1.4.4 | Dashboardグリッドレイアウト |
+| ky | ^1.1.3 | HTTPクライアント |
+| date-fns | ^4.1.0 | 日付操作 |
+| tailwindcss | ^3.4.0 | CSSユーティリティ |
+
+### バックエンド 主要依存パッケージ
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| fastapi | 0.109.0 | Webフレームワーク |
+| uvicorn | 0.27.0 | ASGIサーバ |
+| pydantic | 2.5.0 | データバリデーション |
+| pydantic-settings | 2.1.0 | 設定管理 |
+| aioboto3 | 12.3.0 | 非同期AWS SDK (DynamoDB/S3) |
+| pyarrow | 15.0.0 | Parquet読み書き |
+| pandas | 2.2.0 | データフレーム処理 |
+| python-jose | 3.3.0 | JWT認証 |
+| bcrypt | 4.1.3 | パスワードハッシュ |
+| croniter | >=2.0.0 | cron式パース (Transformスケジューラー) |
+| structlog | 24.1.0 | 構造化ログ |
+| slowapi | 0.1.9 | レート制限 |
+
 ---
 
-## 9. 関連ドキュメント
+## 9. 最近の主要変更 (FR-2 Transform完了)
+
+2026-02-04 に完了した Transform 機能 (FR-2.1/2.2/2.3) の概要:
+
+追加されたバックエンド:
+- `app/models/transform.py` -- Transform Pydantic モデル (TransformCreate/Update/Transform)
+- `app/models/transform_execution.py` -- Transform実行履歴モデル
+- `app/repositories/transform_repository.py` -- TransformRepository (DynamoDB CRUD)
+- `app/repositories/transform_execution_repository.py` -- 実行履歴リポジトリ
+- `app/api/routes/transforms.py` -- Transforms API (CRUD + 手動実行 + 実行履歴)
+- `app/services/transform_execution_service.py` -- Transform実行サービス
+- `app/services/transform_scheduler_service.py` -- cron式スケジューラー
+
+追加されたフロントエンド:
+- `src/types/transform.ts` -- Transform 型定義
+- `src/lib/api/transforms.ts` -- Transform API クライアント
+- `src/hooks/use-transforms.ts` -- Transform カスタムフック (CRUD + 実行 + 実行履歴)
+- `src/pages/TransformListPage.tsx` -- Transform 一覧ページ
+- `src/pages/TransformEditPage.tsx` -- Transform 編集ページ
+- `src/components/transform/TransformCodeEditor.tsx` -- Monaco コードエディタ
+- `src/components/transform/DatasetMultiSelect.tsx` -- 入力Dataset複数選択
+- `src/components/transform/TransformExecutionResult.tsx` -- 実行結果表示
+- `src/components/transform/TransformExecutionHistory.tsx` -- 実行履歴表示
+- `src/components/transform/TransformScheduleConfig.tsx` -- スケジュール設定
+
+Transform の使い方:
+1. Transform一覧ページで「新規作成」
+2. 入力Datasetを1つ以上選択
+3. Pythonコードを記述 (`def transform(inputs, params): ...`)
+4. 「手動実行」ボタンで実行 (同期実行、300秒タイムアウト)
+5. 実行結果として出力Datasetが生成される
+6. (オプション) cron式を設定し、スケジュール実行を有効化
+
+Transform モデルフィールド:
+- `name` -- Transform名 (必須)
+- `input_dataset_ids` -- 入力Dataset IDリスト (1つ以上必須)
+- `code` -- Pythonコード (必須、`def transform(inputs, params)` を定義)
+- `output_dataset_id` -- 出力Dataset ID (実行後に自動設定)
+- `schedule_cron` -- cron式 (オプション、croniter でバリデーション)
+- `schedule_enabled` -- スケジュール実行有効フラグ (デフォルト false)
+
+---
+
+## 10. 関連ドキュメント
 
 | ドキュメント | 内容 |
 |-------------|------|
@@ -278,4 +437,6 @@ work_BI_ClaudeCode/
 | `docs/PROGRESS.md` | 実装進捗 |
 | `docs/security.md` | セキュリティ仕様 |
 | `docs/data-flow.md` | データフロー図 |
+| `docs/deployment.md` | デプロイメントガイド |
+| `docs/tech-spec.md` | 技術仕様書 |
 | `codemaps/` | アーキテクチャマップ |

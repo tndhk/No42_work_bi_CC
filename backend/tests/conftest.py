@@ -333,6 +333,22 @@ def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
         )
         tables['transforms'] = transforms_table
 
+        # Transform executions table
+        transform_executions_table_name = f"{settings.dynamodb_table_prefix}transform_executions"
+        transform_executions_table = dynamodb.create_table(
+            TableName=transform_executions_table_name,
+            KeySchema=[
+                {'AttributeName': 'transformId', 'KeyType': 'HASH'},
+                {'AttributeName': 'startedAt', 'KeyType': 'RANGE'},
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'transformId', 'AttributeType': 'S'},
+                {'AttributeName': 'startedAt', 'AttributeType': 'N'},
+            ],
+            BillingMode='PAY_PER_REQUEST',
+        )
+        tables['transform_executions'] = transform_executions_table
+
         yield (tables, dynamodb)
 
 

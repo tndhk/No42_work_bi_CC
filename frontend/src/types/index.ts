@@ -83,5 +83,6 @@ export type {
   TransformCreateRequest,
   TransformUpdateRequest,
   TransformExecuteResponse,
+  TransformExecution,
 } from './transform';
 export { isTransform } from './transform';

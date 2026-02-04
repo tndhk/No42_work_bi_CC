@@ -42,5 +42,9 @@ class Settings(BaseSettings):
     # Cache
     cache_ttl_seconds: int = 3600
 
+    # Scheduler
+    scheduler_enabled: bool = False
+    scheduler_interval_seconds: int = 60
+
 
 settings = Settings()

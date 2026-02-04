@@ -13,6 +13,8 @@ class TransformCreate(BaseModel):
     name: str = Field(min_length=1)
     input_dataset_ids: list[str] = Field(min_length=1)
     code: str = Field(min_length=1)
+    schedule_cron: Optional[str] = None
+    schedule_enabled: bool = False
 
     @field_validator("name")
     @classmethod
@@ -30,6 +32,16 @@ class TransformCreate(BaseModel):
             raise ValueError("Code cannot be empty")
         return v
 
+    @field_validator("schedule_cron")
+    @classmethod
+    def validate_schedule_cron(cls, v: Optional[str]) -> Optional[str]:
+        """Validate cron expression is parseable."""
+        if v is not None:
+            from croniter import croniter
+            if not croniter.is_valid(v):
+                raise ValueError(f"Invalid cron expression: {v}")
+        return v
+
 
 class TransformUpdate(BaseModel):
     """Transform update request model."""
@@ -39,6 +51,8 @@ class TransformUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1)
     input_dataset_ids: Optional[list[str]] = Field(None, min_length=1)
     code: Optional[str] = Field(None, min_length=1)
+    schedule_cron: Optional[str] = None
+    schedule_enabled: Optional[bool] = None
 
     @field_validator("name")
     @classmethod
@@ -56,6 +70,16 @@ class TransformUpdate(BaseModel):
             raise ValueError("Code cannot be empty")
         return v
 
+    @field_validator("schedule_cron")
+    @classmethod
+    def validate_schedule_cron(cls, v: Optional[str]) -> Optional[str]:
+        """Validate cron expression if provided."""
+        if v is not None:
+            from croniter import croniter
+            if not croniter.is_valid(v):
+                raise ValueError(f"Invalid cron expression: {v}")
+        return v
+
 
 class Transform(TimestampMixin, BaseModel):
     """Transform model."""
@@ -68,5 +92,7 @@ class Transform(TimestampMixin, BaseModel):
     input_dataset_ids: list[str] = Field(min_length=1)
     output_dataset_id: Optional[str] = None
     code: str
+    schedule_cron: Optional[str] = None
+    schedule_enabled: bool = False
     created_at: datetime
     updated_at: datetime

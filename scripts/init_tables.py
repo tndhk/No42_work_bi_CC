@@ -108,6 +108,34 @@ TABLES = [
             },
         ],
     },
+    {
+        'TableName': 'bi_transforms',
+        'KeySchema': [{'AttributeName': 'transformId', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'transformId', 'AttributeType': 'S'},
+            {'AttributeName': 'ownerId', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'TransformsByOwner',
+                'KeySchema': [
+                    {'AttributeName': 'ownerId', 'KeyType': 'HASH'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_transform_executions',
+        'KeySchema': [
+            {'AttributeName': 'transformId', 'KeyType': 'HASH'},
+            {'AttributeName': 'startedAt', 'KeyType': 'RANGE'},
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'transformId', 'AttributeType': 'S'},
+            {'AttributeName': 'startedAt', 'AttributeType': 'N'},
+        ],
+    },
 ]
 
 def create_tables():

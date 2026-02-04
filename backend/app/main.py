@@ -17,8 +17,19 @@ async def lifespan(app: FastAPI) -> Any:
     """Application lifespan events."""
     # Startup
     setup_logging()
+
+    # Start scheduler if enabled
+    scheduler = None
+    if settings.scheduler_enabled:
+        from app.services.transform_scheduler_service import TransformSchedulerService
+        scheduler = TransformSchedulerService()
+        await scheduler.start()
+
     yield
-    # Shutdown (if needed in future)
+
+    # Shutdown
+    if scheduler:
+        await scheduler.stop()
 
 
 # Initialize rate limiter

@@ -627,6 +627,7 @@ class TestExecuteTransform:
             return sample_transform
 
         mock_result = transform_execution_service.TransformExecutionResult(
+            execution_id="exec_123",
             output_dataset_id="dataset_output_123",
             row_count=100,
             column_names=["col1", "col2"],
@@ -647,6 +648,7 @@ class TestExecuteTransform:
         response_data = response.json()
         assert "data" in response_data
         data = response_data["data"]
+        assert data["execution_id"] == "exec_123"
         assert data["output_dataset_id"] == "dataset_output_123"
         assert data["row_count"] == 100
         assert data["column_names"] == ["col1", "col2"]
@@ -738,3 +740,145 @@ class TestExecuteTransform:
 
         assert response.status_code == 500
         assert "Executor failed" in response.json()["detail"]
+
+
+# ============================================================================
+# GET /api/transforms/{transform_id}/executions - List Transform Executions
+# ============================================================================
+
+
+class TestListTransformExecutions:
+    """Tests for GET /api/transforms/{transform_id}/executions."""
+
+    def test_list_executions_success(
+        self, authenticated_client, mock_user, sample_transform
+    ):
+        """Test listing executions for a transform."""
+        from app.repositories import transform_repository
+        from app.repositories.transform_execution_repository import TransformExecutionRepository
+        from app.models.transform_execution import TransformExecution
+        from datetime import datetime, timezone
+
+        async def mock_get_by_id(self, pk, dynamodb):
+            return sample_transform
+
+        mock_execution = TransformExecution(
+            execution_id="exec-001",
+            transform_id=sample_transform.id,
+            status="success",
+            started_at=datetime(2026, 2, 4, 10, 0, 0, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 2, 4, 10, 0, 5, tzinfo=timezone.utc),
+            duration_ms=5000.0,
+            output_row_count=100,
+            output_dataset_id="ds-out-001",
+            triggered_by="manual",
+        )
+
+        async def mock_list_by_transform(self, transform_id, dynamodb, limit=20):
+            return [mock_execution]
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id
+        ), patch.object(
+            TransformExecutionRepository, "list_by_transform", mock_list_by_transform
+        ):
+            response = authenticated_client.get(
+                f"/api/transforms/{sample_transform.id}/executions"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert "pagination" in data
+        assert len(data["data"]) == 1
+        assert data["data"][0]["execution_id"] == "exec-001"
+        assert data["data"][0]["status"] == "success"
+
+    def test_list_executions_empty(
+        self, authenticated_client, mock_user, sample_transform
+    ):
+        """Test listing executions when none exist."""
+        from app.repositories import transform_repository
+        from app.repositories.transform_execution_repository import TransformExecutionRepository
+
+        async def mock_get_by_id(self, pk, dynamodb):
+            return sample_transform
+
+        async def mock_list_by_transform(self, transform_id, dynamodb, limit=20):
+            return []
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id
+        ), patch.object(
+            TransformExecutionRepository, "list_by_transform", mock_list_by_transform
+        ):
+            response = authenticated_client.get(
+                f"/api/transforms/{sample_transform.id}/executions"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"] == []
+
+    def test_list_executions_transform_not_found(
+        self, authenticated_client
+    ):
+        """Test listing executions for non-existent transform."""
+        from app.repositories import transform_repository
+
+        async def mock_get_by_id(self, pk, dynamodb):
+            return None
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id
+        ):
+            response = authenticated_client.get(
+                "/api/transforms/nonexistent/executions"
+            )
+
+        assert response.status_code == 404
+
+    def test_list_executions_pagination(
+        self, authenticated_client, mock_user, sample_transform
+    ):
+        """Test listing executions with pagination."""
+        from app.repositories import transform_repository
+        from app.repositories.transform_execution_repository import TransformExecutionRepository
+        from app.models.transform_execution import TransformExecution
+        from datetime import datetime, timezone
+
+        async def mock_get_by_id(self, pk, dynamodb):
+            return sample_transform
+
+        executions = [
+            TransformExecution(
+                execution_id=f"exec-{i:03d}",
+                transform_id=sample_transform.id,
+                status="success",
+                started_at=datetime(2026, 2, 4, 10 + i, 0, 0, tzinfo=timezone.utc),
+                triggered_by="manual",
+            )
+            for i in range(5)
+        ]
+
+        async def mock_list_by_transform(self, transform_id, dynamodb, limit=20):
+            return executions[:limit]
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id
+        ), patch.object(
+            TransformExecutionRepository, "list_by_transform", mock_list_by_transform
+        ):
+            response = authenticated_client.get(
+                f"/api/transforms/{sample_transform.id}/executions?limit=2&offset=1"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "pagination" in data
+
+    def test_list_executions_unauthenticated(self):
+        """Test listing executions without authentication."""
+        client = TestClient(app)
+        response = client.get("/api/transforms/transform_123/executions")
+        assert response.status_code == 403

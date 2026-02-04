@@ -65,6 +65,19 @@ def create_mock_dataset(
     )
 
 
+def _create_exec_repo_mock() -> tuple[MagicMock, MagicMock]:
+    """Create a mock TransformExecutionRepository class and instance.
+
+    Returns:
+        Tuple of (mock_class, mock_instance).
+    """
+    mock_exec_repo = MagicMock()
+    mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+    mock_exec_repo.update_status = AsyncMock(return_value=None)
+    mock_exec_repo_cls = MagicMock(return_value=mock_exec_repo)
+    return mock_exec_repo_cls, mock_exec_repo
+
+
 @pytest.fixture
 def mock_dynamodb() -> MagicMock:
     """Create mock DynamoDB resource."""
@@ -99,12 +112,14 @@ class TestTransformExecutionResult:
         from app.services.transform_execution_service import TransformExecutionResult
 
         result = TransformExecutionResult(
+            execution_id="exec_123",
             output_dataset_id="dataset_out_123",
             row_count=100,
             column_names=["col1", "col2"],
             execution_time_ms=150.5,
         )
 
+        assert result.execution_id == "exec_123"
         assert result.output_dataset_id == "dataset_out_123"
         assert result.row_count == 100
         assert result.column_names == ["col1", "col2"]
@@ -115,6 +130,7 @@ class TestTransformExecutionResult:
         from app.services.transform_execution_service import TransformExecutionResult
 
         result = TransformExecutionResult(
+            execution_id="exec_123",
             output_dataset_id="dataset_out_123",
             row_count=100,
             column_names=["col1", "col2"],
@@ -210,20 +226,30 @@ class TestTransformExecutionService:
                             mock_transform_repo.update = AsyncMock(return_value=transform)
                             mock_transform_repo_cls.return_value = mock_transform_repo
 
-                            # Execute
-                            service = TransformExecutionService()
-                            result = await service.execute(
-                                transform=transform,
-                                dynamodb=mock_dynamodb,
-                                s3=mock_s3_client,
-                            )
+                            # Mock TransformExecutionRepository
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
 
-                            # Verify
-                            assert isinstance(result, TransformExecutionResult)
-                            assert result.output_dataset_id is not None
-                            assert result.row_count == 3
-                            assert result.column_names == ["col1", "col2"]
-                            assert result.execution_time_ms >= 0
+                                # Execute
+                                service = TransformExecutionService()
+                                result = await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify
+                                assert isinstance(result, TransformExecutionResult)
+                                assert result.execution_id is not None
+                                assert result.output_dataset_id is not None
+                                assert result.row_count == 3
+                                assert result.column_names == ["col1", "col2"]
+                                assert result.execution_time_ms >= 0
 
     @pytest.mark.asyncio
     async def test_execute_input_dataset_not_found(
@@ -246,14 +272,23 @@ class TestTransformExecutionService:
             mock_repo.get_by_id = AsyncMock(return_value=None)
             mock_repo_cls.return_value = mock_repo
 
-            service = TransformExecutionService()
+            # Mock TransformExecutionRepository
+            with patch(
+                "app.services.transform_execution_service.TransformExecutionRepository"
+            ) as mock_exec_repo_cls:
+                mock_exec_repo = MagicMock()
+                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                mock_exec_repo_cls.return_value = mock_exec_repo
 
-            with pytest.raises(ValueError, match="Input dataset .* not found"):
-                await service.execute(
-                    transform=transform,
-                    dynamodb=mock_dynamodb,
-                    s3=mock_s3_client,
-                )
+                service = TransformExecutionService()
+
+                with pytest.raises(ValueError, match="Input dataset .* not found"):
+                    await service.execute(
+                        transform=transform,
+                        dynamodb=mock_dynamodb,
+                        s3=mock_s3_client,
+                    )
 
     @pytest.mark.asyncio
     async def test_execute_input_dataset_no_s3_path(
@@ -292,14 +327,23 @@ class TestTransformExecutionService:
             mock_repo.get_by_id = AsyncMock(return_value=input_dataset)
             mock_repo_cls.return_value = mock_repo
 
-            service = TransformExecutionService()
+            # Mock TransformExecutionRepository
+            with patch(
+                "app.services.transform_execution_service.TransformExecutionRepository"
+            ) as mock_exec_repo_cls:
+                mock_exec_repo = MagicMock()
+                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                mock_exec_repo_cls.return_value = mock_exec_repo
 
-            with pytest.raises(ValueError, match="Input dataset .* has no data"):
-                await service.execute(
-                    transform=transform,
-                    dynamodb=mock_dynamodb,
-                    s3=mock_s3_client,
-                )
+                service = TransformExecutionService()
+
+                with pytest.raises(ValueError, match="Input dataset .* has no data"):
+                    await service.execute(
+                        transform=transform,
+                        dynamodb=mock_dynamodb,
+                        s3=mock_s3_client,
+                    )
 
     @pytest.mark.asyncio
     async def test_execute_multiple_input_datasets(
@@ -384,21 +428,30 @@ class TestTransformExecutionService:
                             mock_transform_repo.update = AsyncMock(return_value=transform)
                             mock_transform_repo_cls.return_value = mock_transform_repo
 
-                            service = TransformExecutionService()
-                            result = await service.execute(
-                                transform=transform,
-                                dynamodb=mock_dynamodb,
-                                s3=mock_s3_client,
-                            )
+                            # Mock TransformExecutionRepository
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
 
-                            # Verify
-                            assert isinstance(result, TransformExecutionResult)
-                            # Verify executor was called with multiple datasets
-                            call_args = mock_client.post.call_args
-                            assert call_args is not None
-                            json_body = call_args[1]["json"]
-                            assert "datasets" in json_body
-                            assert len(json_body["datasets"]) == 2
+                                service = TransformExecutionService()
+                                result = await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify
+                                assert isinstance(result, TransformExecutionResult)
+                                # Verify executor was called with multiple datasets
+                                call_args = mock_client.post.call_args
+                                assert call_args is not None
+                                json_body = call_args[1]["json"]
+                                assert "datasets" in json_body
+                                assert len(json_body["datasets"]) == 2
 
     @pytest.mark.asyncio
     async def test_execute_executor_retry_on_5xx(
@@ -480,19 +533,28 @@ class TestTransformExecutionService:
                                 return_value=create_mock_dataset(dataset_id="output")
                             )
 
-                            service = TransformExecutionService()
-                            result = await service.execute(
-                                transform=transform,
-                                dynamodb=mock_dynamodb,
-                                s3=mock_s3_client,
-                            )
+                            # Mock TransformExecutionRepository
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
 
-                            # Should have succeeded after retries
-                            assert result is not None
-                            # Should have called post 3 times
-                            assert mock_client.post.call_count == 3
-                            # Should have slept between retries
-                            assert mock_sleep.call_count == 2
+                                service = TransformExecutionService()
+                                result = await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Should have succeeded after retries
+                                assert result is not None
+                                # Should have called post 3 times
+                                assert mock_client.post.call_count == 3
+                                # Should have slept between retries
+                                assert mock_sleep.call_count == 2
 
     @pytest.mark.asyncio
     async def test_execute_executor_fails_after_max_retries(
@@ -532,14 +594,23 @@ class TestTransformExecutionService:
                     mock_client.__aexit__ = AsyncMock(return_value=None)
                     mock_client_cls.return_value = mock_client
 
-                    service = TransformExecutionService()
+                    # Mock TransformExecutionRepository
+                    with patch(
+                        "app.services.transform_execution_service.TransformExecutionRepository"
+                    ) as mock_exec_repo_cls:
+                        mock_exec_repo = MagicMock()
+                        mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                        mock_exec_repo.update_status = AsyncMock(return_value=None)
+                        mock_exec_repo_cls.return_value = mock_exec_repo
 
-                    with pytest.raises(RuntimeError, match="Executor failed after"):
-                        await service.execute(
-                            transform=transform,
-                            dynamodb=mock_dynamodb,
-                            s3=mock_s3_client,
-                        )
+                        service = TransformExecutionService()
+
+                        with pytest.raises(RuntimeError, match="Executor failed after"):
+                            await service.execute(
+                                transform=transform,
+                                dynamodb=mock_dynamodb,
+                                s3=mock_s3_client,
+                            )
 
     @pytest.mark.asyncio
     async def test_execute_no_retry_on_4xx(
@@ -586,14 +657,23 @@ class TestTransformExecutionService:
                     mock_client.__aexit__ = AsyncMock(return_value=None)
                     mock_client_cls.return_value = mock_client
 
-                    service = TransformExecutionService()
+                    # Mock TransformExecutionRepository
+                    with patch(
+                        "app.services.transform_execution_service.TransformExecutionRepository"
+                    ) as mock_exec_repo_cls:
+                        mock_exec_repo = MagicMock()
+                        mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                        mock_exec_repo.update_status = AsyncMock(return_value=None)
+                        mock_exec_repo_cls.return_value = mock_exec_repo
 
-                    with pytest.raises(RuntimeError, match="Executor returned client error"):
-                        await service.execute(
-                            transform=transform,
-                            dynamodb=mock_dynamodb,
-                            s3=mock_s3_client,
-                        )
+                        service = TransformExecutionService()
+
+                        with pytest.raises(RuntimeError, match="Executor returned client error"):
+                            await service.execute(
+                                transform=transform,
+                                dynamodb=mock_dynamodb,
+                                s3=mock_s3_client,
+                            )
 
                     # Should have called post only once (no retry)
                     assert mock_client.post.call_count == 1
@@ -665,20 +745,29 @@ class TestTransformExecutionService:
                             mock_transform_repo.update = AsyncMock(return_value=transform)
                             mock_transform_repo_cls.return_value = mock_transform_repo
 
-                            service = TransformExecutionService()
-                            result = await service.execute(
-                                transform=transform,
-                                dynamodb=mock_dynamodb,
-                                s3=mock_s3_client,
-                            )
+                            # Mock TransformExecutionRepository
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
 
-                            # Verify TransformRepository.update was called
-                            mock_transform_repo.update.assert_called_once()
-                            call_args = mock_transform_repo.update.call_args
-                            assert call_args[0][0] == "transform_to_update"
-                            assert "output_dataset_id" in call_args[0][1]
-                            # Verify the output_dataset_id matches the result
-                            assert call_args[0][1]["output_dataset_id"] == result.output_dataset_id
+                                service = TransformExecutionService()
+                                result = await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify TransformRepository.update was called
+                                mock_transform_repo.update.assert_called_once()
+                                call_args = mock_transform_repo.update.call_args
+                                assert call_args[0][0] == "transform_to_update"
+                                assert "output_dataset_id" in call_args[0][1]
+                                # Verify the output_dataset_id matches the result
+                                assert call_args[0][1]["output_dataset_id"] == result.output_dataset_id
 
     @pytest.mark.asyncio
     async def test_execute_creates_output_dataset_with_correct_owner(
@@ -750,15 +839,355 @@ class TestTransformExecutionService:
                             mock_transform_repo.update = AsyncMock(return_value=transform)
                             mock_transform_repo_cls.return_value = mock_transform_repo
 
-                            service = TransformExecutionService()
+                            # Mock TransformExecutionRepository
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
+
+                                service = TransformExecutionService()
+                                await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify DatasetRepository.create was called with correct owner
+                                mock_repo.create.assert_called_once()
+                                create_call_args = mock_repo.create.call_args
+                                dataset_dict = create_call_args[0][0]
+                                assert dataset_dict["owner_id"] == "transform_owner_user"
+
+
+# ============================================================================
+# Execution History Recording Integration Tests
+# ============================================================================
+
+
+class TestTransformExecutionHistoryIntegration:
+    """Test execution history recording integration."""
+
+    @pytest.mark.asyncio
+    async def test_execute_creates_running_execution_record(
+        self,
+        mock_dynamodb: MagicMock,
+        mock_s3_client: MagicMock,
+        sample_dataframe: pd.DataFrame,
+    ) -> None:
+        """Test that execute() creates a running record at start."""
+        from app.services.transform_execution_service import TransformExecutionService
+
+        transform = create_mock_transform()
+        input_dataset = create_mock_dataset(dataset_id="dataset_input_1")
+
+        with patch(
+            "app.services.transform_execution_service.DatasetRepository"
+        ) as mock_repo_cls:
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=input_dataset)
+            mock_repo.create = AsyncMock(
+                return_value=create_mock_dataset(dataset_id="output")
+            )
+            mock_repo_cls.return_value = mock_repo
+
+            with patch(
+                "app.services.transform_execution_service.ParquetReader"
+            ) as mock_reader_cls:
+                mock_reader = MagicMock()
+                mock_reader.read_full.return_value = sample_dataframe
+                mock_reader_cls.return_value = mock_reader
+
+                with patch("httpx.AsyncClient") as mock_client_cls:
+                    executor_response = {
+                        "data": sample_dataframe.to_dict(orient="records"),
+                        "columns": ["col1", "col2"],
+                        "row_count": 3,
+                    }
+                    mock_response = MagicMock()
+                    mock_response.json.return_value = executor_response
+                    mock_response.raise_for_status = MagicMock()
+
+                    mock_client = AsyncMock()
+                    mock_client.post = AsyncMock(return_value=mock_response)
+                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                    mock_client.__aexit__ = AsyncMock(return_value=None)
+                    mock_client_cls.return_value = mock_client
+
+                    with patch(
+                        "app.services.transform_execution_service.ParquetConverter"
+                    ) as mock_converter_cls:
+                        mock_converter = MagicMock()
+                        mock_converter.convert_and_save.return_value = MagicMock(
+                            s3_path="datasets/output/data/part-0000.parquet"
+                        )
+                        mock_converter_cls.return_value = mock_converter
+
+                        with patch(
+                            "app.services.transform_execution_service.TransformRepository"
+                        ) as mock_transform_repo_cls:
+                            mock_transform_repo = MagicMock()
+                            mock_transform_repo.update = AsyncMock(return_value=transform)
+                            mock_transform_repo_cls.return_value = mock_transform_repo
+
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
+
+                                service = TransformExecutionService()
+                                await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify create was called with status="running"
+                                mock_exec_repo.create.assert_called_once()
+                                create_args = mock_exec_repo.create.call_args[0][0]
+                                assert create_args["status"] == "running"
+                                assert create_args["transform_id"] == "transform_123"
+                                assert "execution_id" in create_args
+                                assert "started_at" in create_args
+                                assert create_args["triggered_by"] == "manual"
+
+    @pytest.mark.asyncio
+    async def test_execute_updates_to_success_on_completion(
+        self,
+        mock_dynamodb: MagicMock,
+        mock_s3_client: MagicMock,
+        sample_dataframe: pd.DataFrame,
+    ) -> None:
+        """Test that execute() updates record to success on completion."""
+        from app.services.transform_execution_service import TransformExecutionService
+
+        transform = create_mock_transform()
+        input_dataset = create_mock_dataset(dataset_id="dataset_input_1")
+
+        with patch(
+            "app.services.transform_execution_service.DatasetRepository"
+        ) as mock_repo_cls:
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=input_dataset)
+            mock_repo.create = AsyncMock(
+                return_value=create_mock_dataset(dataset_id="output")
+            )
+            mock_repo_cls.return_value = mock_repo
+
+            with patch(
+                "app.services.transform_execution_service.ParquetReader"
+            ) as mock_reader_cls:
+                mock_reader = MagicMock()
+                mock_reader.read_full.return_value = sample_dataframe
+                mock_reader_cls.return_value = mock_reader
+
+                with patch("httpx.AsyncClient") as mock_client_cls:
+                    executor_response = {
+                        "data": sample_dataframe.to_dict(orient="records"),
+                        "columns": ["col1", "col2"],
+                        "row_count": 3,
+                    }
+                    mock_response = MagicMock()
+                    mock_response.json.return_value = executor_response
+                    mock_response.raise_for_status = MagicMock()
+
+                    mock_client = AsyncMock()
+                    mock_client.post = AsyncMock(return_value=mock_response)
+                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                    mock_client.__aexit__ = AsyncMock(return_value=None)
+                    mock_client_cls.return_value = mock_client
+
+                    with patch(
+                        "app.services.transform_execution_service.ParquetConverter"
+                    ) as mock_converter_cls:
+                        mock_converter = MagicMock()
+                        mock_converter.convert_and_save.return_value = MagicMock(
+                            s3_path="datasets/output/data/part-0000.parquet"
+                        )
+                        mock_converter_cls.return_value = mock_converter
+
+                        with patch(
+                            "app.services.transform_execution_service.TransformRepository"
+                        ) as mock_transform_repo_cls:
+                            mock_transform_repo = MagicMock()
+                            mock_transform_repo.update = AsyncMock(return_value=transform)
+                            mock_transform_repo_cls.return_value = mock_transform_repo
+
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
+
+                                service = TransformExecutionService()
+                                result = await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                )
+
+                                # Verify update_status was called with status="success"
+                                mock_exec_repo.update_status.assert_called_once()
+                                update_args = mock_exec_repo.update_status.call_args
+                                # positional args: transform_id, started_at, updates_dict, dynamodb
+                                assert update_args[0][0] == "transform_123"
+                                updates_dict = update_args[0][2]
+                                assert updates_dict["status"] == "success"
+                                assert "finished_at" in updates_dict
+                                assert "duration_ms" in updates_dict
+                                assert updates_dict["output_row_count"] == 3
+                                assert updates_dict["output_dataset_id"] == result.output_dataset_id
+
+    @pytest.mark.asyncio
+    async def test_execute_updates_to_failed_on_error(
+        self,
+        mock_dynamodb: MagicMock,
+        mock_s3_client: MagicMock,
+        sample_dataframe: pd.DataFrame,
+    ) -> None:
+        """Test that execute() updates record to failed on error."""
+        from app.services.transform_execution_service import TransformExecutionService
+
+        transform = create_mock_transform()
+        input_dataset = create_mock_dataset(dataset_id="dataset_input_1")
+
+        with patch(
+            "app.services.transform_execution_service.DatasetRepository"
+        ) as mock_repo_cls:
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=input_dataset)
+            mock_repo_cls.return_value = mock_repo
+
+            with patch(
+                "app.services.transform_execution_service.ParquetReader"
+            ) as mock_reader_cls:
+                mock_reader = MagicMock()
+                mock_reader.read_full.return_value = sample_dataframe
+                mock_reader_cls.return_value = mock_reader
+
+                with patch("httpx.AsyncClient") as mock_client_cls, \
+                     patch("asyncio.sleep", new_callable=AsyncMock):
+                    # All calls fail with timeout
+                    mock_client = AsyncMock()
+                    mock_client.post = AsyncMock(
+                        side_effect=httpx.TimeoutException("Timeout")
+                    )
+                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                    mock_client.__aexit__ = AsyncMock(return_value=None)
+                    mock_client_cls.return_value = mock_client
+
+                    with patch(
+                        "app.services.transform_execution_service.TransformExecutionRepository"
+                    ) as mock_exec_repo_cls:
+                        mock_exec_repo = MagicMock()
+                        mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                        mock_exec_repo.update_status = AsyncMock(return_value=None)
+                        mock_exec_repo_cls.return_value = mock_exec_repo
+
+                        service = TransformExecutionService()
+
+                        with pytest.raises(RuntimeError):
                             await service.execute(
                                 transform=transform,
                                 dynamodb=mock_dynamodb,
                                 s3=mock_s3_client,
                             )
 
-                            # Verify DatasetRepository.create was called with correct owner
-                            mock_repo.create.assert_called_once()
-                            create_call_args = mock_repo.create.call_args
-                            dataset_dict = create_call_args[0][0]
-                            assert dataset_dict["owner_id"] == "transform_owner_user"
+                        # Verify update_status was called with status="failed"
+                        mock_exec_repo.update_status.assert_called_once()
+                        update_args = mock_exec_repo.update_status.call_args
+                        updates_dict = update_args[0][2]
+                        assert updates_dict["status"] == "failed"
+                        assert "finished_at" in updates_dict
+                        assert "duration_ms" in updates_dict
+                        assert "error" in updates_dict
+
+    @pytest.mark.asyncio
+    async def test_execute_with_triggered_by_schedule(
+        self,
+        mock_dynamodb: MagicMock,
+        mock_s3_client: MagicMock,
+        sample_dataframe: pd.DataFrame,
+    ) -> None:
+        """Test triggered_by='schedule' is recorded."""
+        from app.services.transform_execution_service import TransformExecutionService
+
+        transform = create_mock_transform()
+        input_dataset = create_mock_dataset(dataset_id="dataset_input_1")
+
+        with patch(
+            "app.services.transform_execution_service.DatasetRepository"
+        ) as mock_repo_cls:
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=input_dataset)
+            mock_repo.create = AsyncMock(
+                return_value=create_mock_dataset(dataset_id="output")
+            )
+            mock_repo_cls.return_value = mock_repo
+
+            with patch(
+                "app.services.transform_execution_service.ParquetReader"
+            ) as mock_reader_cls:
+                mock_reader = MagicMock()
+                mock_reader.read_full.return_value = sample_dataframe
+                mock_reader_cls.return_value = mock_reader
+
+                with patch("httpx.AsyncClient") as mock_client_cls:
+                    executor_response = {
+                        "data": sample_dataframe.to_dict(orient="records"),
+                        "columns": ["col1", "col2"],
+                        "row_count": 3,
+                    }
+                    mock_response = MagicMock()
+                    mock_response.json.return_value = executor_response
+                    mock_response.raise_for_status = MagicMock()
+
+                    mock_client = AsyncMock()
+                    mock_client.post = AsyncMock(return_value=mock_response)
+                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                    mock_client.__aexit__ = AsyncMock(return_value=None)
+                    mock_client_cls.return_value = mock_client
+
+                    with patch(
+                        "app.services.transform_execution_service.ParquetConverter"
+                    ) as mock_converter_cls:
+                        mock_converter = MagicMock()
+                        mock_converter.convert_and_save.return_value = MagicMock(
+                            s3_path="datasets/output/data/part-0000.parquet"
+                        )
+                        mock_converter_cls.return_value = mock_converter
+
+                        with patch(
+                            "app.services.transform_execution_service.TransformRepository"
+                        ) as mock_transform_repo_cls:
+                            mock_transform_repo = MagicMock()
+                            mock_transform_repo.update = AsyncMock(return_value=transform)
+                            mock_transform_repo_cls.return_value = mock_transform_repo
+
+                            with patch(
+                                "app.services.transform_execution_service.TransformExecutionRepository"
+                            ) as mock_exec_repo_cls:
+                                mock_exec_repo = MagicMock()
+                                mock_exec_repo.create = AsyncMock(return_value=MagicMock())
+                                mock_exec_repo.update_status = AsyncMock(return_value=None)
+                                mock_exec_repo_cls.return_value = mock_exec_repo
+
+                                service = TransformExecutionService()
+                                await service.execute(
+                                    transform=transform,
+                                    dynamodb=mock_dynamodb,
+                                    s3=mock_s3_client,
+                                    triggered_by="schedule",
+                                )
+
+                                # Verify create was called with triggered_by="schedule"
+                                mock_exec_repo.create.assert_called_once()
+                                create_args = mock_exec_repo.create.call_args[0][0]
+                                assert create_args["triggered_by"] == "schedule"

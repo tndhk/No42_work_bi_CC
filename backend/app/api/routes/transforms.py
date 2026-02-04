@@ -6,6 +6,7 @@ from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
 from app.models.transform import Transform, TransformCreate, TransformUpdate
 from app.models.user import User
+from app.repositories.transform_execution_repository import TransformExecutionRepository
 from app.repositories.transform_repository import TransformRepository
 from app.services.transform_execution_service import TransformExecutionService
 
@@ -285,8 +286,62 @@ async def execute_transform(
         ) from e
 
     return api_response({
+        "execution_id": result.execution_id,
         "output_dataset_id": result.output_dataset_id,
         "row_count": result.row_count,
         "column_names": result.column_names,
         "execution_time_ms": result.execution_time_ms,
     })
+
+
+# ============================================================================
+# List Transform Executions
+# ============================================================================
+
+
+@router.get("/{transform_id}/executions")
+async def list_transform_executions(
+    transform_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+) -> dict[str, Any]:
+    """List execution history for a transform.
+
+    Args:
+        transform_id: Transform ID
+        limit: Maximum number of items to return (1-100, default: 20)
+        offset: Number of items to skip (default: 0)
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Paginated list of transform executions
+
+    Raises:
+        HTTPException: 404 if transform not found
+    """
+    # Verify transform exists
+    repo = TransformRepository()
+    transform = await repo.get_by_id(transform_id, dynamodb)
+    if not transform:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transform not found",
+        )
+
+    # Get executions
+    exec_repo = TransformExecutionRepository()
+    all_executions = await exec_repo.list_by_transform(
+        transform_id, dynamodb, limit=limit + offset,
+    )
+    total = len(all_executions)
+    executions = all_executions[offset:offset + limit]
+
+    return paginated_response(
+        items=[e.model_dump() for e in executions],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

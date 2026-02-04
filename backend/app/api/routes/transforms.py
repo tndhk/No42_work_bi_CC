@@ -8,6 +8,7 @@ from app.models.transform import Transform, TransformCreate, TransformUpdate
 from app.models.user import User
 from app.repositories.transform_execution_repository import TransformExecutionRepository
 from app.repositories.transform_repository import TransformRepository
+from app.services.audit_service import AuditService
 from app.services.transform_execution_service import TransformExecutionService
 
 router = APIRouter()
@@ -280,10 +281,23 @@ async def execute_transform(
         ) from e
     except RuntimeError as e:
         # Executor failed
+        await AuditService().log_transform_failed(
+            user_id=current_user.id,
+            transform_id=transform_id,
+            error=str(e),
+            dynamodb=dynamodb,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         ) from e
+
+    await AuditService().log_transform_executed(
+        user_id=current_user.id,
+        transform_id=transform_id,
+        execution_id=result.execution_id,
+        dynamodb=dynamodb,
+    )
 
     return api_response({
         "execution_id": result.execution_id,

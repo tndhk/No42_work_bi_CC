@@ -14,6 +14,7 @@ from app.services.card_execution_service import (
     CardExecutionService,
 )
 from app.core.config import settings
+from app.services.audit_service import AuditService
 
 router = APIRouter()
 
@@ -348,6 +349,12 @@ async def preview_card(
         })
 
     except RuntimeError as e:
+        await AuditService().log_card_execution_failed(
+            user_id=current_user.id,
+            card_id=card_id,
+            error=str(e),
+            dynamodb=dynamodb,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
@@ -432,6 +439,12 @@ async def execute_card(
         })
 
     except RuntimeError as e:
+        await AuditService().log_card_execution_failed(
+            user_id=current_user.id,
+            card_id=card_id,
+            error=str(e),
+            dynamodb=dynamodb,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),

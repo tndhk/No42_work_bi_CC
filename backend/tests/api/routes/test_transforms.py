@@ -1,7 +1,7 @@
 """Transform API endpoint tests - TDD RED phase."""
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -882,3 +882,82 @@ class TestListTransformExecutions:
         client = TestClient(app)
         response = client.get("/api/transforms/transform_123/executions")
         assert response.status_code == 403
+
+
+# ============================================================================
+# Audit Log Integration Tests
+# ============================================================================
+
+
+class TestExecuteTransformAuditLog:
+    """Tests for audit logging in transform execution."""
+
+    def test_execute_transform_success_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_transform: Transform
+    ) -> None:
+        """Test that successful execution calls AuditService().log_transform_executed()."""
+        from app.repositories import transform_repository
+        from app.services import transform_execution_service
+
+        async def mock_get_by_id_transform(self, pk, dynamodb):
+            return sample_transform
+
+        mock_result = transform_execution_service.TransformExecutionResult(
+            execution_id="exec_audit_001",
+            output_dataset_id="dataset_output_audit",
+            row_count=50,
+            column_names=["a", "b"],
+            execution_time_ms=200.0,
+        )
+
+        async def mock_execute(self, transform, dynamodb, s3):
+            return mock_result
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id_transform
+        ), patch.object(
+            transform_execution_service.TransformExecutionService, "execute", mock_execute
+        ), patch("app.api.routes.transforms.AuditService") as MockAuditService:
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_transform_executed = AsyncMock(return_value=None)
+
+            response = authenticated_client.post(f"/api/transforms/{sample_transform.id}/execute")
+
+        assert response.status_code == 200
+        mock_audit_instance.log_transform_executed.assert_called_once_with(
+            user_id=mock_user.id,
+            transform_id=sample_transform.id,
+            execution_id="exec_audit_001",
+            dynamodb=mock_audit_instance.log_transform_executed.call_args.kwargs["dynamodb"],
+        )
+
+    def test_execute_transform_failure_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_transform: Transform
+    ) -> None:
+        """Test that RuntimeError execution calls AuditService().log_transform_failed()."""
+        from app.repositories import transform_repository
+        from app.services import transform_execution_service
+
+        async def mock_get_by_id_transform(self, pk, dynamodb):
+            return sample_transform
+
+        async def mock_execute(self, transform, dynamodb, s3):
+            raise RuntimeError("Executor failed: some error")
+
+        with patch.object(
+            transform_repository.TransformRepository, "get_by_id", mock_get_by_id_transform
+        ), patch.object(
+            transform_execution_service.TransformExecutionService, "execute", mock_execute
+        ), patch("app.api.routes.transforms.AuditService") as MockAuditService:
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_transform_failed = AsyncMock(return_value=None)
+
+            response = authenticated_client.post(f"/api/transforms/{sample_transform.id}/execute")
+
+        assert response.status_code == 500
+        mock_audit_instance.log_transform_failed.assert_called_once_with(
+            user_id=mock_user.id,
+            transform_id=sample_transform.id,
+            error="Executor failed: some error",
+            dynamodb=mock_audit_instance.log_transform_failed.call_args.kwargs["dynamodb"],
+        )

@@ -1,7 +1,7 @@
 """Dataset API endpoint tests."""
 import io
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
@@ -709,3 +709,130 @@ class TestReimportExecute:
             json={"force": False},
         )
         assert response.status_code == 403
+
+
+class TestAuditLogIntegration:
+    """Tests for audit log calls in dataset endpoints."""
+
+    def test_create_dataset_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test CSV upload success calls AuditService().log_dataset_created()."""
+        csv_content = b"id,name\n1,Alice\n2,Bob\n"
+
+        with patch('app.services.dataset_service.DatasetService.import_csv') as mock_import, \
+             patch('app.api.routes.datasets.AuditService') as MockAuditService:
+            mock_import.return_value = sample_dataset
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_dataset_created = AsyncMock()
+
+            response = authenticated_client.post(
+                "/api/datasets",
+                files={"file": ("test.csv", io.BytesIO(csv_content), "text/csv")},
+                data={"name": "Test Dataset", "description": "Test description"},
+            )
+
+            assert response.status_code == 201
+            mock_audit_instance.log_dataset_created.assert_called_once_with(
+                user_id=mock_user.id,
+                dataset_id=sample_dataset.id,
+                dataset_name="Test Dataset",
+                dynamodb=mock_audit_instance.log_dataset_created.call_args.kwargs["dynamodb"],
+            )
+
+    def test_s3_import_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test S3 import success calls AuditService().log_dataset_imported()."""
+        with patch('app.services.dataset_service.DatasetService.import_s3_csv') as mock_import, \
+             patch('app.api.routes.datasets.AuditService') as MockAuditService:
+            mock_import.return_value = sample_dataset
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_dataset_imported = AsyncMock()
+
+            response = authenticated_client.post(
+                "/api/datasets/s3-import",
+                json={
+                    "name": "Test Dataset",
+                    "s3_bucket": "test-bucket",
+                    "s3_key": "data/test.csv",
+                },
+            )
+
+            assert response.status_code == 201
+            mock_audit_instance.log_dataset_imported.assert_called_once_with(
+                user_id=mock_user.id,
+                dataset_id=sample_dataset.id,
+                dataset_name="Test Dataset",
+                source_type="s3_csv",
+                dynamodb=mock_audit_instance.log_dataset_imported.call_args.kwargs["dynamodb"],
+            )
+
+    def test_reimport_execute_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test reimport success calls AuditService().log_dataset_imported()."""
+        s3_csv_dataset = Dataset(
+            **{
+                **sample_dataset.model_dump(by_alias=True),
+                'source_type': 's3_csv',
+                'source_config': {
+                    's3_bucket': 'test-bucket',
+                    's3_key': 'data/test.csv',
+                    'has_header': True,
+                    'delimiter': ',',
+                },
+            }
+        )
+        updated_dataset = Dataset(
+            **{
+                **s3_csv_dataset.model_dump(by_alias=True),
+                'row_count': 200,
+            }
+        )
+
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.services.dataset_service.DatasetService.reimport_execute') as mock_reimport, \
+             patch('app.api.routes.datasets.AuditService') as MockAuditService:
+            mock_get.return_value = s3_csv_dataset
+            mock_reimport.return_value = updated_dataset
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_dataset_imported = AsyncMock()
+
+            response = authenticated_client.post(
+                f"/api/datasets/{s3_csv_dataset.id}/reimport",
+                json={"force": False},
+            )
+
+            assert response.status_code == 200
+            mock_audit_instance.log_dataset_imported.assert_called_once_with(
+                user_id=mock_user.id,
+                dataset_id=updated_dataset.id,
+                dataset_name=updated_dataset.name,
+                source_type="reimport",
+                dynamodb=mock_audit_instance.log_dataset_imported.call_args.kwargs["dynamodb"],
+            )
+
+    def test_delete_dataset_calls_audit_log(
+        self, authenticated_client: TestClient, mock_user: User, sample_dataset: Dataset
+    ) -> None:
+        """Test delete success calls AuditService().log_dataset_deleted()."""
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get, \
+             patch('app.repositories.dataset_repository.DatasetRepository.delete') as mock_delete, \
+             patch('app.api.routes.datasets.AuditService') as MockAuditService:
+            mock_get.return_value = sample_dataset
+            mock_delete.return_value = None
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_dataset_deleted = AsyncMock()
+
+            response = authenticated_client.delete(
+                f"/api/datasets/{sample_dataset.id}",
+            )
+
+            assert response.status_code == 204
+            mock_audit_instance.log_dataset_deleted.assert_called_once_with(
+                user_id=mock_user.id,
+                dataset_id=sample_dataset.id,
+                dataset_name=sample_dataset.name,
+                dynamodb=mock_audit_instance.log_dataset_deleted.call_args.kwargs["dynamodb"],
+            )

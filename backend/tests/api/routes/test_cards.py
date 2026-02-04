@@ -1,7 +1,7 @@
 """Card API endpoint tests - TDD RED phase."""
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -505,6 +505,51 @@ class TestPreviewCard:
 
         assert response.status_code == 500
 
+    def test_preview_card_failure_calls_audit_log(
+        self,
+        authenticated_client: TestClient,
+        mock_user: User,
+        sample_card: Card,
+        mock_dynamodb,
+    ) -> None:
+        """Test that preview RuntimeError triggers audit log for card execution failure."""
+        from app.repositories import card_repository, dataset_repository
+
+        async def mock_get_by_id_card(self, pk, dynamodb):
+            return sample_card
+
+        async def mock_get_by_id_dataset(self, pk, dynamodb):
+            mock_dataset = MagicMock()
+            mock_dataset.updated_at = datetime.now(timezone.utc)
+            return mock_dataset
+
+        async def mock_execute(self, *args, **kwargs):
+            raise RuntimeError("Preview execution failed")
+
+        with patch.object(
+            card_repository.CardRepository, "get_by_id", mock_get_by_id_card
+        ), patch.object(
+            dataset_repository.DatasetRepository, "get_by_id", mock_get_by_id_dataset
+        ), patch(
+            "app.services.card_execution_service.CardExecutionService.execute",
+            mock_execute,
+        ), patch("app.api.routes.cards.AuditService") as MockAuditService:
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_card_execution_failed = AsyncMock(return_value=None)
+
+            response = authenticated_client.post(
+                f"/api/cards/{sample_card.id}/preview",
+                json={"filters": {}},
+            )
+
+        assert response.status_code == 500
+        mock_audit_instance.log_card_execution_failed.assert_called_once_with(
+            user_id=mock_user.id,
+            card_id=sample_card.id,
+            error=str(RuntimeError("Preview execution failed")),
+            dynamodb=mock_dynamodb,
+        )
+
 
 # ============================================================================
 # POST /api/cards/{card_id}/execute - Execute Card
@@ -645,3 +690,48 @@ class TestExecuteCard:
         assert "data" in response_data
         data = response_data["data"]
         assert data["cached"] is False
+
+    def test_execute_card_failure_calls_audit_log(
+        self,
+        authenticated_client: TestClient,
+        mock_user: User,
+        sample_card: Card,
+        mock_dynamodb,
+    ) -> None:
+        """Test that execute RuntimeError triggers audit log for card execution failure."""
+        from app.repositories import card_repository, dataset_repository
+
+        async def mock_get_by_id_card(self, pk, dynamodb):
+            return sample_card
+
+        async def mock_get_by_id_dataset(self, pk, dynamodb):
+            mock_dataset = MagicMock()
+            mock_dataset.updated_at = datetime.now(timezone.utc)
+            return mock_dataset
+
+        async def mock_execute(self, *args, **kwargs):
+            raise RuntimeError("Execution failed")
+
+        with patch.object(
+            card_repository.CardRepository, "get_by_id", mock_get_by_id_card
+        ), patch.object(
+            dataset_repository.DatasetRepository, "get_by_id", mock_get_by_id_dataset
+        ), patch(
+            "app.services.card_execution_service.CardExecutionService.execute",
+            mock_execute,
+        ), patch("app.api.routes.cards.AuditService") as MockAuditService:
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_card_execution_failed = AsyncMock(return_value=None)
+
+            response = authenticated_client.post(
+                f"/api/cards/{sample_card.id}/execute",
+                json={"filters": {}, "use_cache": True},
+            )
+
+        assert response.status_code == 500
+        mock_audit_instance.log_card_execution_failed.assert_called_once_with(
+            user_id=mock_user.id,
+            card_id=sample_card.id,
+            error=str(RuntimeError("Execution failed")),
+            dynamodb=mock_dynamodb,
+        )

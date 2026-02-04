@@ -7,6 +7,7 @@ from app.api.response import api_response, paginated_response
 from app.models.dataset import Dataset, DatasetUpdate, ReimportDryRunResponse, ReimportRequest, S3ImportRequest
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
+from app.services.audit_service import AuditService
 from app.services.dataset_service import DatasetService
 
 router = APIRouter()
@@ -112,6 +113,13 @@ async def create_dataset(
             detail=str(e),
         )
 
+    await AuditService().log_dataset_created(
+        user_id=current_user.id,
+        dataset_id=dataset.id,
+        dataset_name=name.strip(),
+        dynamodb=dynamodb,
+    )
+
     return api_response(dataset.model_dump())
 
 
@@ -157,6 +165,14 @@ async def s3_import_dataset(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+
+    await AuditService().log_dataset_imported(
+        user_id=current_user.id,
+        dataset_id=dataset.id,
+        dataset_name=import_data.name.strip(),
+        source_type="s3_csv",
+        dynamodb=dynamodb,
+    )
 
     return api_response(dataset.model_dump())
 
@@ -277,6 +293,13 @@ async def delete_dataset(
 
     # Delete dataset
     await repo.delete(dataset_id, dynamodb)
+
+    await AuditService().log_dataset_deleted(
+        user_id=current_user.id,
+        dataset_id=dataset_id,
+        dataset_name=dataset.name,
+        dynamodb=dynamodb,
+    )
 
 
 @router.get("/{dataset_id}/columns/{column_name}/values")
@@ -482,5 +505,13 @@ async def reimport_execute(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+
+    await AuditService().log_dataset_imported(
+        user_id=current_user.id,
+        dataset_id=updated_dataset.id,
+        dataset_name=updated_dataset.name,
+        source_type="reimport",
+        dynamodb=dynamodb,
+    )
 
     return api_response(updated_dataset.model_dump())

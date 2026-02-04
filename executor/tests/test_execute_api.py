@@ -1,5 +1,4 @@
 """Executor API テスト"""
-import pytest
 from fastapi.testclient import TestClient
 
 

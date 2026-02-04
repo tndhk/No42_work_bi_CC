@@ -1,7 +1,5 @@
 """Tests for type_inferrer service."""
 import pandas as pd
-import pytest
-from datetime import datetime, date
 from app.services.type_inferrer import (
     infer_column_type,
     infer_schema,

@@ -1,5 +1,4 @@
 """Tests for executor client retry logic in CardExecutionService."""
-import asyncio
 from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -10,7 +9,6 @@ from app.services.card_execution_service import (
     CardExecutionService,
     CardCacheService,
     MAX_RETRIES,
-    RETRY_BASE_DELAY,
 )
 
 

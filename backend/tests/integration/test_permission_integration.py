@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 
 from app.models.dashboard import Dashboard
 from app.models.dashboard_share import Permission, SharedToType
-from app.models.group import Group
 from app.services.permission_service import PermissionService
 from app.repositories.dashboard_share_repository import DashboardShareRepository
 from app.repositories.group_repository import GroupRepository

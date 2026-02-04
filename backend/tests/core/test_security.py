@@ -1,7 +1,7 @@
 """Security tests following TDD."""
 import pytest
-from datetime import datetime, timedelta
-from jose import jwt as jose_jwt, JWTError
+from datetime import timedelta
+from jose import jwt as jose_jwt
 
 
 class TestPasswordHashing:
@@ -124,7 +124,6 @@ class TestJWTToken:
     def test_decode_access_token_returns_none_for_expired_token(self):
         """decode_access_token()が期限切れトークンでNoneを返す."""
         from app.core.security import create_access_token, decode_access_token
-        from app.core.config import settings
 
         data = {"sub": "user@example.com"}
         # Create token that expired 1 hour ago

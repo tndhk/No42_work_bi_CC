@@ -3,7 +3,6 @@ import pytest
 from datetime import datetime
 from typing import Any
 
-from app.core.config import settings
 
 
 @pytest.mark.asyncio

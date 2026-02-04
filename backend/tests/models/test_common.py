@@ -1,7 +1,6 @@
 """Tests for common model components."""
 from datetime import datetime
-import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from app.models.common import BaseResponse, TimestampMixin
 
 

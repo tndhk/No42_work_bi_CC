@@ -16,7 +16,6 @@ vi.mock('@/lib/api', () => ({
 
 import { filterViewsApi } from '@/lib/api';
 const mockList = filterViewsApi.list as ReturnType<typeof vi.fn>;
-const mockGet = filterViewsApi.get as ReturnType<typeof vi.fn>;
 const mockCreate = filterViewsApi.create as ReturnType<typeof vi.fn>;
 const mockUpdate = filterViewsApi.update as ReturnType<typeof vi.fn>;
 const mockDelete = filterViewsApi.delete as ReturnType<typeof vi.fn>;

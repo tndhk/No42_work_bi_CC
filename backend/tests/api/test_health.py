@@ -1,5 +1,4 @@
 """Health endpoint test following TDD RED phase."""
-import pytest
 from fastapi.testclient import TestClient
 
 

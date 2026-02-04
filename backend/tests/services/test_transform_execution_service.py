@@ -1,5 +1,4 @@
 """Tests for transform_execution_service module - TDD RED phase."""
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch

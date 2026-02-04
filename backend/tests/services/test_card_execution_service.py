@@ -1,13 +1,9 @@
 """Tests for card_execution_service module - TDD RED phase."""
-import hashlib
-import json
 import time
-from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
 
 from app.services.card_execution_service import CardCacheService, CardExecutionService, CardExecutionResult
 

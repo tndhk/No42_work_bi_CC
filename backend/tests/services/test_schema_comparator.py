@@ -3,7 +3,6 @@ import pytest
 
 from app.models.dataset import ColumnSchema
 from app.services.schema_comparator import (
-    SchemaChange,
     SchemaChangeType,
     SchemaCompareResult,
     compare_schemas,

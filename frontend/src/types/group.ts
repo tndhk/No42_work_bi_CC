@@ -27,11 +27,3 @@ export interface AddMemberRequest {
   user_id: string;
 }
 
-export function isGroup(value: unknown): value is Group {
-  if (typeof value !== 'object' || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.id === 'string' &&
-    typeof obj.name === 'string'
-  );
-}

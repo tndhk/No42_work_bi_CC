@@ -1,12 +1,12 @@
 """Card API endpoint tests - TDD RED phase."""
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
-from app.models.card import Card, CardCreate, CardUpdate
+from app.models.card import Card
 from app.models.user import User
 
 

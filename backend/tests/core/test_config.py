@@ -1,5 +1,4 @@
 """Config tests following TDD."""
-import pytest
 
 
 def test_settings_default_values():

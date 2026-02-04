@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.config import settings
-from app.models.dataset import ColumnSchema, Dataset
+from app.models.dataset import Dataset
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.csv_parser import CsvImportOptions, parse_full
 from app.services.parquet_storage import ParquetConverter, ParquetReader

@@ -117,7 +117,7 @@ class TestImportS3Csv:
             # Verify _save_metadata was called with source_type="s3_csv" and source_config
             call_kwargs = mock_save_meta.call_args[1] if mock_save_meta.call_args[1] else {}
             if not call_kwargs:
-                call_args = mock_save_meta.call_args[0]
+                _ = mock_save_meta.call_args[0]
                 # Check positional args - can't easily check, so we verify call was made
             assert mock_save_meta.called
 

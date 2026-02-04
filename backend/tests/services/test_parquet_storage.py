@@ -150,7 +150,7 @@ class TestParquetConverter:
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-004'
 
-        result = converter.convert_and_save(
+        converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column='department'
@@ -259,7 +259,7 @@ class TestParquetReader:
         # First save data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-009'
-        result = converter.convert_and_save(
+        converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column='department'

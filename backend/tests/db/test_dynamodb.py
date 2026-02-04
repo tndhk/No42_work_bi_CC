@@ -54,7 +54,6 @@ async def test_dynamodb_table_prefix_configuration():
 @pytest.mark.asyncio
 async def test_dynamodb_resource_is_async_generator():
     """Test that get_dynamodb_resource is properly an async generator."""
-    from collections.abc import AsyncGenerator
 
     dynamodb_gen = get_dynamodb_resource()
     # Verify it's an async generator

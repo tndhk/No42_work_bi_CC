@@ -52,7 +52,6 @@ export type {
   FilterViewCreateRequest,
   FilterViewUpdateRequest,
 } from './filter-view';
-export { isFilterView } from './filter-view';
 
 export type {
   Group,
@@ -62,7 +61,6 @@ export type {
   GroupUpdateRequest,
   AddMemberRequest,
 } from './group';
-export { isGroup } from './group';
 
 export type {
   ApiResponse,
@@ -79,4 +77,11 @@ export type {
   ReimportDryRunResponse,
   ReimportRequest,
 } from './reimport';
-export { isSchemaChange, isReimportDryRunResponse } from './reimport';
+
+export type {
+  Transform,
+  TransformCreateRequest,
+  TransformUpdateRequest,
+  TransformExecuteResponse,
+} from './transform';
+export { isTransform } from './transform';

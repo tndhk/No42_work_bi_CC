@@ -5,7 +5,6 @@ import boto3
 from datetime import datetime
 
 from app.core.security import hash_password, create_access_token
-from app.repositories.user_repository import UserRepository
 from app.core.config import settings
 
 

@@ -112,7 +112,6 @@ test.describe('Dashboard共有フロー', () => {
 test.describe('共有されたダッシュボードの閲覧', () => {
   let cleanup: TestDataCleanup;
   let adminToken: string;
-  let viewerToken: string;
   let dashId: string;
   let dashName: string;
 
@@ -126,7 +125,6 @@ test.describe('共有されたダッシュボードの閲覧', () => {
     };
 
     adminToken = await getAccessToken(ADMIN_EMAIL, ADMIN_PASSWORD);
-    viewerToken = await getAccessToken(VIEWER_EMAIL, VIEWER_PASSWORD);
 
     // ダッシュボード作成
     const csvContent = 'date,product,amount\n2024-01-01,Widget A,1000\n';

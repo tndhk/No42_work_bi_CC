@@ -1,5 +1,4 @@
 """Password policy validation tests following TDD."""
-import pytest
 
 
 class TestPasswordPolicy:

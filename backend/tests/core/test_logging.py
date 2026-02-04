@@ -1,5 +1,4 @@
 """Logging tests following TDD."""
-import pytest
 
 
 def test_setup_logging_configures_structlog():

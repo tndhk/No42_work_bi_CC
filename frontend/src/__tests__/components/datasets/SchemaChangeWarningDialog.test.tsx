@@ -122,7 +122,7 @@ describe('SchemaChangeWarningDialog', () => {
       />
     );
 
-    const table = screen.getByRole('table');
+    screen.getByRole('table');
 
     // added: old_value=null, new_value=TEXT
     const addedRow = screen.getByText('new_column').closest('tr');

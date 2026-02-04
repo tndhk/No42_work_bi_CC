@@ -3,8 +3,6 @@ import pytest
 from datetime import datetime
 from typing import Any
 from pydantic import BaseModel
-import boto3
-from moto import mock_aws
 
 from app.core.config import settings
 
@@ -28,7 +26,7 @@ class TestBaseRepository:
 
         # Setup
         tables, dynamodb = dynamodb_tables
-        table = tables['users']
+        _ = tables['users']
         repo = BaseRepository[TestModel](
             table_name=f"{settings.dynamodb_table_prefix}users",
             pk_name='userId',

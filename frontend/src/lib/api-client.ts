@@ -1,4 +1,4 @@
-import ky, { type KyInstance, type Options } from 'ky';
+import ky, { type KyInstance } from 'ky';
 import { useAuthStore } from '@/stores/auth-store';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -30,5 +30,3 @@ export const apiClient: KyInstance = ky.create({
   },
 });
 
-export type { Options as ApiOptions };
-export default apiClient;

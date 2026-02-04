@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-最終更新: 2026-02-03 (FR-7 Dashboard Sharing / Group Management)
+最終更新: 2026-02-04 (FR-2.1 Transform基盤追加)
 データベース: DynamoDB (NoSQL) + S3 (Parquet)
 
 ---
@@ -8,6 +8,8 @@
 ## DynamoDB テーブル一覧
 
 テーブルプレフィックス: `bi_` (設定可能)
+BillingMode: PAY_PER_REQUEST (全テーブル)
+テーブル総数: 10
 
 | テーブル名 | PK | SK | GSI | 用途 |
 |-----------|-----|-----|-----|------|
@@ -16,11 +18,11 @@
 | bi_cards | cardId (S) | - | CardsByOwner (ownerId + createdAt) | カード |
 | bi_dashboards | dashboardId (S) | - | DashboardsByOwner (ownerId + createdAt) | ダッシュボード |
 | bi_filter_views | filterViewId (S) | - | FilterViewsByDashboard (dashboardId + createdAt) | フィルタービュー |
-| bi_groups | groupId (S) | - | GroupsByName (name) | グループ |
-| bi_group_members | groupId (S) | userId (S) | MembersByUser (userId) | グループメンバー |
-| bi_dashboard_shares | shareId (S) | - | SharesByDashboard (dashboardId), SharesByTarget (sharedToId) | ダッシュボード共有 |
-
-BillingMode: PAY_PER_REQUEST (全テーブル)
+| bi_transforms | transformId (S) | - | TransformsByOwner (ownerId) | Transform定義 [FR-2.1] |
+| bi_transform_executions | transformId (S) | startedAt (N) | - (GSI なし) | Transform実行履歴 [FR-2.1] |
+| bi_groups | groupId (S) | - | GroupsByName (name) | グループ [FR-7] |
+| bi_group_members | groupId (S) | userId (S) | MembersByUser (userId) | グループメンバー [FR-7] |
+| bi_dashboard_shares | shareId (S) | - | SharesByDashboard (dashboardId), SharesByTarget (sharedToId) | ダッシュボード共有 [FR-7] |
 
 ---
 
@@ -103,12 +105,50 @@ GSI: `DashboardsByOwner` (PK: ownerId, SK: createdAt, Projection: ALL)
 | filterViewId | PK | S | UUID |
 | dashboardId | GSI-PK | S | 対象ダッシュボード ID |
 | name | - | S | ビュー名 |
-| values | - | M | フィルタ値 |
 | ownerId | - | S | 作成者 ID |
+| filterState | - | M | フィルタ状態 |
+| isShared | - | BOOL | 共有フラグ |
+| isDefault | - | BOOL | デフォルトフラグ |
 | createdAt | GSI-SK | N | UNIX タイムスタンプ |
 | updatedAt | - | N | UNIX タイムスタンプ |
 
 GSI: `FilterViewsByDashboard` (PK: dashboardId, SK: createdAt, Projection: ALL)
+
+### bi_transforms [FR-2.1]
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| transformId | PK | S | UUID |
+| name | - | S | Transform名 |
+| ownerId | GSI-PK | S | オーナー ID |
+| inputDatasetIds | - | L(S) | 入力データセット ID のリスト (1つ以上) |
+| outputDatasetId | - | S | 出力データセット ID (nullable, 実行後に設定) |
+| code | - | S | Python 変換コード |
+| scheduleCron | - | S | cronスケジュール式 (nullable) |
+| scheduleEnabled | - | BOOL | スケジュール実行有効フラグ (デフォルト false) |
+| createdAt | - | N | UNIX タイムスタンプ |
+| updatedAt | - | N | UNIX タイムスタンプ |
+
+GSI: `TransformsByOwner` (PK: ownerId, Projection: ALL)
+
+### bi_transform_executions [FR-2.1]
+
+複合キーテーブル (transformId + startedAt)。GSI なし。
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| transformId | PK | S | Transform ID |
+| startedAt | SK | N | 実行開始 UNIX タイムスタンプ |
+| executionId | - | S | UUID (実行ごとの一意 ID) |
+| status | - | S | "running" / "success" / "failed" |
+| finishedAt | - | N | 実行完了 UNIX タイムスタンプ (nullable) |
+| durationMs | - | N | 実行時間(ms) (nullable) |
+| outputRowCount | - | N | 出力行数 (nullable) |
+| outputDatasetId | - | S | 出力データセット ID (nullable) |
+| error | - | S | エラーメッセージ (nullable, failed時) |
+| triggeredBy | - | S | "manual" / "schedule" |
+
+クエリパターン: transformId で PK 指定 + startedAt 降順 (ScanIndexForward=False) で最新実行を取得
 
 ### bi_groups [FR-7]
 
@@ -165,6 +205,8 @@ bi-datasets/
 
 フォーマット: Apache Parquet (Snappy 圧縮)
 
+Transform 実行時: 出力は新しい datasetId として `datasets/{newDatasetId}/data/` に保存される。
+
 ---
 
 ## Pydantic モデル (Backend)
@@ -193,14 +235,14 @@ class UserInDB:            # DB保存用 (hashedPassword含む)
     id: str
     email: str
     hashed_password: str
-    role: str = "user"     # [FR-7] "user" / "admin"
+    role: str = "user"     # "user" / "admin"
     created_at: datetime
     updated_at: datetime
 
 class User:                # 公開用 (hashedPassword除外)
     id: str
     email: str
-    role: str = "user"     # [FR-7] "user" / "admin"
+    role: str = "user"     # "user" / "admin"
     created_at: datetime
     updated_at: datetime
 
@@ -314,6 +356,95 @@ class Dashboard(TimestampMixin):
     owner_id: str | None
     filters: list[FilterDefinition] | None
     default_filter_view_id: str | None
+```
+
+### filter_view.py
+
+```python
+class FilterViewCreate:
+    name: str              # min_length=1, 空白バリデーション
+    filter_state: dict[str, Any]
+    is_shared: bool = False
+    is_default: bool = False
+
+class FilterViewUpdate:
+    name: str | None       # min_length=1, 空白バリデーション
+    filter_state: dict[str, Any] | None
+    is_shared: bool | None
+    is_default: bool | None
+
+class FilterView(TimestampMixin):
+    id: str
+    dashboard_id: str
+    name: str
+    owner_id: str
+    filter_state: dict[str, Any]
+    is_shared: bool = False
+    is_default: bool = False
+```
+
+### transform.py [FR-2.1]
+
+```python
+class TransformCreate:
+    name: str              # min_length=1, 空白バリデーション
+    input_dataset_ids: list[str]  # min_length=1
+    code: str              # min_length=1, 空白バリデーション
+    schedule_cron: str | None     # croniter バリデーション
+    schedule_enabled: bool = False
+
+class TransformUpdate:
+    name: str | None       # min_length=1, 空白バリデーション
+    input_dataset_ids: list[str] | None  # min_length=1
+    code: str | None       # min_length=1, 空白バリデーション
+    schedule_cron: str | None     # croniter バリデーション
+    schedule_enabled: bool | None
+
+class Transform(TimestampMixin):
+    id: str
+    name: str
+    owner_id: str
+    input_dataset_ids: list[str]  # min_length=1
+    output_dataset_id: str | None
+    code: str
+    schedule_cron: str | None
+    schedule_enabled: bool = False
+```
+
+### transform_execution.py [FR-2.1]
+
+```python
+class TransformExecution:
+    execution_id: str
+    transform_id: str
+    status: str            # "running" | "success" | "failed"
+    started_at: datetime
+    finished_at: datetime | None
+    duration_ms: float | None
+    output_row_count: int | None
+    output_dataset_id: str | None
+    error: str | None
+    triggered_by: str      # "manual" | "schedule"
+```
+
+### schema_change.py [FR-1.3]
+
+```python
+class SchemaChangeType(str, Enum):
+    ADDED = "added"
+    REMOVED = "removed"
+    TYPE_CHANGED = "type_changed"
+    NULLABLE_CHANGED = "nullable_changed"
+
+class SchemaChange:
+    column_name: str
+    change_type: SchemaChangeType
+    old_value: str | None
+    new_value: str | None
+
+class SchemaCompareResult:
+    has_changes: bool
+    changes: list[SchemaChange]
 ```
 
 ### dashboard_share.py [FR-7]
@@ -495,6 +626,25 @@ interface GroupUpdateRequest { name?: string }
 interface AddMemberRequest { user_id: string }
 ```
 
+### transform.ts [FR-2.1]
+
+```typescript
+interface Transform { id: string; name: string; owner_id: string; input_dataset_ids: string[]; output_dataset_id?: string; schedule_cron?: string; schedule_enabled?: boolean; code: string; owner: OwnerRef; created_at: string; updated_at: string }
+interface TransformCreateRequest { name: string; input_dataset_ids: string[]; code: string; schedule_cron?: string; schedule_enabled?: boolean }
+interface TransformUpdateRequest { name?: string; input_dataset_ids?: string[]; code?: string; schedule_cron?: string; schedule_enabled?: boolean }
+interface TransformExecuteResponse { execution_id: string; output_dataset_id: string; row_count: number; column_names: string[]; execution_time_ms: number }
+interface TransformExecution { execution_id: string; transform_id: string; status: 'running' | 'success' | 'failed'; started_at: string; finished_at?: string; duration_ms?: number; output_row_count?: number; output_dataset_id?: string; error?: string; triggered_by: 'manual' | 'schedule' }
+```
+
+### reimport.ts [FR-1.3]
+
+```typescript
+type SchemaChangeType = 'added' | 'removed' | 'type_changed' | 'nullable_changed'
+interface SchemaChange { column_name: string; change_type: SchemaChangeType; old_value: string | null; new_value: string | null }
+interface ReimportDryRunResponse { has_schema_changes: boolean; changes: SchemaChange[]; new_row_count: number; new_column_count: number }
+interface ReimportRequest { force?: boolean }
+```
+
 ---
 
 ## Type Guard 関数
@@ -509,6 +659,7 @@ interface AddMemberRequest { user_id: string }
 | `isDashboard()` | dashboard.ts | Dashboard |
 | `isLayoutItem()` | dashboard.ts | LayoutItem |
 | `isGroup()` | group.ts | Group |
+| `isTransform()` | transform.ts | Transform |
 | `isApiErrorResponse()` | api.ts | ApiErrorResponse |
 | `isPagination()` | api.ts | Pagination |
 
@@ -521,6 +672,7 @@ erDiagram
     User ||--o{ Dataset : "owns"
     User ||--o{ Card : "owns"
     User ||--o{ Dashboard : "owns"
+    User ||--o{ Transform : "owns"
     User }o--o{ Group : "belongs to (via GroupMember)"
     Dashboard ||--o{ DashboardShare : "shared via"
     DashboardShare }o--|| User : "shared to (user)"
@@ -529,15 +681,26 @@ erDiagram
     GroupMember }o--|| User : "member"
     Dashboard ||--o{ LayoutItem : "contains"
     Dashboard ||--o{ FilterDefinition : "has"
+    Dashboard ||--o{ FilterView : "has views"
     LayoutItem }o--|| Card : "references"
     Card }o--|| Dataset : "uses"
     Dataset ||--|| S3_Parquet : "stored in"
+    Transform }o--o{ Dataset : "input (1..N)"
+    Transform ||--o| Dataset : "output (0..1)"
+    Transform ||--o{ TransformExecution : "execution history"
 ```
 
 ```
   User (bi_users)
     |
     +--< owns >-- Dataset (bi_datasets) ---> S3 Parquet
+    |               ^                ^
+    |               |                |
+    |               | (input 1..N)   | (output 0..1, 実行時に生成)
+    |               |                |
+    +--< owns >-- Transform (bi_transforms)
+    |               |
+    |               +--< history >-- TransformExecution (bi_transform_executions)
     |
     +--< owns >-- Card (bi_cards)
     |               |
@@ -549,6 +712,8 @@ erDiagram
     |               +-- filters[] --> FilterDefinition (options --> Dataset column values)
     |               +-- clone --> new Dashboard (owner=current_user)
     |               |
+    |               +--< views >-- FilterView (bi_filter_views)
+    |               |
     |               +--< shared via >-- DashboardShare (bi_dashboard_shares)
     |                                     |
     |                                     +-- shared_to_type="user"  --> User
@@ -558,6 +723,43 @@ erDiagram
                           |
                           +-- group_id --> Group (bi_groups)
 ```
+
+## データフロー
+
+### CSV インポート -> Parquet 変換
+```
+CSV Upload --> Backend API --> S3 (Parquet) --> Dataset レコード (DynamoDB)
+                                                  |
+                                                  +-- schema (列定義)
+                                                  +-- s3Path (保存先)
+                                                  +-- rowCount / columnCount
+```
+
+### Transform 実行 -> 新規 Dataset 生成
+```
+Transform 実行要求 (manual / schedule)
+  |
+  +-- TransformExecution レコード作成 (status="running")
+  |
+  +-- 入力 Dataset を S3 から読み込み (input_dataset_ids)
+  |
+  +-- Python コード実行 (code)
+  |
+  +-- 出力を新規 Dataset として S3 に保存
+  |
+  +-- Transform.output_dataset_id を更新
+  |
+  +-- TransformExecution ステータス更新 (status="success" or "failed")
+```
+
+### 再インポート (Reimport) [FR-1.3]
+```
+再インポート Dry Run --> スキーマ変更検知 (SchemaChange リスト返却)
+  |
+  +-- force=true で確定 --> 既存 Parquet 上書き --> Dataset レコード更新
+```
+
+---
 
 ## Permission モデル [FR-7]
 
@@ -577,11 +779,12 @@ Permission の優先度: owner > editor > viewer
 
 BaseRepository で自動変換:
 - Python: `snake_case` (created_at) <--> DynamoDB: `camelCase` (createdAt)
-- Python: `id` <--> DynamoDB: テーブル固有PK名 (userId, datasetId, groupId, shareId, etc.)
+- Python: `id` <--> DynamoDB: テーブル固有PK名 (userId, datasetId, groupId, shareId, transformId, etc.)
 - Python: `datetime` <--> DynamoDB: `Number` (UNIX timestamp)
 
-例外: GroupMemberRepository は BaseRepository を継承せず、独自の変換ロジックを使用
-(複合キー groupId + userId を直接操作)
+例外:
+- GroupMemberRepository は BaseRepository を継承せず、独自の変換ロジックを使用 (複合キー groupId + userId を直接操作)
+- TransformExecutionRepository は BaseRepository を継承するが、`create` / `_from_dynamodb_item` をオーバーライド (複合キー transformId + startedAt, Decimal 変換処理)
 
 ## Backend <--> Frontend レスポンスマッピング
 
@@ -591,8 +794,10 @@ BaseRepository で自動変換:
 | `paginated_response(...)` | `PaginatedResponse<T>` | `{ data: T[], pagination: Pagination }` |
 | HTTPException 4xx/5xx | `ApiErrorResponse` | `{ error: { code, message } }` |
 
-一覧 API (GET /datasets, /cards, /dashboards) は全て `paginated_response()` を使用し、
+一覧 API (GET /datasets, /cards, /dashboards, /transforms) は全て `paginated_response()` を使用し、
 `limit` / `offset` クエリパラメータを受け付ける (デフォルト: limit=50, offset=0)。
+
+Transform 実行履歴 (GET /transforms/{id}/executions) は `api_response()` でラップ (ページネーションなし、上限20件)。
 
 ## 関連コードマップ
 

@@ -5,6 +5,7 @@ from app.models.dataset import Dataset, DatasetCreate, DatasetUpdate, ColumnSche
 from app.models.card import Card, CardCreate, CardUpdate
 from app.models.dashboard import Dashboard, DashboardCreate, DashboardUpdate, LayoutItem, FilterDefinition
 from app.models.transform import Transform, TransformCreate, TransformUpdate
+from app.models.audit_log import AuditLog, EventType
 
 __all__ = [
     "BaseResponse",
@@ -28,4 +29,6 @@ __all__ = [
     "Transform",
     "TransformCreate",
     "TransformUpdate",
+    "AuditLog",
+    "EventType",
 ]

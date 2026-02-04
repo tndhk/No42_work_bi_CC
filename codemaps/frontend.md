@@ -1,9 +1,9 @@
 # フロントエンド コードマップ
 
-最終更新: 2026-02-03 (FR-7 Dashboard Sharing / Group Management)
+最終更新: 2026-02-04 (FR-2.1 Transform基盤 Phase 1)
 フレームワーク: React 18 + TypeScript + Vite 5
 エントリポイント: `frontend/src/main.tsx`
-テストカバレッジ: 53テストファイル (Unit) + 4スペック (E2E)
+テストカバレッジ: 64テストファイル (Unit) + 4スペック (E2E)
 
 ---
 
@@ -37,7 +37,7 @@ frontend/
         ErrorBoundary.tsx              # React ErrorBoundary
         Header.tsx                     # ヘッダー (ユーザーメニュー)
         Layout.tsx                     # Sidebar + Header + Outlet
-        Sidebar.tsx                    # ナビゲーション (admin 時 グループ管理リンク表示)
+        Sidebar.tsx                    # ナビゲーション (Transform リンク追加, admin 時 グループ管理リンク表示)
         LoadingSpinner.tsx             # ローディング
         ConfirmDialog.tsx              # 確認ダイアログ
         Pagination.tsx                 # ページネーション
@@ -57,8 +57,16 @@ frontend/
         filters/
           CategoryFilter.tsx           # カテゴリフィルタ (単一/複数選択)
           DateRangeFilter.tsx          # 日付範囲フィルタ (カレンダー)
-      dataset/                         # データセット関連コンポーネント
+      dataset/                         # データセット関連コンポーネント (単数形)
         S3ImportForm.tsx               # S3 CSV インポートフォーム
+      datasets/                        # データセット関連コンポーネント (複数形) [FR-1.3]
+        SchemaChangeWarningDialog.tsx  # スキーマ変更警告ダイアログ (再取り込み時)
+      transform/                       # Transform 関連コンポーネント [FR-2.1]
+        TransformCodeEditor.tsx        # Monaco Editor (Python, Transform 用)
+        DatasetMultiSelect.tsx         # 入力データセット複数選択
+        TransformExecutionResult.tsx   # 実行結果表示 (行数, カラム, 実行時間)
+        TransformExecutionHistory.tsx  # 実行履歴一覧 (ステータスバッジ, 手動/スケジュール区分)
+        TransformScheduleConfig.tsx    # スケジュール設定 (Cron式 + プリセット)
       group/                           # グループ管理コンポーネント [FR-7]
         GroupCreateDialog.tsx           # グループ新規作成ダイアログ
         GroupDetailPanel.tsx            # グループ詳細 + メンバー一覧パネル
@@ -73,23 +81,25 @@ frontend/
       use-auth.ts                      # useLogin, useLogout, useCurrentUser
       use-cards.ts                     # useCards, useCard, CRUD + execute + preview
       use-dashboards.ts                # useDashboards, useDashboard, CRUD + clone
-      use-datasets.ts                  # useDatasets, useDataset, CRUD + preview + S3 import
+      use-datasets.ts                  # useDatasets, useDataset, CRUD + preview + S3 import + reimport [FR-1.3]
       use-dashboard-shares.ts          # useShares, useCreateShare, useUpdateShare, useDeleteShare [FR-7]
       use-filter-views.ts              # useFilterViews, CRUD
       use-groups.ts                    # useGroups, useGroup, CRUD + useAddMember, useRemoveMember [FR-7]
+      use-transforms.ts               # useTransforms, useTransform, CRUD + execute + executions [FR-2.1]
     lib/
       api-client.ts                    # ky ベース HTTPクライアント (JWT自動付与)
       utils.ts                         # cn() (clsx + tailwind-merge)
       layout-utils.ts                  # toRGLLayout(), fromRGLLayout()
       api/
-        index.ts                       # barrel export (7 API モジュール)
+        index.ts                       # barrel export (8 API モジュール)
         auth.ts                        # authApi
         cards.ts                       # cardsApi
         dashboards.ts                  # dashboardsApi
-        datasets.ts                    # datasetsApi
+        datasets.ts                    # datasetsApi (reimportDryRun, reimport 追加) [FR-1.3]
         dashboard-shares.ts            # dashboardSharesApi [FR-7]
         filter-views.ts                # filterViewsApi
         groups.ts                      # groupsApi [FR-7]
+        transforms.ts                  # transformsApi [FR-2.1]
     pages/
       LoginPage.tsx                    # ログインフォーム
       DashboardListPage.tsx            # ダッシュボード一覧 (権限バッジ, 権限別操作ボタン表示)
@@ -97,9 +107,11 @@ frontend/
       DashboardEditPage.tsx            # ダッシュボード編集 (viewer リダイレクト)
       DatasetListPage.tsx              # データセット一覧
       DatasetImportPage.tsx            # CSVインポート
-      DatasetDetailPage.tsx            # データセット詳細
+      DatasetDetailPage.tsx            # データセット詳細 (再取り込み+スキーマ変更警告) [FR-1.3]
       CardListPage.tsx                 # カード一覧
       CardEditPage.tsx                 # カード編集 (コードエディタ)
+      TransformListPage.tsx            # Transform 一覧 (CRUD + ページネーション) [FR-2.1]
+      TransformEditPage.tsx            # Transform 編集 (コード/データセット選択/スケジュール/実行/履歴) [FR-2.1]
       GroupListPage.tsx                # グループ管理 (admin専用) [FR-7]
     stores/
       auth-store.ts                    # Zustand 認証ストア
@@ -109,17 +121,20 @@ frontend/
       user.ts                          # User, UserWithGroups, GroupRef, LoginRequest, LoginResponse
       card.ts                          # Card, CardDetail, execute/preview 型
       dashboard.ts                     # Dashboard, LayoutItem, FilterDefinition, DashboardShare, Permission, SharedToType
-      dataset.ts                       # Dataset, ColumnSchema, DatasetPreview
+      dataset.ts                       # Dataset, ColumnSchema, DatasetPreview, OwnerRef
       filter-view.ts                   # FilterView, FilterViewCreateRequest, FilterViewUpdateRequest
       group.ts                         # Group, GroupDetail, GroupMember, GroupCreateRequest, GroupUpdateRequest, AddMemberRequest [FR-7]
-    __tests__/                         # Vitest テストスイート (53ファイル)
+      reimport.ts                      # SchemaChange, ReimportDryRunResponse, ReimportRequest [FR-1.3]
+      transform.ts                     # Transform, TransformCreateRequest, TransformUpdateRequest, TransformExecuteResponse, TransformExecution, isTransform [FR-2.1]
+    __tests__/                         # Vitest テストスイート (64ファイル)
       setup.ts                         # jest-dom matchers, CSS mock
       vitest.d.ts                      # カスタム型定義
       helpers/
-        test-utils.tsx                 # renderWithProviders, factory 関数
+        test-utils.tsx                 # renderWithProviders, factory 関数 (createMockTransform, createMockTransformExecution 追加)
       App.test.tsx                     # App コンポーネントテスト
       types/
         type-guards.test.ts            # 全 type guard テスト
+        transform-type-guards.test.ts  # Transform type guard テスト [FR-2.1]
       stores/
         auth-store.test.ts             # Zustand ストアテスト
       hooks/
@@ -130,6 +145,7 @@ frontend/
         use-dashboard-shares.test.ts   # 共有 hooks テスト [FR-7]
         use-filter-views.test.ts       # FilterView hooks テスト
         use-groups.test.ts             # グループ hooks テスト [FR-7]
+        use-transforms.test.ts         # Transform hooks テスト [FR-2.1]
       lib/
         api-client.test.ts             # HTTP クライアントテスト
         layout-utils.test.ts           # レイアウトユーティリティテスト
@@ -140,6 +156,7 @@ frontend/
           dashboards.test.ts           # dashboardsApi テスト
           datasets.test.ts             # datasetsApi テスト
           filter-views.test.ts         # filterViewsApi テスト
+          transforms.test.ts           # transformsApi テスト [FR-2.1]
       components/
         common/
           AuthGuard.test.tsx           # 認証ガードテスト
@@ -168,6 +185,14 @@ frontend/
             DateRangeFilter.test.tsx   # 日付範囲フィルタテスト
         dataset/
           S3ImportForm.test.tsx        # S3 インポートフォームテスト
+        datasets/                      # [FR-1.3]
+          SchemaChangeWarningDialog.test.tsx # スキーマ変更警告ダイアログテスト
+        transform/                     # [FR-2.1]
+          TransformCodeEditor.test.tsx # コードエディタテスト
+          DatasetMultiSelect.test.tsx   # データセット複数選択テスト
+          TransformExecutionResult.test.tsx # 実行結果表示テスト
+          TransformExecutionHistory.test.tsx # 実行履歴テスト
+          TransformScheduleConfig.test.tsx # スケジュール設定テスト
         group/                         # グループコンポーネントテスト [FR-7]
           GroupCreateDialog.test.tsx    # グループ作成ダイアログテスト
           GroupDetailPanel.test.tsx     # グループ詳細パネルテスト
@@ -183,6 +208,8 @@ frontend/
         DatasetDetailPage.test.tsx     # データセット詳細テスト
         CardListPage.test.tsx          # カード一覧テスト
         CardEditPage.test.tsx          # カード編集テスト
+        TransformListPage.test.tsx     # Transform 一覧テスト [FR-2.1]
+        TransformEditPage.test.tsx     # Transform 編集テスト [FR-2.1]
 ```
 
 ## ルーティング
@@ -196,9 +223,11 @@ frontend/
 | `/dashboards/:id/edit` | DashboardEditPage | 必要 | ダッシュボード編集 (viewer はリダイレクト) |
 | `/datasets` | DatasetListPage | 必要 | データセット一覧 |
 | `/datasets/import` | DatasetImportPage | 必要 | CSVインポート |
-| `/datasets/:id` | DatasetDetailPage | 必要 | データセット詳細 |
+| `/datasets/:id` | DatasetDetailPage | 必要 | データセット詳細 (再取り込みボタン) [FR-1.3] |
 | `/cards` | CardListPage | 必要 | カード一覧 |
 | `/cards/:id` | CardEditPage | 必要 | カード編集 (new/既存) |
+| `/transforms` | TransformListPage | 必要 | Transform 一覧 [FR-2.1] |
+| `/transforms/:id` | TransformEditPage | 必要 | Transform 編集 (new/既存) [FR-2.1] |
 | `/admin/groups` | GroupListPage | 必要 | グループ管理 (admin 専用, Sidebar から遷移) [FR-7] |
 
 ## コンポーネント依存関係グラフ
@@ -225,6 +254,7 @@ App.tsx
               +-- Sidebar
               |     +-- NavLink (react-router-dom)
               |     +-- useAuthStore (store) -- user.role チェック
+              |     +-- 常時表示: ダッシュボード, データセット, Transform, カード
               |     +-- admin の場合: グループ管理 (/admin/groups) リンクを追加表示
               +-- Outlet --> 各ページ
 ```
@@ -276,6 +306,30 @@ DashboardEditPage
         +-- dashboardsApi.getReferencedDatasets()
         +-- datasetsApi.getColumnValues()
 
+DatasetDetailPage [FR-1.3 拡張]
+  +-- useDataset, useDatasetPreview, useReimportDryRun, useReimportDataset
+  +-- SchemaChangeWarningDialog (components/datasets/)
+  |     +-- スキーマ変更検出時に警告表示、force 再取り込み確認
+  +-- LoadingSpinner
+
+TransformListPage [FR-2.1]
+  +-- useTransforms, useDeleteTransform
+  +-- LoadingSpinner, Pagination, ConfirmDialog
+  +-- ui/table, ui/button
+  +-- 一覧表示: 名前, 入力データセット数, オーナー, 更新日時
+
+TransformEditPage [FR-2.1]
+  +-- useTransform, useCreateTransform, useUpdateTransform, useExecuteTransform, useDatasets
+  +-- TransformCodeEditor (Monaco Editor, Python)
+  +-- DatasetMultiSelect (入力データセット複数選択)
+  +-- TransformScheduleConfig (Cron式, プリセット, 有効/無効切替)
+  +-- TransformExecutionResult (行数, カラム, 実行時間, 出力データセットリンク)
+  +-- TransformExecutionHistory (実行履歴一覧)
+  |     +-- useTransformExecutions
+  |     +-- ステータスバッジ (success/failed/running)
+  |     +-- 手動実行 / スケジュール実行 区分表示
+  +-- 2カラムレイアウト: 左=設定+コード, 右=結果+履歴
+
 GroupListPage [FR-7]
   +-- useGroups, useDeleteGroup
   +-- LoadingSpinner, ConfirmDialog
@@ -298,9 +352,6 @@ DatasetListPage
 
 DatasetImportPage
   +-- useCreateDataset
-
-DatasetDetailPage
-  +-- useDataset, useDatasetPreview
 ```
 
 ## レイアウトユーティリティ (lib/layout-utils.ts)
@@ -353,6 +404,9 @@ interface AuthState {
 | `['datasets', id, 'preview', limit?]` | useDatasetPreview | プレビュー |
 | `['cards', params?]` | useCards | カード一覧 |
 | `['cards', id]` | useCard | カード詳細 |
+| `['transforms', params?]` | useTransforms | Transform 一覧 [FR-2.1] |
+| `['transforms', id]` | useTransform | Transform 詳細 [FR-2.1] |
+| `['transform-executions', id, params?]` | useTransformExecutions | Transform 実行履歴 [FR-2.1] |
 | `['shares', dashboardId]` | useShares | ダッシュボード共有一覧 [FR-7] |
 | `['groups']` | useGroups | グループ一覧 [FR-7] |
 | `['groups', groupId]` | useGroup | グループ詳細 (メンバー含む) [FR-7] |
@@ -367,10 +421,11 @@ lib/api-client.ts (ky ベース)
   +-- lib/api/auth.ts              authApi.login(), logout(), me()
   +-- lib/api/cards.ts              cardsApi.list(), get(), create(), update(), delete(), execute(), preview()
   +-- lib/api/dashboards.ts         dashboardsApi.list(), get(), create(), update(), delete(), clone(), getReferencedDatasets()
-  +-- lib/api/datasets.ts           datasetsApi.list(), get(), create(FormData), update(), delete(), preview(), getColumnValues()
+  +-- lib/api/datasets.ts           datasetsApi.list(), get(), create(FormData), update(), delete(), preview(), getColumnValues(), s3Import(), reimportDryRun(), reimport() [FR-1.3]
   +-- lib/api/dashboard-shares.ts   dashboardSharesApi.list(), create(), update(), delete() [FR-7]
   +-- lib/api/filter-views.ts       filterViewsApi.list(), create(), update(), delete()
   +-- lib/api/groups.ts             groupsApi.list(), get(), create(), update(), delete(), addMember(), removeMember() [FR-7]
+  +-- lib/api/transforms.ts         transformsApi.list(), get(), create(), update(), delete(), execute(), listExecutions() [FR-2.1]
 ```
 
 ## hooks 一覧
@@ -413,6 +468,19 @@ lib/api-client.ts (ky ベース)
 | `useUpdateDataset()` | mutation | データセット更新 |
 | `useDeleteDataset()` | mutation | データセット削除 |
 | `useS3ImportDataset()` | mutation | S3 CSV インポート |
+| `useReimportDryRun()` | mutation | 再取り込み dry-run (スキーマ変更検出) [FR-1.3] |
+| `useReimportDataset()` | mutation | 再取り込み実行 (force オプション) [FR-1.3] |
+
+### use-transforms.ts [FR-2.1]
+| hook | 種別 | 説明 |
+|------|------|------|
+| `useTransforms(params?)` | query | Transform 一覧 |
+| `useTransform(transformId)` | query | Transform 詳細 |
+| `useCreateTransform()` | mutation | Transform 作成 |
+| `useUpdateTransform()` | mutation | Transform 更新 |
+| `useDeleteTransform()` | mutation | Transform 削除 |
+| `useExecuteTransform()` | mutation | Transform 手動実行 |
+| `useTransformExecutions(id, params?)` | query | Transform 実行履歴 |
 
 ### use-dashboard-shares.ts [FR-7]
 | hook | 種別 | 説明 |
@@ -440,6 +508,20 @@ lib/api-client.ts (ky ベース)
 | `useCreateFilterView()` | mutation | FilterView 作成 |
 | `useUpdateFilterView()` | mutation | FilterView 更新 |
 | `useDeleteFilterView()` | mutation | FilterView 削除 |
+
+## 型定義一覧
+
+| ファイル | 主要な型 | 備考 |
+|---------|---------|------|
+| `api.ts` | ApiResponse, PaginatedResponse, PaginationParams, isApiErrorResponse, isPagination | 共通 API レスポンス型 |
+| `user.ts` | User, UserWithGroups, GroupRef, LoginRequest, LoginResponse, isUser, isLoginResponse | 認証・ユーザー |
+| `dataset.ts` | Dataset, DatasetDetail, ColumnSchema, OwnerRef, DatasetPreview, S3ImportRequest | データセット |
+| `card.ts` | Card, CardRef, CardDetail, CardExecuteRequest, CardExecuteResponse, CardPreviewResponse, isCard | カード |
+| `dashboard.ts` | Dashboard, DashboardDetail, LayoutItem, FilterDefinition, DashboardShare, Permission, SharedToType, isDashboard, isLayoutItem | ダッシュボード |
+| `filter-view.ts` | FilterView, FilterViewCreateRequest, FilterViewUpdateRequest | フィルタビュー |
+| `group.ts` | Group, GroupDetail, GroupMember, GroupCreateRequest, GroupUpdateRequest, AddMemberRequest | グループ [FR-7] |
+| `reimport.ts` | SchemaChange, SchemaChangeType, ReimportDryRunResponse, ReimportRequest | 再取り込み [FR-1.3] |
+| `transform.ts` | Transform, TransformCreateRequest, TransformUpdateRequest, TransformExecuteResponse, TransformExecution, isTransform | Transform [FR-2.1] |
 
 ## カード描画セキュリティ
 
@@ -534,6 +616,8 @@ TestDataCleanup 型 (cleanup トラッキング):
 | `createMockDataset(overrides?)` | Dataset ファクトリ |
 | `createMockCard(overrides?)` | Card ファクトリ |
 | `createMockDashboard(overrides?)` | Dashboard ファクトリ |
+| `createMockTransform(overrides?)` | Transform ファクトリ [FR-2.1] |
+| `createMockTransformExecution(overrides?)` | TransformExecution ファクトリ [FR-2.1] |
 | `createMockPaginatedResponse(items, total?)` | PaginatedResponse ファクトリ |
 
 ### テストカバレッジマトリクス
@@ -541,19 +625,21 @@ TestDataCleanup 型 (cleanup トラッキング):
 | 対象カテゴリ | テストファイル数 | テスト対象 |
 |-------------|-----------------|-----------|
 | App | 1 | App.test.tsx |
-| Types | 1 | type-guards.test.ts |
-| Stores | 1 | auth-store.test.ts |
-| Hooks | 7 | use-auth, use-cards, use-dashboards, use-datasets, use-dashboard-shares, use-filter-views, use-groups |
+| Types | 2 | type-guards, transform-type-guards [FR-2.1] |
+| Stores | 1 | auth-store |
+| Hooks | 8 | use-auth, use-cards, use-dashboards, use-datasets, use-dashboard-shares, use-filter-views, use-groups, use-transforms [FR-2.1] |
 | Lib | 3 | api-client, layout-utils, utils |
-| Lib/API | 5 | auth, cards, dashboards, datasets, filter-views |
+| Lib/API | 6 | auth, cards, dashboards, datasets, filter-views, transforms [FR-2.1] |
 | Components/common | 8 | AuthGuard, ConfirmDialog, ErrorBoundary, Header, Layout, LoadingSpinner, Pagination, Sidebar |
 | Components/card | 2 | CardEditor, CardPreview |
 | Components/dashboard | 10 | AddCardDialog, CardContainer, DashboardEditor, DashboardViewer, FilterBar, FilterConfigPanel, FilterDefinitionForm, FilterViewSelector, ShareDialog |
 | Components/dashboard/filters | 2 | CategoryFilter, DateRangeFilter |
 | Components/dataset | 1 | S3ImportForm |
-| Components/group | 4 | GroupCreateDialog, GroupDetailPanel, GroupListPage, MemberAddDialog |
-| Pages | 9 | Login, DashboardList/View/Edit, DatasetList/Import/Detail, CardList/Edit |
-| 合計 (Unit) | 53 | -- |
+| Components/datasets | 1 | SchemaChangeWarningDialog [FR-1.3] |
+| Components/transform | 5 | TransformCodeEditor, DatasetMultiSelect, TransformExecutionResult, TransformExecutionHistory, TransformScheduleConfig [FR-2.1] |
+| Components/group | 4 | GroupCreateDialog, GroupDetailPanel, GroupListPage, MemberAddDialog [FR-7] |
+| Pages | 11 | Login, DashboardList/View/Edit, DatasetList/Import/Detail, CardList/Edit, TransformList/Edit [FR-2.1] |
+| 合計 (Unit) | 64 | -- |
 
 ## 関連コードマップ
 

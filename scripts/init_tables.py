@@ -15,7 +15,7 @@ dynamodb = boto3.resource(
     aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY', 'dummy'),
 )
 
-# MVP用テーブル定義 (4テーブルのみ)
+# テーブル定義 (全11テーブル)
 TABLES = [
     {
         'TableName': 'bi_users',
@@ -109,6 +109,68 @@ TABLES = [
         ],
     },
     {
+        'TableName': 'bi_groups',
+        'KeySchema': [{'AttributeName': 'groupId', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'groupId', 'AttributeType': 'S'},
+            {'AttributeName': 'name', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'GroupsByName',
+                'KeySchema': [
+                    {'AttributeName': 'name', 'KeyType': 'HASH'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_group_members',
+        'KeySchema': [
+            {'AttributeName': 'groupId', 'KeyType': 'HASH'},
+            {'AttributeName': 'userId', 'KeyType': 'RANGE'},
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'groupId', 'AttributeType': 'S'},
+            {'AttributeName': 'userId', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'MembersByUser',
+                'KeySchema': [
+                    {'AttributeName': 'userId', 'KeyType': 'HASH'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_dashboard_shares',
+        'KeySchema': [{'AttributeName': 'shareId', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'shareId', 'AttributeType': 'S'},
+            {'AttributeName': 'dashboardId', 'AttributeType': 'S'},
+            {'AttributeName': 'sharedToId', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'SharesByDashboard',
+                'KeySchema': [
+                    {'AttributeName': 'dashboardId', 'KeyType': 'HASH'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+            {
+                'IndexName': 'SharesByTarget',
+                'KeySchema': [
+                    {'AttributeName': 'sharedToId', 'KeyType': 'HASH'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
         'TableName': 'bi_transforms',
         'KeySchema': [{'AttributeName': 'transformId', 'KeyType': 'HASH'}],
         'AttributeDefinitions': [
@@ -134,6 +196,37 @@ TABLES = [
         'AttributeDefinitions': [
             {'AttributeName': 'transformId', 'AttributeType': 'S'},
             {'AttributeName': 'startedAt', 'AttributeType': 'N'},
+        ],
+    },
+    {
+        'TableName': 'bi_audit_logs',
+        'KeySchema': [
+            {'AttributeName': 'logId', 'KeyType': 'HASH'},
+            {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+        ],
+        'AttributeDefinitions': [
+            {'AttributeName': 'logId', 'AttributeType': 'S'},
+            {'AttributeName': 'timestamp', 'AttributeType': 'N'},
+            {'AttributeName': 'userId', 'AttributeType': 'S'},
+            {'AttributeName': 'targetId', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'LogsByUser',
+                'KeySchema': [
+                    {'AttributeName': 'userId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+            {
+                'IndexName': 'LogsByTarget',
+                'KeySchema': [
+                    {'AttributeName': 'targetId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
         ],
     },
 ]

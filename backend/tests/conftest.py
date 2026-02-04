@@ -349,6 +349,42 @@ def dynamodb_tables() -> Generator[tuple[dict[str, Any], Any], None, None]:
         )
         tables['transform_executions'] = transform_executions_table
 
+        # Audit logs table
+        audit_logs_table_name = f"{settings.dynamodb_table_prefix}audit_logs"
+        audit_logs_table = dynamodb.create_table(
+            TableName=audit_logs_table_name,
+            KeySchema=[
+                {'AttributeName': 'logId', 'KeyType': 'HASH'},
+                {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'logId', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'N'},
+                {'AttributeName': 'userId', 'AttributeType': 'S'},
+                {'AttributeName': 'targetId', 'AttributeType': 'S'},
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            GlobalSecondaryIndexes=[
+                {
+                    'IndexName': 'LogsByUser',
+                    'KeySchema': [
+                        {'AttributeName': 'userId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                },
+                {
+                    'IndexName': 'LogsByTarget',
+                    'KeySchema': [
+                        {'AttributeName': 'targetId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'}
+                }
+            ]
+        )
+        tables['audit_logs'] = audit_logs_table
+
         yield (tables, dynamodb)
 
 

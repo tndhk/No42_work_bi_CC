@@ -1,236 +1,154 @@
 ==============================================================================
 コードマップ差分レポート
-生成日時: 2026-02-01
-トリガー: フィルタ機能追加 (FilterBar, FilterConfigPanel, FilterDefinitionForm, CategoryFilter, DateRangeFilter)
+生成日時: 2026-02-04
+トリガー: FR-2.1/2.2/2.3 Transform基盤 + 実行履歴 + スケジューラ + 実行制約
 ==============================================================================
 
-状態: 既存コードマップからの更新 (前回: 2026-02-01 Phase Q4 E2E + Q5 完了後)
+状態: 既存コードマップからの更新 (前回: 2026-02-01 フィルタ機能追加後)
 
 ------------------------------------------------------------------------------
 変更概要
 ------------------------------------------------------------------------------
 
 今回の更新トリガー:
-- frontend/src/components/dashboard/FilterBar.tsx 追加 (閲覧モード用フィルタバー)
-- frontend/src/components/dashboard/FilterConfigPanel.tsx 追加 (編集モード用フィルタ設定)
-- frontend/src/components/dashboard/FilterDefinitionForm.tsx 追加 (フィルタ定義フォーム)
-- frontend/src/components/dashboard/filters/CategoryFilter.tsx 追加 (カテゴリフィルタ)
-- frontend/src/components/dashboard/filters/DateRangeFilter.tsx 追加 (日付範囲フィルタ)
-- frontend/src/components/ui/ 追加 (calendar, checkbox, popover, select)
-- frontend/src/lib/api/datasets.ts 更新 (getColumnValues() 追加)
-- frontend/src/lib/api/dashboards.ts 更新 (getReferencedDatasets() 追加)
-- frontend/src/types/dashboard.ts 更新 (FilterDefinition に options フィールド追加)
-- frontend/src/pages/DashboardViewPage.tsx 更新 (FilterBar 統合)
-- frontend/src/pages/DashboardEditPage.tsx 更新 (FilterConfigPanel 統合)
-- frontend/src/components/dashboard/DashboardViewer.tsx 更新 (filterValues 対応)
-- frontend/src/components/dashboard/CardContainer.tsx 更新 (filterApplied 対応)
-- backend/app/api/routes/datasets.py 更新 (get_column_values エンドポイント追加)
-- backend/app/models/dashboard.py 更新 (FilterDefinition に options 追加)
-- backend/app/services/dataset_service.py 更新 (get_column_values メソッド追加)
-- frontend/package.json 更新 (date-fns, react-day-picker 追加)
-- フィルタ関連テスト 5ファイル追加 (FilterBar, FilterConfigPanel, FilterDefinitionForm, CategoryFilter, DateRangeFilter)
+- FR-2.1 Transform CRUD + 手動実行 (Backend API/Repository + Frontend UI)
+- FR-2.2 Transform実行履歴 + asyncioスケジューラによるcron式自動実行
+- FR-2.3 Transform実行制約 (TransformRunner, 300秒タイムアウト, 4096MBメモリ制限)
+- FR-1.3 Dataset再取り込み反映漏れ修正 (SchemaChange, reimport関連)
+- DynamoDBテーブル 8 -> 10 (bi_transforms, bi_transform_executions追加)
+- init_tables.py: bi_groups, bi_group_members, bi_dashboard_shares 定義追加
 
 ------------------------------------------------------------------------------
 ファイルごとの差分率
 ------------------------------------------------------------------------------
 
                        旧行数   新行数   差分行数   差分率    判定
-architecture.md          263      267       +4      1.5%    AUTO UPDATE
-backend.md               284      285       +1      0.4%    AUTO UPDATE
-frontend.md              426      447      +21      4.9%    AUTO UPDATE
-data.md                  430      431       +1      0.2%    AUTO UPDATE
+architecture.md          369      499     +130     35.2%    APPROVAL REQUIRED
+backend.md               486      796     +310     63.7%    APPROVAL REQUIRED
+data.md                  601      806     +205     34.1%    APPROVAL REQUIRED
+frontend.md              562      648      +86     15.3%    AUTO UPDATE
 ------------------------------------------------------------------------------
-合計                    1403     1430      +27      1.9%    AUTO UPDATE
+合計                    2018     2749     +731     36.2%    APPROVAL REQUIRED
 
-git diff 統計: 55 insertions(+), 28 deletions(-), 4 files changed
-全体差分率: 1.9% (閾値 30% 未満 --> 自動更新承認)
-
-------------------------------------------------------------------------------
-architecture.md の変更内容 (6箇所編集, +4行, 1.5%)
-------------------------------------------------------------------------------
-
-[UPDATED] 最終更新タイムスタンプ ("Phase Q4 E2E + Q5 + フィルタ機能" 追記)
-[UPDATED] テストインフラストラクチャ テーブル -- テスト数更新
-          (Frontend Unit: 37ファイル/227テスト --> 42ファイル/262テスト)
-[NEW]     サービス間通信 -- GET /api/datasets/:id/columns/:col/values エンドポイント追加
-          (Backend --> S3/MinIO への通信経路)
-[UPDATED] データフロー: ダッシュボード表示 -- FilterBar ステップ追加
-          (フィルタ定義からUI描画、filterValues を onExecuteCard に渡す流れ)
-[NEW]     主要依存ライブラリ Frontend -- date-fns 4.1.0 (日付フォーマット) 追加
-[NEW]     主要依存ライブラリ Frontend -- react-day-picker 9.13.0 (カレンダーUI) 追加
+git diff 統計: 881 insertions(+), 150 deletions(-), 4 files changed
+全体差分率: 36.2% (閾値 30% 超過 --> 承認が必要)
 
 ------------------------------------------------------------------------------
-backend.md の変更内容 (4箇所編集, +1行, 0.4%)
+architecture.md の変更内容 (+181, -51, 35.2%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ ("Phase Q4 E2E + Q5 + フィルタ機能" 追記)
-[NEW]     API ルートテーブル -- GET /api/datasets/:id/columns/:col/values 追加
-          (カラムユニーク値取得、api_response 形式)
-[UPDATED] models/dashboard.py 記述 -- FilterDefinition の説明に "(options付き)" 追記
-[UPDATED] サービス依存 -- parquet_storage 記述に "(get_column_values 含む)" 追記
+[UPDATED] 最終更新タイムスタンプ (FR-2.1 Transform基盤 Phase 1 追加)
+[UPDATED] システム構成図: DynamoDB 8->10テーブル、API ServerにScheduler追記
+[NEW]     Transform CRUD API (/api/transforms/*) 通信パターン追加
+[NEW]     Transform実行フロー (POST /api/transforms/:id/execute --> S3 --> Executor --> S3 --> DynamoDB)
+[NEW]     Transform実行履歴 (GET /api/transforms/:id/executions)
+[NEW]     Scheduler通信パターン (DynamoDB scan --> croniter判定 --> TransformExecutionService)
+[NEW]     データフロー: Transform実行 [FR-2.1] セクション (手動/スケジュール)
+[NEW]     DynamoDBテーブル: bi_transforms (GSI: TransformsByOwner), bi_transform_executions (複合キー)
+[UPDATED] リポジトリ一覧: 8->10 (TransformRepository, TransformExecutionRepository追加)
+[NEW]     サービス一覧セクション (11サービス)
+[UPDATED] APIルーター一覧: /api/transforms追加
+[NEW]     フロントエンド ルーティング セクション (全12ルート)
+[NEW]     フロントエンド Transform コンポーネント セクション (7コンポーネント)
+[NEW]     スケジューラ アーキテクチャ セクション (asyncio, lifespan, 設定値)
+[UPDATED] 環境変数: SCHEDULER_ENABLED, SCHEDULER_INTERVAL_SECONDS, TRANSFORM_TIMEOUT_SECONDS追加
+[UPDATED] 依存ライブラリ: croniter, httpx追加
+[UPDATED] テストファイル数: Backend 37->52, Frontend 42->67, E2E 3->4
 
 ------------------------------------------------------------------------------
-frontend.md の変更内容 (8箇所編集, +21行, 4.9%)
+backend.md の変更内容 (+373, -63, 63.7%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ ("Phase Q4 E2E + Q5 + フィルタ機能" 追記)
-[UPDATED] ヘッダー テストカバレッジ -- テスト数更新 (42ファイル / 262テスト)
-[NEW]     ディレクトリ構造 components/dashboard/ -- フィルタコンポーネント 5ファイル追加
-          FilterBar.tsx, FilterConfigPanel.tsx, FilterDefinitionForm.tsx,
-          filters/CategoryFilter.tsx, filters/DateRangeFilter.tsx
-[NEW]     ディレクトリ構造 components/ui/ -- UI コンポーネント 4ファイル追加
-          calendar.tsx, checkbox.tsx, popover.tsx, select.tsx
-[NEW]     ディレクトリ構造 __tests__/components/dashboard/ -- フィルタテスト 5ファイル追加
-          FilterBar.test.tsx (7テスト), FilterConfigPanel.test.tsx (6テスト),
-          FilterDefinitionForm.test.tsx (6テスト),
-          filters/CategoryFilter.test.tsx (10テスト), filters/DateRangeFilter.test.tsx (6テスト)
-[UPDATED] ページ依存関係グラフ DashboardViewPage -- FilterBar 追加
-          FilterBar --> CategoryFilter (filters/), DateRangeFilter (filters/)
-[UPDATED] ページ依存関係グラフ DashboardEditPage -- FilterConfigPanel 追加
-          FilterConfigPanel --> FilterDefinitionForm,
-          dashboardsApi.getReferencedDatasets(), datasetsApi.getColumnValues()
-[UPDATED] API クライアント層 -- datasets.ts に getColumnValues() 追加
-          dashboards.ts に getReferencedDatasets() 追加
-[UPDATED] UI コンポーネント (shadcn/ui) 一覧 -- calendar, checkbox, popover, select 追加
-[UPDATED] テストカバレッジマトリクス -- dashboard テスト 3-->7ファイル,
-          filters カテゴリ新設 (2ファイル), 合計 42ファイル
+[UPDATED] 最終更新タイムスタンプ (FR-2.1)
+[NEW]     ディレクトリ構造: Transform関連 10ファイル追加
+            models/transform.py, models/transform_execution.py, models/schema_change.py,
+            models/filter_view.py, repositories/transform_repository.py,
+            repositories/transform_execution_repository.py, repositories/filter_view_repository.py,
+            services/transform_execution_service.py, services/transform_scheduler_service.py,
+            services/schema_comparator.py, routes/transforms.py
+[NEW]     API routes: Transform 7エンドポイント (CRUD + execute + execution history)
+[NEW]     Dataset API: s3-import, reimport/dry-run, reimport [FR-1.3]
+[NEW]     FilterView API (dashboard-scoped + independent routes)
+[NEW]     モデル: Transform (croniter validation), TransformExecution (status lifecycle)
+[NEW]     モデル: SchemaChange/SchemaCompareResult [FR-1.3], FilterView
+[UPDATED] Dataset: source_type "transform" 追加
+[NEW]     リポジトリ: TransformRepository (GSI TransformsByOwner)
+[NEW]     リポジトリ: TransformExecutionRepository (複合キー, _from_dynamodb_item override, Decimal変換)
+[NEW]     リポジトリ: FilterViewRepository (GSI FilterViewsByDashboard)
+[UPDATED] サービス依存グラフ拡張
+[NEW]     Transform手動実行フロー (9ステップ)
+[NEW]     Schedulerスケジュール実行フロー (asyncio background loop)
+[NEW]     Dataset再取り込みフロー [FR-1.3]
+[UPDATED] 設定テーブル: scheduler/transform関連追加
+[UPDATED] 依存パッケージテーブル構造化 (production/dev分離)
+[UPDATED] DynamoDBテーブル一覧: bi_transforms, bi_transform_executions, bi_filter_views追加
+[UPDATED] テストカバレッジ一覧: Transform関連テスト6ファイル追加
 
 ------------------------------------------------------------------------------
-data.md の変更内容 (4箇所編集, +1行, 0.2%)
+data.md の変更内容 (+218, -13, 34.1%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ ("Phase Q4 E2E + Q5 + フィルタ機能" 追記)
-[UPDATED] Backend FilterDefinition モデル -- options フィールド追加
-          (options: list[str] | None = None  # カテゴリフィルタ選択肢)
-[UPDATED] Frontend FilterDefinition 型 -- options フィールド追加
-          (options?: string[]  # FilterDefinition.options)
-[UPDATED] エンティティ関係図 -- filters[] 記述更新
-          (options --> Dataset column values の参照関係を明示)
+[UPDATED] 最終更新タイムスタンプ (FR-2.1 Transform基盤追加)
+[NEW]     DynamoDBテーブル: bi_transforms (PK: transformId, GSI: TransformsByOwner)
+[NEW]     DynamoDBテーブル: bi_transform_executions (PK: transformId, SK: startedAt)
+[UPDATED] テーブル総数: 10テーブルを明記
+[NEW]     スキーマ詳細: bi_transforms 全属性+クエリパターン
+[NEW]     スキーマ詳細: bi_transform_executions 全属性+クエリパターン (ScanIndexForward=False)
+[UPDATED] スキーマ詳細: bi_filter_views 欠落属性追加 (filterState, isShared, isDefault, ownerId)
+[NEW]     S3ストレージ: Transform実行時の出力保存先追記
+[NEW]     Pydanticモデル: transform.py (TransformCreate, TransformUpdate, Transform)
+[NEW]     Pydanticモデル: transform_execution.py (TransformExecution, status/triggered_by列挙)
+[NEW]     Pydanticモデル: schema_change.py [FR-1.3] (SchemaChangeType, SchemaChange, SchemaCompareResult)
+[NEW]     Pydanticモデル: filter_view.py (FilterViewCreate, FilterViewUpdate, FilterView)
+[NEW]     TypeScript型: transform.ts (Transform, TransformCreateRequest等)
+[NEW]     TypeScript型: reimport.ts (SchemaChangeType, SchemaChange等)
+[NEW]     Type Guard: isTransform()追加
+[UPDATED] エンティティ関係図: mermaid/ASCII にTransform/TransformExecution/FilterView追加
+[NEW]     データフローセクション (CSVインポート, Transform実行, 再インポート)
+[NEW]     キーパターン例外: TransformExecutionRepository特殊処理
+
+------------------------------------------------------------------------------
+frontend.md の変更内容 (+109, -23, 15.3%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプ (FR-2.1)
+[NEW]     ルーティング: /transforms -> TransformListPage, /transforms/:id -> TransformEditPage
+[NEW]     ページ: TransformListPage.tsx, TransformEditPage.tsx
+[NEW]     コンポーネント: transform/ 5件 (TransformCodeEditor, DatasetMultiSelect,
+            TransformExecutionResult, TransformExecutionHistory, TransformScheduleConfig)
+[NEW]     Hooks: use-transforms.ts 7 hooks (useTransforms, useTransform, useCreateTransform等)
+[NEW]     API: transforms.ts (list, get, create, update, delete, execute, listExecutions)
+[NEW]     型定義: transform.ts (Transform, TransformCreateRequest等, isTransform type guard)
+[NEW]     React Queryキー: transforms, transform-executions
+[NEW]     テスト: 11ファイル追加 (components 5, hooks 1, api 1, pages 2, types 1)
+[NEW]     テストユーティリティ: createMockTransform(), createMockTransformExecution()
+[UPDATED] Sidebar: Transform リンク追加 (Repeatアイコン)
+[NEW]     FR-1.3反映漏れ修正: SchemaChangeWarningDialog, reimport.ts, reimport hooks/API
+[NEW]     型定義一覧テーブル (全9型定義ファイル)
+[UPDATED] テストファイル数: 53->64, APIモジュール数: 7->8
 
 ------------------------------------------------------------------------------
 スキャン統計 (更新後)
 ------------------------------------------------------------------------------
 
 Backend (app/):
-  ソースファイル:      37 (.py)  [変更なし]
-  テストファイル:      37 (.py)  [変更なし]
-  ルートモジュール:     4       [変更なし]
-  モデルモジュール:     5       [変更なし]
-  リポジトリ:          5       [変更なし]
-  サービス:            6       [変更なし]
-  コアモジュール:      4       [変更なし]
-  DB接続:              2       [変更なし]
-  APIヘルパー:         1       [変更なし]
-  (新規エンドポイント: GET /datasets/:id/columns/:col/values)
+  ソースファイル:      ~50 (.py)  [前回: 37 -> Transform/スケジューラ関連追加]
+  テストファイル:      52 (.py)   [前回: 37 -> Transform関連テスト追加]
+  ルートモジュール:     6         [前回: 4 -> transforms, filter_views追加]
+  モデルモジュール:    12         [前回: 5 -> transform, transform_execution等追加]
+  リポジトリ:         10         [前回: 5 -> transform, filter_view系追加]
+  サービス:           11         [前回: 6 -> transform_execution, scheduler, schema_comparator等追加]
 
 Frontend (src/):
-  ソースファイル:     109 (.ts/.tsx)  [前回: 100 --> +9 (フィルタ5 + UI4)]
-  実質ソースファイル:  65 (非テスト)  [前回: 60 --> +5 (フィルタコンポーネント)]
-  テストファイル:      44 (.ts/.tsx)  [前回: 40 --> +4 (フィルタ関連テスト)]
-  テスト数:          262             [前回: 227 --> +35 (フィルタテスト)]
-  カバレッジ:       83.07%           [変更なし]
-  ページ:              9             [変更なし]
-  コンポーネント:     24             [前回: 19 --> +5 (フィルタ3 + filters/2)]
-  UIコンポーネント:   16             [前回: 12 --> +4 (calendar, checkbox, popover, select)]
-  Hooks:               4 ファイル --> 20 export   [変更なし]
-  API クライアント:    5             [変更なし (既存ファイルに関数追加)]
-  型定義:              5 ファイル    [変更なし (既存ファイルにフィールド追加)]
-  ストア:              1             [変更なし]
+  テストファイル:      64 (.ts/.tsx)  [前回: 44 -> Transform関連11ファイル追加]
+  ページ:             11             [前回: 9 -> TransformList, TransformEdit追加]
+  コンポーネント:     ~30            [前回: 24 -> transform/ 5件追加]
+  Hooks:               5 ファイル    [前回: 4 -> use-transforms.ts追加]
+  API クライアント:    8             [前回: 5 -> transforms.ts追加]
+  型定義:              9 ファイル    [前回: 5 -> transform.ts, reimport.ts等追加]
 
-Frontend (e2e/):
-  E2E テストファイル:   6 (.ts)      [変更なし]
-  テスト数:           12             [変更なし]
-
-Scripts:
-  スクリプトファイル:   2 (.py)      [変更なし]
-
-Executor (app/):
-  ソースファイル:       7 (.py)      [変更なし]
-  テストファイル:       7             [変更なし]
-
-Docs:
-  9 ドキュメント                     [変更なし]
-
-------------------------------------------------------------------------------
-新規ファイル一覧
-------------------------------------------------------------------------------
-
-Frontend (コンポーネント):
-  + frontend/src/components/dashboard/FilterBar.tsx            (閲覧モード用フィルタバー)
-  + frontend/src/components/dashboard/FilterConfigPanel.tsx    (編集モード用フィルタ設定パネル)
-  + frontend/src/components/dashboard/FilterDefinitionForm.tsx (フィルタ定義フォーム)
-  + frontend/src/components/dashboard/filters/CategoryFilter.tsx   (カテゴリフィルタ: 単一/複数選択)
-  + frontend/src/components/dashboard/filters/DateRangeFilter.tsx  (日付範囲フィルタ: カレンダーUI)
-
-Frontend (UI):
-  + frontend/src/components/ui/calendar.tsx                    (shadcn/ui カレンダー)
-  + frontend/src/components/ui/checkbox.tsx                    (shadcn/ui チェックボックス)
-  + frontend/src/components/ui/popover.tsx                     (shadcn/ui ポップオーバー)
-  + frontend/src/components/ui/select.tsx                      (shadcn/ui セレクト)
-
-Frontend (テスト):
-  + frontend/src/__tests__/components/dashboard/FilterBar.test.tsx            (7テスト)
-  + frontend/src/__tests__/components/dashboard/FilterConfigPanel.test.tsx    (6テスト)
-  + frontend/src/__tests__/components/dashboard/FilterDefinitionForm.test.tsx (6テスト)
-  + frontend/src/__tests__/components/dashboard/filters/CategoryFilter.test.tsx  (10テスト)
-  + frontend/src/__tests__/components/dashboard/filters/DateRangeFilter.test.tsx (6テスト)
-
-------------------------------------------------------------------------------
-変更ファイル一覧
-------------------------------------------------------------------------------
-
-Backend:
-  ~ backend/app/api/routes/datasets.py           (get_column_values エンドポイント追加)
-  ~ backend/app/models/dashboard.py               (FilterDefinition に options フィールド追加)
-  ~ backend/app/services/dataset_service.py       (get_column_values メソッド追加)
-
-Frontend (ソース):
-  ~ frontend/src/pages/DashboardViewPage.tsx       (FilterBar 統合)
-  ~ frontend/src/pages/DashboardEditPage.tsx       (FilterConfigPanel 統合)
-  ~ frontend/src/components/dashboard/DashboardViewer.tsx (filterValues props 対応)
-  ~ frontend/src/components/dashboard/CardContainer.tsx   (filterApplied 対応)
-  ~ frontend/src/lib/api/dashboards.ts             (getReferencedDatasets() 追加)
-  ~ frontend/src/lib/api/datasets.ts               (getColumnValues() 追加)
-  ~ frontend/src/types/dashboard.ts                (FilterDefinition に options 追加)
-
-Frontend (テスト):
-  ~ frontend/src/__tests__/components/dashboard/CardContainer.test.tsx     (filterApplied テスト)
-  ~ frontend/src/__tests__/components/dashboard/DashboardViewer.test.tsx   (filterValues テスト)
-  ~ frontend/src/__tests__/pages/DashboardEditPage.test.tsx               (FilterConfigPanel テスト)
-  ~ frontend/src/__tests__/pages/DashboardViewPage.test.tsx               (FilterBar テスト)
-
-Infrastructure:
-  ~ frontend/package.json                          (date-fns, react-day-picker 追加)
-  ~ frontend/package-lock.json                     (依存関係更新)
-
-------------------------------------------------------------------------------
-検出された構造パターン (更新)
-------------------------------------------------------------------------------
-
-1-12: [変更なし -- 前回レポート参照]
-
-13. ダッシュボードフィルタパターン [NEW]
-    FilterDefinition モデルでフィルタを定義し、DashboardViewPage の FilterBar で
-    ユーザーがフィルタ値を入力。filterValues は onExecuteCard() 経由で各カードの
-    実行リクエストに渡される。フィルタ種別は category (CategoryFilter) と
-    date_range (DateRangeFilter) の 2種。
-
-14. フィルタ設定管理パターン [NEW]
-    DashboardEditPage の FilterConfigPanel でフィルタ定義を CRUD 管理。
-    dashboardsApi.getReferencedDatasets() でダッシュボードが参照するデータセットを取得し、
-    datasetsApi.getColumnValues() でカラムのユニーク値を取得して、
-    FilterDefinitionForm のプルダウン選択肢を動的に構築。
-
-15. カラム値取得パターン [NEW]
-    GET /api/datasets/:id/columns/:col/values で S3 上の Parquet ファイルから
-    指定カラムのユニーク値を取得。parquet_storage.get_column_values() で実装。
-    カテゴリフィルタの options (選択肢リスト) 自動生成に使用。
-
-16. フィルタコンポーネント分離パターン [NEW]
-    フィルタ種別ごとに独立した子コンポーネント (filters/CategoryFilter,
-    filters/DateRangeFilter) に分離。FilterBar が type に応じて動的にディスパッチ。
-    各フィルタコンポーネントは shadcn/ui プリミティブ (select, checkbox, calendar,
-    popover) を利用。
+DynamoDB:
+  テーブル数:         10             [前回: 8 -> bi_transforms, bi_transform_executions追加]
 
 ------------------------------------------------------------------------------
 注意事項 (更新)
@@ -238,22 +156,15 @@ Infrastructure:
 
 [継続] Executor の dataset_rows は将来拡張用で、現在 None 固定
 [継続] Frontend の types には OwnerRef, GroupRef 等 Backend 側に対応モデルが無い型がある
-[継続] DashboardEditor/DashboardViewer は react-grid-layout の Responsive +
-       WidthProvider を使用。CSS は __tests__/setup.ts でモック化されている。
-[継続] layout-utils.ts は pure function のみで副作用なし。テストカバー済み。
 [継続] Backend の一覧ページネーションは全件取得後 Python スライスで実装。
-       大量データ時はパフォーマンス懸念あり。DynamoDB の LastEvaluatedKey
-       ベースのページネーションへの移行を検討。
-[継続] E2E テストは workers:1 (シングルスレッド) で実行。DynamoDB Local が
-       共有データベースのため、並列実行時にテスト間干渉の可能性あり。
+       大量データ時はパフォーマンス懸念あり。
+[継続] E2E テストは workers:1 (シングルスレッド) で実行。
 
-[NEW]  FilterDefinition の options フィールドはカテゴリフィルタの選択肢を保持。
-       getColumnValues() API で動的取得も可能だが、保存時に options を永続化して
-       おくことで表示時の API コールを削減できる設計。ただしデータ更新時に
-       options が陳腐化する可能性がある (手動更新が必要)。
-
-[NEW]  date-fns + react-day-picker は DateRangeFilter 専用で導入。
-       バンドルサイズへの影響は tree-shaking により限定的だが、
-       将来的にフィルタ種別が増加する場合は lazy loading を検討。
+[NEW]  TransformExecutionRepository は複合キー (PK: transformId, SK: startedAt) を使用し、
+       create() と _from_dynamodb_item() をオーバーライドしている。Decimal変換に注意。
+[NEW]  スケジューラは asyncio バックグラウンドタスクとして main.py の lifespan で起動。
+       SCHEDULER_ENABLED=false (デフォルト) では起動しない。
+[NEW]  Transform実行は TransformRunner を通じて Executor と同一のサンドボックスで実行される。
+       タイムアウトは 300秒 (カード実行の 10秒と異なる)。
 
 ==============================================================================

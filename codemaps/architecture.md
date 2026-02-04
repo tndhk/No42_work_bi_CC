@@ -1,6 +1,6 @@
 # 全体アーキテクチャ コードマップ
 
-最終更新: 2026-02-03 (FR-7 Dashboard Sharing / Group Management 追加)
+最終更新: 2026-02-04 (FR-2.1 Transform基盤 Phase 1 追加)
 プロジェクト: BI Tool (社内BI・Pythonカード MVP)
 ステージ: MVP
 
@@ -21,13 +21,14 @@
                        |   API サーバ     |
                        |  FastAPI         |
                        |  :8000           |
+                       |  [Scheduler]     |  <-- asyncio バックグラウンドタスク
                        +---+---------+----+
                            |         |
               +------------+----+----+-----------+
               |                 |                 |
      +--------+------+  +------+------+  +-------+-------+
      |  DynamoDB     |  |    S3       |  |   Executor    |
-     |  (8テーブル)  |  | (Parquet)   |  |  (Python実行) |
+     | (10テーブル)  |  | (Parquet)   |  |  (Python実行) |
      |  :8001        |  | MinIO :9000 |  |  :8080        |
      +---------------+  +-------------+  +---------------+
 ```
@@ -37,7 +38,7 @@
 | サービス | 技術 | ポート | 役割 | ヘルスチェック |
 |----------|------|--------|------|---------------|
 | frontend | React 18 + Vite 5 + TypeScript | 3000 | SPA フロントエンド | - |
-| api (backend) | FastAPI 0.109 + Python 3.11 | 8000 | REST API サーバ | GET /api/health |
+| api (backend) | FastAPI 0.109 + Python 3.11 | 8000 | REST API サーバ + Scheduler | GET /api/health |
 | executor | FastAPI 0.109 + Python 3.11 | 8080 | Python コード安全実行 | GET /health |
 | dynamodb-local | Amazon DynamoDB Local | 8001 | NoSQL メタデータ保存 | curl localhost:8000 |
 | minio | MinIO (S3互換) | 9000/9001 | オブジェクトストレージ | /minio/health/live |
@@ -68,30 +69,30 @@ work_BI_ClaudeCode/
       api/             # ルーター、依存性注入、レスポンスヘルパー
       core/            # 設定、セキュリティ、ログ
       db/              # DynamoDB / S3 接続
-      models/          # Pydantic モデル
-      repositories/    # DynamoDB リポジトリ (CRUD, 8リポジトリ)
-      services/        # ビジネスロジック (permission_service 含む)
-    tests/             # pytest テスト (37ファイル)
+      models/          # Pydantic モデル (12ファイル)
+      repositories/    # DynamoDB リポジトリ (CRUD, 10リポジトリ)
+      services/        # ビジネスロジック (11サービス)
+    tests/             # pytest テスト (52ファイル)
   frontend/            # React SPA
     src/
-      components/      # UI コンポーネント
-      hooks/           # React Query hooks
-      lib/             # API クライアント、ユーティリティ
-      pages/           # ページコンポーネント
+      components/      # UI コンポーネント (transform/ 含む)
+      hooks/           # React Query hooks (use-transforms 含む)
+      lib/             # API クライアント (transforms API 含む)
+      pages/           # ページコンポーネント (TransformList/Edit 含む)
       stores/          # Zustand ストア
-      types/           # TypeScript 型定義
-      __tests__/       # Vitest テスト (42ファイル, 262テスト, 83.07% coverage)
-    e2e/               # Playwright E2E テスト (3スペック, 12テスト) [NEW]
-    playwright.config.ts  # E2E テスト設定 [NEW]
-    vitest.config.ts   # ユニットテスト設定
+      types/           # TypeScript 型定義 (transform.ts 含む)
+      __tests__/       # Vitest テスト (67ファイル)
+    e2e/               # Playwright E2E テスト (4スペック)
+    playwright.config.ts
+    vitest.config.ts
   executor/            # Python 実行サンドボックス
     app/               # FastAPI アプリ
-    tests/             # pytest テスト (7ファイル)
+    tests/             # pytest テスト (6ファイル)
   scripts/             # 初期化・ユーティリティスクリプト
-    init_tables.py     # DynamoDB テーブル作成
-    seed_test_user.py  # E2E テストユーザ作成 [NEW]
+    init_tables.py     # DynamoDB テーブル作成 (10テーブル)
+    seed_test_user.py  # E2E テストユーザ作成
   codemaps/            # アーキテクチャ・コードマップ
-  docs/                # 設計ドキュメント (9ファイル)
+  docs/                # 設計ドキュメント (10ファイル)
   docker-compose.yml   # ローカル開発環境 (ヘルスチェック付き)
 ```
 
@@ -110,9 +111,23 @@ work_BI_ClaudeCode/
     |                                       +--> DynamoDB (cache)
     |                                       +--> S3 (dataset)
     +--> POST /api/dashboards/:id/clone --> [Backend :8000] --> [DynamoDB]
-    +--> GET/POST /api/dashboards/:id/shares/* --> [Backend :8000] --> [DynamoDB] [FR-7]
-    +--> GET/POST /api/groups/*    --> [Backend :8000] --> [DynamoDB] [FR-7]
-    +--> GET /api/users?q=...      --> [Backend :8000] --> [DynamoDB] [FR-7]
+    +--> GET/POST /api/dashboards/:id/shares/* --> [Backend :8000] --> [DynamoDB]
+    +--> GET/POST /api/groups/*    --> [Backend :8000] --> [DynamoDB]
+    +--> GET /api/users?q=...      --> [Backend :8000] --> [DynamoDB]
+    +--> GET/POST /api/transforms/*  --> [Backend :8000] --> [DynamoDB] [FR-2.1]
+    +--> POST /api/transforms/:id/execute --> [Backend :8000] [FR-2.1]
+    |                                       |
+    |                                       +--> S3 (入力Dataset読込)
+    |                                       +--> POST /execute/transform --> [Executor :8080]
+    |                                       +--> S3 (出力Dataset保存)
+    |                                       +--> DynamoDB (execution履歴 + Dataset作成)
+    +--> GET /api/transforms/:id/executions --> [Backend :8000] --> [DynamoDB] [FR-2.1]
+
+[Scheduler (Backend内 asyncio タスク)] [FR-2.1]
+    |
+    +--> DynamoDB: schedule_enabled=true の Transform を scan
+    +--> croniter で実行タイミング判定
+    +--> TransformExecutionService.execute(triggered_by="schedule")
 ```
 
 ## 認証フロー
@@ -126,7 +141,7 @@ work_BI_ClaudeCode/
 6. Backend: deps.get_current_user() で JWT 検証
 ```
 
-## 認可レイヤー (Permission / Authorization) [FR-7]
+## 認可レイヤー (Permission / Authorization)
 
 FR-7 で追加された認可は 2 つのレベルで機能する。
 
@@ -208,6 +223,39 @@ app/api/routes/dashboard_shares.py
 7. ブラウザ: iframe (sandbox) で HTML 描画
 ```
 
+## データフロー: Transform 実行 [FR-2.1]
+
+```
+手動実行:
+1. ブラウザ: POST /api/transforms/:id/execute
+2. Backend: オーナー検証
+3. TransformExecutionService: execution 履歴レコード作成 (status=running)
+4. TransformExecutionService: 入力 Dataset を DynamoDB から取得
+5. TransformExecutionService: 入力 Parquet を S3 から読込 (ParquetReader)
+6. TransformExecutionService: Executor API に POST /execute/transform (リトライ付き)
+7. Executor: Python コードで DataFrame 変換を実行
+8. TransformExecutionService: 出力 DataFrame を Parquet に変換 + S3 保存
+9. TransformExecutionService: 出力 Dataset レコードを DynamoDB に作成 (source_type="transform")
+10. TransformExecutionService: Transform.output_dataset_id を更新
+11. TransformExecutionService: execution 履歴を success/failed に更新
+
+スケジュール実行:
+1. TransformSchedulerService: asyncio ループで scheduler_interval_seconds 毎にチェック
+2. schedule_enabled=true の Transform を DynamoDB scan
+3. croniter で実行タイミング判定 (前回実行からの差分 < interval)
+4. 実行中の execution がないことを確認 (重複防止)
+5. TransformExecutionService.execute(triggered_by="schedule") を呼出
+```
+
+### Transform リトライ戦略
+
+```
+- 最大リトライ: 3回
+- バックオフ: 指数バックオフ (0.5s, 1s, 2s)
+- リトライ対象: 接続エラー、タイムアウト、5xx エラー
+- 即時失敗: 4xx クライアントエラー
+```
+
 ## データフロー: ダッシュボード表示
 
 ```
@@ -219,20 +267,22 @@ app/api/routes/dashboard_shares.py
 6. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
 ```
 
-## DynamoDB テーブル一覧 (8テーブル)
+## DynamoDB テーブル一覧 (10テーブル)
 
-| テーブル名 | PK | 主な GSI | 用途 |
-|-----------|-----|---------|------|
-| bi_users | userId | UsersByEmail | ユーザ認証・プロフィール |
-| bi_datasets | datasetId | DatasetsByOwner | データセットメタデータ |
-| bi_cards | cardId | CardsByOwner | カード (Pythonコード + 設定) |
-| bi_dashboards | dashboardId | DashboardsByOwner | ダッシュボード定義 |
-| bi_filter_views | filterViewId | FilterViewsByDashboard | フィルタビュー保存 |
-| bi_groups | groupId | GroupsByName | グループ定義 [FR-7] |
-| bi_group_members | groupId + userId (複合キー) | MembersByUser | グループメンバーシップ [FR-7] |
-| bi_dashboard_shares | shareId | SharesByDashboard, SharesByTarget | ダッシュボード共有設定 [FR-7] |
+| テーブル名 | PK | SK | 主な GSI | 用途 |
+|-----------|-----|-----|---------|------|
+| bi_users | userId | - | UsersByEmail | ユーザ認証・プロフィール |
+| bi_datasets | datasetId | - | DatasetsByOwner | データセットメタデータ |
+| bi_cards | cardId | - | CardsByOwner | カード (Pythonコード + 設定) |
+| bi_dashboards | dashboardId | - | DashboardsByOwner | ダッシュボード定義 |
+| bi_filter_views | filterViewId | - | FilterViewsByDashboard | フィルタビュー保存 |
+| bi_groups | groupId | - | GroupsByName | グループ定義 [FR-7] |
+| bi_group_members | groupId | userId | MembersByUser | グループメンバーシップ [FR-7] |
+| bi_dashboard_shares | shareId | - | SharesByDashboard, SharesByTarget | ダッシュボード共有設定 [FR-7] |
+| bi_transforms | transformId | - | TransformsByOwner | Transform 定義 [FR-2.1] |
+| bi_transform_executions | transformId | startedAt | - | Transform 実行履歴 [FR-2.1] |
 
-## リポジトリ一覧 (8リポジトリ)
+## リポジトリ一覧 (10リポジトリ)
 
 | リポジトリ | 対象テーブル | ベースクラス | 備考 |
 |-----------|-------------|-------------|------|
@@ -244,6 +294,24 @@ app/api/routes/dashboard_shares.py
 | GroupRepository | bi_groups | BaseRepository | name ユニーク検証 [FR-7] |
 | GroupMemberRepository | bi_group_members | (独自実装) | 複合キー操作, MembersByUser GSI [FR-7] |
 | DashboardShareRepository | bi_dashboard_shares | BaseRepository | dashboard 別/target 別検索, 重複検出 [FR-7] |
+| TransformRepository | bi_transforms | BaseRepository | owner 別一覧 [FR-2.1] |
+| TransformExecutionRepository | bi_transform_executions | BaseRepository | 複合キー (transformId+startedAt), has_running_execution [FR-2.1] |
+
+## サービス一覧 (11サービス)
+
+| サービス | モジュール | 役割 |
+|---------|-----------|------|
+| DatasetService | dataset_service.py | CSV/S3インポート、プレビュー、再取込 |
+| DashboardService | dashboard_service.py | ダッシュボード CRUD + クローン |
+| CardExecutionService | card_execution_service.py | カード Python 実行 + キャッシュ |
+| PermissionService | permission_service.py | ダッシュボード権限解決 |
+| TransformExecutionService | transform_execution_service.py | Transform 実行オーケストレーション [FR-2.1] |
+| TransformSchedulerService | transform_scheduler_service.py | asyncio cron スケジューラ [FR-2.1] |
+| CsvParser | csv_parser.py | CSV パース (chardet) |
+| TypeInferrer | type_inferrer.py | カラム型推論 |
+| ParquetStorage | parquet_storage.py | Parquet 変換 + S3 読み書き |
+| SchemaComparator | schema_comparator.py | スキーマ変更検知 [FR-1.3] |
+| setup_logging | logging.py | structlog 設定 |
 
 ## APIルーター一覧
 
@@ -255,9 +323,66 @@ app/api/routes/dashboard_shares.py
 | /api/cards | cards | cards.py | get_current_user |
 | /api/dashboards/{id}/filter-views | filter-views | filter_views.py | get_current_user |
 | /api/filter-views | filter-views | filter_view_detail.py | get_current_user |
-| /api/users | users | users.py | get_current_user [FR-7] |
-| /api/dashboards/{id}/shares | dashboard-shares | dashboard_shares.py | get_current_user + owner検証 [FR-7] |
-| /api/groups | groups | groups.py | require_admin [FR-7] |
+| /api/users | users | users.py | get_current_user |
+| /api/dashboards/{id}/shares | dashboard-shares | dashboard_shares.py | get_current_user + owner検証 |
+| /api/groups | groups | groups.py | require_admin |
+| /api/transforms | transforms | transforms.py | get_current_user + owner検証 [FR-2.1] |
+
+## フロントエンド ルーティング
+
+| パス | ページコンポーネント | 備考 |
+|------|---------------------|------|
+| /login | LoginPage | 認証不要 |
+| /dashboards | DashboardListPage | デフォルトリダイレクト先 |
+| /dashboards/:id | DashboardViewPage | |
+| /dashboards/:id/edit | DashboardEditPage | |
+| /datasets | DatasetListPage | |
+| /datasets/import | DatasetImportPage | |
+| /datasets/:id | DatasetDetailPage | |
+| /cards | CardListPage | |
+| /cards/:id | CardEditPage | |
+| /transforms | TransformListPage | [FR-2.1] |
+| /transforms/:id | TransformEditPage | [FR-2.1] |
+| /admin/groups | GroupListPage | admin のみ表示 |
+
+## フロントエンド Transform コンポーネント [FR-2.1]
+
+| コンポーネント | 役割 |
+|---------------|------|
+| TransformListPage | Transform 一覧ページ |
+| TransformEditPage | Transform 作成/編集ページ |
+| TransformCodeEditor | Python コードエディタ (Monaco) |
+| DatasetMultiSelect | 入力 Dataset 複数選択 |
+| TransformScheduleConfig | cron スケジュール設定 |
+| TransformExecutionResult | 実行結果表示 |
+| TransformExecutionHistory | 実行履歴一覧 |
+
+## スケジューラ アーキテクチャ [FR-2.1]
+
+```
+Backend API プロセス (main.py lifespan)
+  |
+  +--> settings.scheduler_enabled == True の場合のみ起動
+  |
+  +--> TransformSchedulerService
+         |
+         +--> asyncio.create_task(_run_loop)
+         |       |
+         |       +--> _check_and_execute() (毎 scheduler_interval_seconds 秒)
+         |              |
+         |              +--> aioboto3 セッション作成 (DynamoDB + S3)
+         |              +--> schedule_enabled=true の Transform を全件 scan
+         |              +--> croniter で実行判定
+         |              +--> 実行中チェック (has_running_execution)
+         |              +--> TransformExecutionService.execute()
+         |
+         +--> lifespan shutdown 時に task.cancel()
+
+設定値:
+  - SCHEDULER_ENABLED: bool (デフォルト: False)
+  - SCHEDULER_INTERVAL_SECONDS: int (デフォルト: 60秒)
+  - TRANSFORM_TIMEOUT_SECONDS: int (デフォルト: 300秒 = 5分)
+```
 
 ## APIレスポンス標準化
 
@@ -266,7 +391,7 @@ app/api/routes/dashboard_shares.py
 | ヘルパー | 出力形式 | 使用場面 |
 |---------|---------|---------|
 | `api_response(data)` | `{ "data": T }` | 単体リソース取得、作成、更新 |
-| `paginated_response(items, total, limit, offset)` | `{ "data": [...], "pagination": {...} }` | 一覧取得 (datasets, cards, dashboards) |
+| `paginated_response(items, total, limit, offset)` | `{ "data": [...], "pagination": {...} }` | 一覧取得 (datasets, cards, dashboards, transforms) |
 
 ページネーションオブジェクト: `{ total, limit, offset, has_next }`
 
@@ -285,6 +410,8 @@ app/api/routes/dashboard_shares.py
 | slowapi | 0.1.9 | レート制限 |
 | chardet | 5.2.0 | エンコーディング検出 |
 | structlog | 24.1.0 | 構造化ログ |
+| croniter | >=2.0.0 | cron式パース (Transform スケジューラ) [FR-2.1] |
+| httpx | 0.25.2 | 非同期 HTTP クライアント (Executor 呼出) |
 
 ### Frontend (TypeScript)
 | ライブラリ | バージョン | 用途 |
@@ -313,7 +440,7 @@ app/api/routes/dashboard_shares.py
 | @testing-library/jest-dom | 6.1.5 | DOM マッチャー |
 | @testing-library/user-event | 14.5.1 | ユーザー操作シミュレーション |
 | jsdom | 23.0.1 | ブラウザ環境エミュレーション |
-| @playwright/test | 1.58.1 | E2E テスト [NEW] |
+| @playwright/test | 1.58.1 | E2E テスト |
 
 ### Executor (Python)
 | ライブラリ | バージョン | 用途 |
@@ -326,21 +453,21 @@ app/api/routes/dashboard_shares.py
 
 ## テストインフラストラクチャ
 
-| 領域 | フレームワーク | テストファイル数 | テスト数 | カバレッジ |
-|------|---------------|-----------------|---------|-----------|
-| Frontend (Unit) | Vitest + Testing Library | 42 | 262 | 83.07% (statements) |
-| Frontend (E2E) | Playwright | 3 specs | 12 | - |
-| Backend | pytest | 37 | - | - |
-| Executor | pytest | 7 | - | - |
+| 領域 | フレームワーク | テストファイル数 | カバレッジ |
+|------|---------------|-----------------|-----------|
+| Frontend (Unit) | Vitest + Testing Library | 67 | - |
+| Frontend (E2E) | Playwright | 4 specs | - |
+| Backend | pytest | 52 | - |
+| Executor | pytest | 6 | - |
 
-### E2E テスト構成 [NEW]
+### E2E テスト構成
 
 ```
 frontend/e2e/
   global-setup.ts          # バックエンド起動待機 (ヘルスチェック)
-  auth.spec.ts             # 認証フロー (5テスト)
-  dataset.spec.ts          # CSVインポート、一覧、プレビュー (3テスト)
-  card-dashboard.spec.ts   # カード/ダッシュボード CRUD (4テスト)
+  auth.spec.ts             # 認証フロー
+  dataset.spec.ts          # CSVインポート、一覧、プレビュー
+  card-dashboard.spec.ts   # カード/ダッシュボード CRUD
   helpers/
     login-helper.ts        # UI 経由ログインヘルパー
     api-helper.ts          # テストデータ作成/削除 API ヘルパー
@@ -361,6 +488,9 @@ Playwright 設定: Chromium のみ, `workers: 1` (DynamoDB Local 共有のため
 | S3_BUCKET_DATASETS | データセットバケット | bi-datasets |
 | EXECUTOR_ENDPOINT | Executor エンドポイント | http://executor:8080 |
 | VITE_API_URL | フロントAPI URL | http://localhost:8000 |
+| SCHEDULER_ENABLED | Transform スケジューラ有効化 | False [FR-2.1] |
+| SCHEDULER_INTERVAL_SECONDS | スケジューラチェック間隔 | 60 [FR-2.1] |
+| TRANSFORM_TIMEOUT_SECONDS | Transform 実行タイムアウト | 300 [FR-2.1] |
 
 ## 関連コードマップ
 

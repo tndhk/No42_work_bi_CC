@@ -212,17 +212,11 @@ E2Eテストスイート:
 | `bi_cards` | cardId | - | CardsByOwner |
 | `bi_dashboards` | dashboardId | - | DashboardsByOwner |
 | `bi_filter_views` | filterViewId | - | FilterViewsByDashboard |
+| `bi_groups` | groupId | - | GroupsByName |
+| `bi_group_members` | groupId | userId | MembersByUser |
+| `bi_dashboard_shares` | shareId | - | SharesByDashboard, SharesByTarget |
 | `bi_transforms` | transformId | - | TransformsByOwner |
 | `bi_transform_executions` | transformId | startedAt | - |
-
-[注意] 以下のテーブルはバックエンドコードで参照されているが、`init_tables.py` に定義が存在しない。
-手動作成、または init_tables.py への追加が必要:
-
-| テーブル名 | パーティションキー | ソートキー | GSI | 参照元 |
-|-----------|-------------------|-----------|-----|--------|
-| `bi_groups` | groupId | - | GroupsByName | group_repository.py |
-| `bi_group_members` | groupId | userId | MembersByUser | group_member_repository.py |
-| `bi_dashboard_shares` | shareId | - | SharesByDashboard, SharesByTarget | dashboard_share_repository.py |
 
 ---
 

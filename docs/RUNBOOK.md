@@ -179,22 +179,17 @@ docker compose run --rm dynamodb-init
 
 現在のテーブル一覧:
 
-init_tables.py で自動作成されるテーブル (7テーブル):
+init_tables.py で自動作成されるテーブル (10テーブル):
 - `bi_users` - ユーザー (GSI: UsersByEmail)
 - `bi_datasets` - データセット (GSI: DatasetsByOwner)
 - `bi_cards` - カード (GSI: CardsByOwner)
 - `bi_dashboards` - ダッシュボード (GSI: DashboardsByOwner)
 - `bi_filter_views` - フィルタビュー (GSI: FilterViewsByDashboard)
+- `bi_groups` - グループ (GSI: GroupsByName)
+- `bi_group_members` - グループメンバー (GSI: MembersByUser)
+- `bi_dashboard_shares` - ダッシュボード共有 (GSI: SharesByDashboard, SharesByTarget)
 - `bi_transforms` - Transform (GSI: TransformsByOwner)
 - `bi_transform_executions` - Transform実行履歴 (PK: transformId, SK: startedAt)
-
-[要対応] init_tables.py に未定義だがバックエンドコードが参照するテーブル (3テーブル):
-- `bi_groups` - グループ (GSI: GroupsByName) -- group_repository.py で参照
-- `bi_group_members` - グループメンバー (GSI: MembersByUser) -- group_member_repository.py で参照
-- `bi_dashboard_shares` - ダッシュボード共有 (GSI: SharesByDashboard, SharesByTarget) -- dashboard_share_repository.py で参照
-
-これらのテーブルはグループ管理・Dashboard共有機能で必要。
-init_tables.py にテーブル定義を追加するか、手動で作成する必要がある。
 
 ### FilterView可視性
 

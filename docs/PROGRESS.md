@@ -93,8 +93,8 @@ Last Updated: 2026-02-04
 
 ## 品質・テスト (完了済み)
 
-- [x] フロントエンドテスト 83%+ カバレッジ (53テストファイル)
-- [x] バックエンドテスト充実 (45モジュール、11,515行)
+- [x] フロントエンドテスト 83%+ カバレッジ (64テストファイル)
+- [x] バックエンドテスト充実 (52モジュール、15,363行)
 - [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard, sharing)
 - [x] Docker Compose ヘルスチェック
 - [x] ドキュメント整備 (codemaps, CONTRIB.md, RUNBOOK.md)
@@ -113,9 +113,8 @@ Last Updated: 2026-02-04
 | FR-5/6 + FR-1.2 | フィルタUI + FilterView CRUD + S3 Import | (WIP) | 2026-02-02 |
 | FR-7 | Dashboard共有/権限 + グループ管理 + User検索API | -- | 2026-02-03 |
 | FR-1.3 | Dataset再取り込み (スキーマ変化検知・警告) | -- | 2026-02-03 |
-| FR-2 (Backend) | Transform定義・実行バックエンド (API/Repository/ExecutionService/TransformRunner) | -- | 2026-02-04 |
-| FR-2.1 FE | Transform定義 フロントエンド UI | -- | 2026-02-04 |
-| FR-2.2 | Transform実行履歴 + スケジュール実行 | -- | 2026-02-04 |
+| FR-2.1 | Transform基盤 CRUD + 手動実行 (Backend API/Repository + Frontend UI) | fb09d08 | 2026-02-04 |
+| FR-2.2/2.3 | Transform実行履歴 + スケジュール実行 + 実行制約 (TransformRunner, 300秒タイムアウト) | 5ead250 | 2026-02-04 |
 
 ## 次期フェーズ候補
 

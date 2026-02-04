@@ -1,6 +1,6 @@
 # 全体アーキテクチャ コードマップ
 
-最終更新: 2026-02-04 (FR-2.1 Transform基盤 Phase 1 追加)
+最終更新: 2026-02-05 (Audit Log 機能追加)
 プロジェクト: BI Tool (社内BI・Pythonカード MVP)
 ステージ: MVP
 
@@ -22,13 +22,14 @@
                        |  FastAPI         |
                        |  :8000           |
                        |  [Scheduler]     |  <-- asyncio バックグラウンドタスク
+                       |  [AuditService]  |  <-- 監査ログ記録
                        +---+---------+----+
                            |         |
               +------------+----+----+-----------+
               |                 |                 |
      +--------+------+  +------+------+  +-------+-------+
      |  DynamoDB     |  |    S3       |  |   Executor    |
-     | (10テーブル)  |  | (Parquet)   |  |  (Python実行) |
+     | (11テーブル)  |  | (Parquet)   |  |  (Python実行) |
      |  :8001        |  | MinIO :9000 |  |  :8080        |
      +---------------+  +-------------+  +---------------+
 ```
@@ -70,18 +71,18 @@ work_BI_ClaudeCode/
       core/            # 設定、セキュリティ、ログ
       db/              # DynamoDB / S3 接続
       models/          # Pydantic モデル (12ファイル)
-      repositories/    # DynamoDB リポジトリ (CRUD, 10リポジトリ)
-      services/        # ビジネスロジック (11サービス)
-    tests/             # pytest テスト (52ファイル)
+      repositories/    # DynamoDB リポジトリ (CRUD, 11リポジトリ)
+      services/        # ビジネスロジック (11サービス + AuditService)
+    tests/             # pytest テスト (56テストファイル)
   frontend/            # React SPA
     src/
       components/      # UI コンポーネント (transform/ 含む)
-      hooks/           # React Query hooks (use-transforms 含む)
-      lib/             # API クライアント (transforms API 含む)
-      pages/           # ページコンポーネント (TransformList/Edit 含む)
+      hooks/           # React Query hooks (use-audit-logs 含む)
+      lib/             # API クライアント (audit-logs API 含む)
+      pages/           # ページコンポーネント (AuditLogListPage 含む)
       stores/          # Zustand ストア
-      types/           # TypeScript 型定義 (transform.ts 含む)
-      __tests__/       # Vitest テスト (67ファイル)
+      types/           # TypeScript 型定義 (audit-log.ts 含む)
+      __tests__/       # Vitest テスト (64ファイル)
     e2e/               # Playwright E2E テスト (4スペック)
     playwright.config.ts
     vitest.config.ts
@@ -89,7 +90,7 @@ work_BI_ClaudeCode/
     app/               # FastAPI アプリ
     tests/             # pytest テスト (6ファイル)
   scripts/             # 初期化・ユーティリティスクリプト
-    init_tables.py     # DynamoDB テーブル作成 (10テーブル)
+    init_tables.py     # DynamoDB テーブル作成 (11テーブル)
     seed_test_user.py  # E2E テストユーザ作成
   codemaps/            # アーキテクチャ・コードマップ
   docs/                # 設計ドキュメント (10ファイル)
@@ -101,29 +102,32 @@ work_BI_ClaudeCode/
 ```
 [Frontend :3000]
     |
-    +--> GET/POST /api/auth/*      --> [Backend :8000] --> [DynamoDB]
-    +--> GET/POST /api/datasets/*  --> [Backend :8000] --> [DynamoDB] + [S3/MinIO]
+    +--> GET/POST /api/auth/*      --> [Backend :8000] --> [DynamoDB] + [AuditLog]
+    +--> GET/POST /api/datasets/*  --> [Backend :8000] --> [DynamoDB] + [S3/MinIO] + [AuditLog]
     +--> GET /api/datasets/:id/columns/:col/values --> [Backend :8000] --> [S3/MinIO]
-    +--> GET/POST /api/cards/*     --> [Backend :8000] --> [DynamoDB]
+    +--> GET/POST /api/cards/*     --> [Backend :8000] --> [DynamoDB] + [AuditLog]
     +--> POST /api/cards/:id/execute --> [Backend :8000]
     |                                       |
     |                                       +--> POST /execute/card --> [Executor :8080]
     |                                       +--> DynamoDB (cache)
     |                                       +--> S3 (dataset)
+    |                                       +--> [AuditLog] (失敗時)
     +--> POST /api/dashboards/:id/clone --> [Backend :8000] --> [DynamoDB]
-    +--> GET/POST /api/dashboards/:id/shares/* --> [Backend :8000] --> [DynamoDB]
+    +--> GET/POST /api/dashboards/:id/shares/* --> [Backend :8000] --> [DynamoDB] + [AuditLog]
     +--> GET/POST /api/groups/*    --> [Backend :8000] --> [DynamoDB]
     +--> GET /api/users?q=...      --> [Backend :8000] --> [DynamoDB]
-    +--> GET/POST /api/transforms/*  --> [Backend :8000] --> [DynamoDB] [FR-2.1]
-    +--> POST /api/transforms/:id/execute --> [Backend :8000] [FR-2.1]
+    +--> GET/POST /api/transforms/*  --> [Backend :8000] --> [DynamoDB] + [AuditLog]
+    +--> POST /api/transforms/:id/execute --> [Backend :8000]
     |                                       |
     |                                       +--> S3 (入力Dataset読込)
     |                                       +--> POST /execute/transform --> [Executor :8080]
     |                                       +--> S3 (出力Dataset保存)
     |                                       +--> DynamoDB (execution履歴 + Dataset作成)
-    +--> GET /api/transforms/:id/executions --> [Backend :8000] --> [DynamoDB] [FR-2.1]
+    |                                       +--> [AuditLog] (成功/失敗)
+    +--> GET /api/transforms/:id/executions --> [Backend :8000] --> [DynamoDB]
+    +--> GET /api/audit-logs --> [Backend :8000] --> [DynamoDB] (admin専用)
 
-[Scheduler (Backend内 asyncio タスク)] [FR-2.1]
+[Scheduler (Backend内 asyncio タスク)]
     |
     +--> DynamoDB: schedule_enabled=true の Transform を scan
     +--> croniter で実行タイミング判定
@@ -136,14 +140,13 @@ work_BI_ClaudeCode/
 1. ブラウザ --> POST /api/auth/login { email, password }
 2. Backend: DynamoDB から User 取得 --> bcrypt 検証 --> JWT 発行
 3. Backend: api_response() でラップ { data: { access_token, user, ... } }
-4. ブラウザ: Zustand ストアに token 保存
-5. 以降のリクエスト: Authorization: Bearer <JWT>
-6. Backend: deps.get_current_user() で JWT 検証
+4. Backend: AuditService.log_user_login() (成功時) / log_user_login_failed() (失敗時)
+5. ブラウザ: Zustand ストアに token 保存
+6. 以降のリクエスト: Authorization: Bearer <JWT>
+7. Backend: deps.get_current_user() で JWT 検証
 ```
 
 ## 認可レイヤー (Permission / Authorization)
-
-FR-7 で追加された認可は 2 つのレベルで機能する。
 
 ### 1. ロールベース認可 (require_admin 依存性)
 
@@ -155,9 +158,10 @@ app/api/deps.py :: require_admin()
 
   適用先:
     - /api/groups/*           (グループ CRUD + メンバー管理)
+    - /api/audit-logs         (監査ログ閲覧)
 ```
 
-グループ管理は管理者専用操作であるため、全エンドポイントで require_admin を Depends に指定している。
+グループ管理と監査ログは管理者専用操作であるため、全エンドポイントで require_admin を Depends に指定している。
 
 ### 2. ダッシュボード権限 (PermissionService)
 
@@ -188,16 +192,46 @@ app/services/permission_service.py :: PermissionService
 app/api/routes/dashboard_shares.py
 
   全操作はダッシュボードオーナーのみ実行可能 (_get_dashboard_as_owner で検証)。
+  全操作で AuditService による監査ログ記録を実施。
 
   エンドポイント:
     GET    /api/dashboards/{id}/shares       -- 共有一覧取得
-    POST   /api/dashboards/{id}/shares       -- 共有作成 (重複時 409)
-    PUT    /api/dashboards/{id}/shares/{sid}  -- 権限レベル変更
-    DELETE /api/dashboards/{id}/shares/{sid}  -- 共有解除
+    POST   /api/dashboards/{id}/shares       -- 共有作成 (重複時 409) + AuditLog
+    PUT    /api/dashboards/{id}/shares/{sid}  -- 権限レベル変更 + AuditLog
+    DELETE /api/dashboards/{id}/shares/{sid}  -- 共有解除 + AuditLog
 
   共有ターゲット (SharedToType):
     - USER  -- 特定ユーザへの直接共有
     - GROUP -- グループ単位の共有
+```
+
+## 監査ログ (Audit Log)
+
+```
+app/services/audit_service.py :: AuditService
+
+  監査ログは火-and-forget パターンで記録 (例外は握りつぶし、ビジネスロジックに影響しない)。
+
+  記録対象イベント (EventType):
+    - USER_LOGIN               -- ログイン成功
+    - USER_LOGOUT              -- ログアウト
+    - USER_LOGIN_FAILED        -- ログイン失敗 (email + reason)
+    - DASHBOARD_SHARE_ADDED    -- ダッシュボード共有追加
+    - DASHBOARD_SHARE_REMOVED  -- ダッシュボード共有削除
+    - DASHBOARD_SHARE_UPDATED  -- ダッシュボード共有権限更新
+    - DATASET_CREATED          -- データセット作成
+    - DATASET_IMPORTED         -- データセットインポート (S3, reimport)
+    - DATASET_DELETED          -- データセット削除
+    - TRANSFORM_EXECUTED       -- Transform 実行成功
+    - TRANSFORM_FAILED         -- Transform 実行失敗
+    - CARD_EXECUTION_FAILED    -- カード実行失敗
+
+  呼び出し元ルート:
+    auth.py            --> log_user_login, log_user_logout, log_user_login_failed
+    cards.py           --> log_card_execution_failed (preview/execute 失敗時)
+    datasets.py        --> log_dataset_created, log_dataset_imported, log_dataset_deleted
+    dashboard_shares.py --> log_dashboard_share_added/removed/updated
+    transforms.py      --> log_transform_executed, log_transform_failed
 ```
 
 ## データフロー: CSV インポート
@@ -208,7 +242,8 @@ app/api/routes/dashboard_shares.py
 3. Backend: 型推論 (type_inferrer)
 4. Backend: Parquet 変換 + S3 保存 (parquet_storage)
 5. Backend: メタデータを DynamoDB に保存 (dataset_repository)
-6. Backend: api_response() でラップして返却
+6. Backend: AuditService.log_dataset_created()
+7. Backend: api_response() でラップして返却
 ```
 
 ## データフロー: カード実行
@@ -221,9 +256,10 @@ app/api/routes/dashboard_shares.py
 5. Executor: render() の戻り値 (HTML) を返却
 6. Backend: 結果をキャッシュ + api_response() でラップ + フロントに返却
 7. ブラウザ: iframe (sandbox) で HTML 描画
+(失敗時: AuditService.log_card_execution_failed())
 ```
 
-## データフロー: Transform 実行 [FR-2.1]
+## データフロー: Transform 実行
 
 ```
 手動実行:
@@ -238,6 +274,7 @@ app/api/routes/dashboard_shares.py
 9. TransformExecutionService: 出力 Dataset レコードを DynamoDB に作成 (source_type="transform")
 10. TransformExecutionService: Transform.output_dataset_id を更新
 11. TransformExecutionService: execution 履歴を success/failed に更新
+12. Backend: AuditService.log_transform_executed() / log_transform_failed()
 
 スケジュール実行:
 1. TransformSchedulerService: asyncio ループで scheduler_interval_seconds 毎にチェック
@@ -267,7 +304,7 @@ app/api/routes/dashboard_shares.py
 6. ResponsiveGridLayout: ドラッグ/リサイズ不可 (閲覧モード)
 ```
 
-## DynamoDB テーブル一覧 (10テーブル)
+## DynamoDB テーブル一覧 (11テーブル)
 
 | テーブル名 | PK | SK | 主な GSI | 用途 |
 |-----------|-----|-----|---------|------|
@@ -281,8 +318,9 @@ app/api/routes/dashboard_shares.py
 | bi_dashboard_shares | shareId | - | SharesByDashboard, SharesByTarget | ダッシュボード共有設定 [FR-7] |
 | bi_transforms | transformId | - | TransformsByOwner | Transform 定義 [FR-2.1] |
 | bi_transform_executions | transformId | startedAt | - | Transform 実行履歴 [FR-2.1] |
+| bi_audit_logs | logId | timestamp | LogsByUser, LogsByTarget | 監査ログ |
 
-## リポジトリ一覧 (10リポジトリ)
+## リポジトリ一覧 (11リポジトリ)
 
 | リポジトリ | 対象テーブル | ベースクラス | 備考 |
 |-----------|-------------|-------------|------|
@@ -296,8 +334,9 @@ app/api/routes/dashboard_shares.py
 | DashboardShareRepository | bi_dashboard_shares | BaseRepository | dashboard 別/target 別検索, 重複検出 [FR-7] |
 | TransformRepository | bi_transforms | BaseRepository | owner 別一覧 [FR-2.1] |
 | TransformExecutionRepository | bi_transform_executions | BaseRepository | 複合キー (transformId+startedAt), has_running_execution [FR-2.1] |
+| AuditLogRepository | bi_audit_logs | BaseRepository | 複合キー (logId+timestamp), GSI: LogsByUser, LogsByTarget |
 
-## サービス一覧 (11サービス)
+## サービス一覧 (12サービス)
 
 | サービス | モジュール | 役割 |
 |---------|-----------|------|
@@ -307,6 +346,7 @@ app/api/routes/dashboard_shares.py
 | PermissionService | permission_service.py | ダッシュボード権限解決 |
 | TransformExecutionService | transform_execution_service.py | Transform 実行オーケストレーション [FR-2.1] |
 | TransformSchedulerService | transform_scheduler_service.py | asyncio cron スケジューラ [FR-2.1] |
+| AuditService | audit_service.py | 監査ログ記録 (fire-and-forget) |
 | CsvParser | csv_parser.py | CSV パース (chardet) |
 | TypeInferrer | type_inferrer.py | カラム型推論 |
 | ParquetStorage | parquet_storage.py | Parquet 変換 + S3 読み書き |
@@ -327,6 +367,7 @@ app/api/routes/dashboard_shares.py
 | /api/dashboards/{id}/shares | dashboard-shares | dashboard_shares.py | get_current_user + owner検証 |
 | /api/groups | groups | groups.py | require_admin |
 | /api/transforms | transforms | transforms.py | get_current_user + owner検証 [FR-2.1] |
+| /api/audit-logs | audit-logs | audit_logs.py | require_admin |
 
 ## フロントエンド ルーティング
 
@@ -344,6 +385,7 @@ app/api/routes/dashboard_shares.py
 | /transforms | TransformListPage | [FR-2.1] |
 | /transforms/:id | TransformEditPage | [FR-2.1] |
 | /admin/groups | GroupListPage | admin のみ表示 |
+| /admin/audit-logs | AuditLogListPage | admin のみ表示 |
 
 ## フロントエンド Transform コンポーネント [FR-2.1]
 
@@ -391,7 +433,7 @@ Backend API プロセス (main.py lifespan)
 | ヘルパー | 出力形式 | 使用場面 |
 |---------|---------|---------|
 | `api_response(data)` | `{ "data": T }` | 単体リソース取得、作成、更新 |
-| `paginated_response(items, total, limit, offset)` | `{ "data": [...], "pagination": {...} }` | 一覧取得 (datasets, cards, dashboards, transforms) |
+| `paginated_response(items, total, limit, offset)` | `{ "data": [...], "pagination": {...} }` | 一覧取得 (datasets, cards, dashboards, transforms, audit-logs) |
 
 ページネーションオブジェクト: `{ total, limit, offset, has_next }`
 
@@ -455,9 +497,9 @@ Backend API プロセス (main.py lifespan)
 
 | 領域 | フレームワーク | テストファイル数 | カバレッジ |
 |------|---------------|-----------------|-----------|
-| Frontend (Unit) | Vitest + Testing Library | 67 | - |
+| Frontend (Unit) | Vitest + Testing Library | 64 | - |
 | Frontend (E2E) | Playwright | 4 specs | - |
-| Backend | pytest | 52 | - |
+| Backend | pytest | 56 | - |
 | Executor | pytest | 6 | - |
 
 ### E2E テスト構成
@@ -468,6 +510,7 @@ frontend/e2e/
   auth.spec.ts             # 認証フロー
   dataset.spec.ts          # CSVインポート、一覧、プレビュー
   card-dashboard.spec.ts   # カード/ダッシュボード CRUD
+  sharing.spec.ts          # Dashboard共有フロー, Group管理 [FR-7]
   helpers/
     login-helper.ts        # UI 経由ログインヘルパー
     api-helper.ts          # テストデータ作成/削除 API ヘルパー

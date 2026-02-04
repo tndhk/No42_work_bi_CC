@@ -1,6 +1,6 @@
 # 運用ランブック (RUNBOOK)
 
-最終更新: 2026-02-04
+最終更新: 2026-02-05
 
 ---
 
@@ -107,6 +107,8 @@ docker compose exec executor curl -s http://localhost:8080/health
 | Transform 失敗率 | > 20% | > 30% | Executorログ確認、コードレビュー |
 | ECS CPU使用率 | > 80% | > 90% | タスク数増加 |
 | ECS メモリ使用率 | > 80% | > 90% | タスク数増加/メモリ増加 |
+| AuditLog 記録失敗数 | > 1/分 | > 10/分 | DynamoDB bi_audit_logs テーブル確認 |
+| ログイン失敗回数 (USER_LOGIN_FAILED) | > 10/分 | > 50/分 | ブルートフォース攻撃の可能性、IPブロック検討 |
 
 ### ログ
 
@@ -179,7 +181,7 @@ docker compose run --rm dynamodb-init
 
 現在のテーブル一覧:
 
-init_tables.py で自動作成されるテーブル (10テーブル):
+init_tables.py で自動作成されるテーブル (11テーブル):
 - `bi_users` - ユーザー (GSI: UsersByEmail)
 - `bi_datasets` - データセット (GSI: DatasetsByOwner)
 - `bi_cards` - カード (GSI: CardsByOwner)
@@ -190,6 +192,7 @@ init_tables.py で自動作成されるテーブル (10テーブル):
 - `bi_dashboard_shares` - ダッシュボード共有 (GSI: SharesByDashboard, SharesByTarget)
 - `bi_transforms` - Transform (GSI: TransformsByOwner)
 - `bi_transform_executions` - Transform実行履歴 (PK: transformId, SK: startedAt)
+- `bi_audit_logs` - 監査ログ (GSI: LogsByUser, LogsByTarget)
 
 ### FilterView可視性
 
@@ -403,7 +406,7 @@ docker scan bi-api:latest
 
 | 設定 | 値 |
 |------|-----|
-| Point-in-Time Recovery | 有効 (35日間) |
+| Point-in-Time Recovery | 有効 (35日間、bi_audit_logs 含む全テーブル) |
 | オンデマンドバックアップ | 週次 (日曜深夜) |
 
 ### S3
@@ -491,6 +494,53 @@ curl -s http://localhost:8000/api/datasets/<dataset_id> -H "Authorization: Beare
 # 4. Executor ヘルスチェック
 curl -s http://localhost:8080/health | jq .
 ```
+
+### 監査ログ (NFR-3/4) -- 2026-02-05 追加
+
+監査ログは admin ユーザーのみがアクセス可能。全主要操作 (認証、共有変更、Dataset操作、Transform/Card実行) のイベントを自動記録する。
+
+管理画面: `/admin/audit-logs` (Sidebar の "監査ログ" リンク、admin ユーザーのみ表示)
+
+API エンドポイント:
+```bash
+# 監査ログ一覧取得 (admin only)
+curl -s http://localhost:8000/api/audit-logs \
+  -H "Authorization: Bearer <admin_token>" | jq .
+
+# イベントタイプフィルタ
+curl -s "http://localhost:8000/api/audit-logs?event_type=USER_LOGIN&limit=20" \
+  -H "Authorization: Bearer <admin_token>" | jq .
+
+# ユーザーIDフィルタ (GSI: LogsByUser)
+curl -s "http://localhost:8000/api/audit-logs?user_id=<user_id>" \
+  -H "Authorization: Bearer <admin_token>" | jq .
+
+# 対象IDフィルタ (GSI: LogsByTarget)
+curl -s "http://localhost:8000/api/audit-logs?target_id=<dataset_id>" \
+  -H "Authorization: Bearer <admin_token>" | jq .
+
+# 日付範囲フィルタ (ISO 8601)
+curl -s "http://localhost:8000/api/audit-logs?start_date=2026-02-01T00:00:00&end_date=2026-02-05T23:59:59" \
+  -H "Authorization: Bearer <admin_token>" | jq .
+```
+
+DynamoDB テーブル: `bi_audit_logs`
+- PK: `logId` (文字列)
+- GSI `LogsByUser`: PK=`userId`, SK=`timestamp` (数値: Unix epoch)
+- GSI `LogsByTarget`: PK=`targetId`, SK=`timestamp` (数値: Unix epoch)
+
+運用上の注意:
+- AuditService はログ記録の失敗を例外として伝播しない (ビジネスロジックへの影響なし)
+- DynamoDB Scan ベースの全件取得は、ログ件数が増えると遅くなる可能性がある。user_id / target_id フィルタは GSI Query で効率的に処理される
+- ログデータの TTL やアーカイブポリシーは現時点では未設定。大量蓄積する場合は DynamoDB TTL の導入を検討
+
+監査ログトラブルシューティング:
+
+| 問題 | 原因 | 対策 |
+|------|------|------|
+| 403 Forbidden | admin以外のユーザー | admin権限を持つユーザーでアクセス |
+| ログが記録されていない | AuditService例外を握りつぶし | APIログで例外を確認、DynamoDBテーブル存在確認 |
+| レスポンスが遅い | Scanベースの全件取得 | user_id/target_id フィルタで GSI Query に誘導 |
 
 ### Dataset再取り込み (FR-1.3) -- 2026-02-03 追加
 

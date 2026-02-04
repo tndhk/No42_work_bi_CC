@@ -1,154 +1,140 @@
 ==============================================================================
 コードマップ差分レポート
-生成日時: 2026-02-04
-トリガー: FR-2.1/2.2/2.3 Transform基盤 + 実行履歴 + スケジューラ + 実行制約
+生成日時: 2026-02-05
+トリガー: Audit Log 機能追加 (監査ログテーブル + AuditService + 既存ルート統合 + Frontend UI)
 ==============================================================================
 
-状態: 既存コードマップからの更新 (前回: 2026-02-01 フィルタ機能追加後)
+状態: 既存コードマップからの更新 (前回: 2026-02-04 FR-2.1 Transform基盤)
 
 ------------------------------------------------------------------------------
 変更概要
 ------------------------------------------------------------------------------
 
 今回の更新トリガー:
-- FR-2.1 Transform CRUD + 手動実行 (Backend API/Repository + Frontend UI)
-- FR-2.2 Transform実行履歴 + asyncioスケジューラによるcron式自動実行
-- FR-2.3 Transform実行制約 (TransformRunner, 300秒タイムアウト, 4096MBメモリ制限)
-- FR-1.3 Dataset再取り込み反映漏れ修正 (SchemaChange, reimport関連)
-- DynamoDBテーブル 8 -> 10 (bi_transforms, bi_transform_executions追加)
-- init_tables.py: bi_groups, bi_group_members, bi_dashboard_shares 定義追加
+- Audit Log 機能: DynamoDB テーブル (bi_audit_logs), Model, Repository, Service, Route
+- AuditService を既存ルートに統合 (auth, cards, datasets, dashboard_shares, transforms)
+- Frontend: AuditLogListPage, use-audit-logs hook, audit-logs API, audit-log types
+- Sidebar: admin 向け監査ログリンク追加 (ScrollText アイコン)
+- ルーティング: /admin/audit-logs 追加
+- DynamoDB テーブル 10 -> 11 (bi_audit_logs 追加, GSI: LogsByUser, LogsByTarget)
+- init_tables.py: bi_audit_logs テーブル定義追加
 
 ------------------------------------------------------------------------------
 ファイルごとの差分率
 ------------------------------------------------------------------------------
 
                        旧行数   新行数   差分行数   差分率    判定
-architecture.md          369      499     +130     35.2%    APPROVAL REQUIRED
-backend.md               486      796     +310     63.7%    APPROVAL REQUIRED
-data.md                  601      806     +205     34.1%    APPROVAL REQUIRED
-frontend.md              562      648      +86     15.3%    AUTO UPDATE
+architecture.md          500      542      +42      8.4%    AUTO UPDATE
+backend.md               797      858      +61      7.7%    AUTO UPDATE
+data.md                  807      877      +70      8.7%    AUTO UPDATE
+frontend.md              649      668      +19      2.9%    AUTO UPDATE
 ------------------------------------------------------------------------------
-合計                    2018     2749     +731     36.2%    APPROVAL REQUIRED
+合計                    2753     2945     +192      7.0%    AUTO UPDATE
 
-git diff 統計: 881 insertions(+), 150 deletions(-), 4 files changed
-全体差分率: 36.2% (閾値 30% 超過 --> 承認が必要)
-
-------------------------------------------------------------------------------
-architecture.md の変更内容 (+181, -51, 35.2%)
-------------------------------------------------------------------------------
-
-[UPDATED] 最終更新タイムスタンプ (FR-2.1 Transform基盤 Phase 1 追加)
-[UPDATED] システム構成図: DynamoDB 8->10テーブル、API ServerにScheduler追記
-[NEW]     Transform CRUD API (/api/transforms/*) 通信パターン追加
-[NEW]     Transform実行フロー (POST /api/transforms/:id/execute --> S3 --> Executor --> S3 --> DynamoDB)
-[NEW]     Transform実行履歴 (GET /api/transforms/:id/executions)
-[NEW]     Scheduler通信パターン (DynamoDB scan --> croniter判定 --> TransformExecutionService)
-[NEW]     データフロー: Transform実行 [FR-2.1] セクション (手動/スケジュール)
-[NEW]     DynamoDBテーブル: bi_transforms (GSI: TransformsByOwner), bi_transform_executions (複合キー)
-[UPDATED] リポジトリ一覧: 8->10 (TransformRepository, TransformExecutionRepository追加)
-[NEW]     サービス一覧セクション (11サービス)
-[UPDATED] APIルーター一覧: /api/transforms追加
-[NEW]     フロントエンド ルーティング セクション (全12ルート)
-[NEW]     フロントエンド Transform コンポーネント セクション (7コンポーネント)
-[NEW]     スケジューラ アーキテクチャ セクション (asyncio, lifespan, 設定値)
-[UPDATED] 環境変数: SCHEDULER_ENABLED, SCHEDULER_INTERVAL_SECONDS, TRANSFORM_TIMEOUT_SECONDS追加
-[UPDATED] 依存ライブラリ: croniter, httpx追加
-[UPDATED] テストファイル数: Backend 37->52, Frontend 42->67, E2E 3->4
+全体差分率: 7.0% (閾値 30% 以下 --> 自動更新)
 
 ------------------------------------------------------------------------------
-backend.md の変更内容 (+373, -63, 63.7%)
+architecture.md の変更内容 (+42, 8.4%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (FR-2.1)
-[NEW]     ディレクトリ構造: Transform関連 10ファイル追加
-            models/transform.py, models/transform_execution.py, models/schema_change.py,
-            models/filter_view.py, repositories/transform_repository.py,
-            repositories/transform_execution_repository.py, repositories/filter_view_repository.py,
-            services/transform_execution_service.py, services/transform_scheduler_service.py,
-            services/schema_comparator.py, routes/transforms.py
-[NEW]     API routes: Transform 7エンドポイント (CRUD + execute + execution history)
-[NEW]     Dataset API: s3-import, reimport/dry-run, reimport [FR-1.3]
-[NEW]     FilterView API (dashboard-scoped + independent routes)
-[NEW]     モデル: Transform (croniter validation), TransformExecution (status lifecycle)
-[NEW]     モデル: SchemaChange/SchemaCompareResult [FR-1.3], FilterView
-[UPDATED] Dataset: source_type "transform" 追加
-[NEW]     リポジトリ: TransformRepository (GSI TransformsByOwner)
-[NEW]     リポジトリ: TransformExecutionRepository (複合キー, _from_dynamodb_item override, Decimal変換)
-[NEW]     リポジトリ: FilterViewRepository (GSI FilterViewsByDashboard)
-[UPDATED] サービス依存グラフ拡張
-[NEW]     Transform手動実行フロー (9ステップ)
-[NEW]     Schedulerスケジュール実行フロー (asyncio background loop)
-[NEW]     Dataset再取り込みフロー [FR-1.3]
-[UPDATED] 設定テーブル: scheduler/transform関連追加
-[UPDATED] 依存パッケージテーブル構造化 (production/dev分離)
-[UPDATED] DynamoDBテーブル一覧: bi_transforms, bi_transform_executions, bi_filter_views追加
-[UPDATED] テストカバレッジ一覧: Transform関連テスト6ファイル追加
+[UPDATED] 最終更新タイムスタンプ (Audit Log 機能追加)
+[UPDATED] システム構成図: DynamoDB 10->11テーブル、[AuditService] 追記
+[NEW]     /api/audit-logs 通信パターン追加 (admin専用)
+[NEW]     各ルートから AuditLog への通信を明示 ([AuditLog] 注記)
+[UPDATED] 認証フロー: AuditService.log_user_login/log_user_login_failed 追加
+[UPDATED] 認可レイヤー: require_admin 適用先に /api/audit-logs 追加
+[NEW]     監査ログ (Audit Log) セクション追加 (EventType 12種, 呼び出し元一覧)
+[UPDATED] DynamoDBテーブル: bi_audit_logs (GSI: LogsByUser, LogsByTarget) 追加
+[UPDATED] リポジトリ一覧: 10->11 (AuditLogRepository 追加)
+[UPDATED] サービス一覧: 11->12 (AuditService 追加)
+[UPDATED] APIルーター一覧: /api/audit-logs 追加
+[UPDATED] フロントエンド ルーティング: /admin/audit-logs 追加
+[UPDATED] データフロー各セクションに AuditService 呼び出しを追記
 
 ------------------------------------------------------------------------------
-data.md の変更内容 (+218, -13, 34.1%)
+backend.md の変更内容 (+61, 7.7%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (FR-2.1 Transform基盤追加)
-[NEW]     DynamoDBテーブル: bi_transforms (PK: transformId, GSI: TransformsByOwner)
-[NEW]     DynamoDBテーブル: bi_transform_executions (PK: transformId, SK: startedAt)
-[UPDATED] テーブル総数: 10テーブルを明記
-[NEW]     スキーマ詳細: bi_transforms 全属性+クエリパターン
-[NEW]     スキーマ詳細: bi_transform_executions 全属性+クエリパターン (ScanIndexForward=False)
-[UPDATED] スキーマ詳細: bi_filter_views 欠落属性追加 (filterState, isShared, isDefault, ownerId)
-[NEW]     S3ストレージ: Transform実行時の出力保存先追記
-[NEW]     Pydanticモデル: transform.py (TransformCreate, TransformUpdate, Transform)
-[NEW]     Pydanticモデル: transform_execution.py (TransformExecution, status/triggered_by列挙)
-[NEW]     Pydanticモデル: schema_change.py [FR-1.3] (SchemaChangeType, SchemaChange, SchemaCompareResult)
-[NEW]     Pydanticモデル: filter_view.py (FilterViewCreate, FilterViewUpdate, FilterView)
-[NEW]     TypeScript型: transform.ts (Transform, TransformCreateRequest等)
-[NEW]     TypeScript型: reimport.ts (SchemaChangeType, SchemaChange等)
-[NEW]     Type Guard: isTransform()追加
-[UPDATED] エンティティ関係図: mermaid/ASCII にTransform/TransformExecution/FilterView追加
-[NEW]     データフローセクション (CSVインポート, Transform実行, 再インポート)
-[NEW]     キーパターン例外: TransformExecutionRepository特殊処理
+[UPDATED] 最終更新タイムスタンプ (Audit Log 機能追加)
+[NEW]     ディレクトリ構造: audit_logs.py, audit_log.py, audit_log_repository.py, audit_service.py 追加
+[NEW]     API routes: audit_logs エンドポイント (admin専用, フィルタ付き一覧)
+[NEW]     モデル: AuditLog, EventType (12種類の監査イベント)
+[NEW]     リポジトリ: AuditLogRepository (複合キー, GSI: LogsByUser, LogsByTarget)
+[NEW]     サービス: AuditService (fire-and-forget パターン)
+[UPDATED] 依存関係グラフ: audit_logs.py ルート追加
+[UPDATED] auth.py, cards.py, datasets.py, dashboard_shares.py 依存に audit_service.py 追加
+[UPDATED] DynamoDBテーブル一覧: bi_audit_logs 追加
+[UPDATED] テスト一覧: audit_log 関連テスト3ファイル追加 (model, repository, service)
+[UPDATED] routes テスト: test_audit_logs.py 追加
 
 ------------------------------------------------------------------------------
-frontend.md の変更内容 (+109, -23, 15.3%)
+data.md の変更内容 (+70, 8.7%)
 ------------------------------------------------------------------------------
 
-[UPDATED] 最終更新タイムスタンプ (FR-2.1)
-[NEW]     ルーティング: /transforms -> TransformListPage, /transforms/:id -> TransformEditPage
-[NEW]     ページ: TransformListPage.tsx, TransformEditPage.tsx
-[NEW]     コンポーネント: transform/ 5件 (TransformCodeEditor, DatasetMultiSelect,
-            TransformExecutionResult, TransformExecutionHistory, TransformScheduleConfig)
-[NEW]     Hooks: use-transforms.ts 7 hooks (useTransforms, useTransform, useCreateTransform等)
-[NEW]     API: transforms.ts (list, get, create, update, delete, execute, listExecutions)
-[NEW]     型定義: transform.ts (Transform, TransformCreateRequest等, isTransform type guard)
-[NEW]     React Queryキー: transforms, transform-executions
-[NEW]     テスト: 11ファイル追加 (components 5, hooks 1, api 1, pages 2, types 1)
-[NEW]     テストユーティリティ: createMockTransform(), createMockTransformExecution()
-[UPDATED] Sidebar: Transform リンク追加 (Repeatアイコン)
-[NEW]     FR-1.3反映漏れ修正: SchemaChangeWarningDialog, reimport.ts, reimport hooks/API
-[NEW]     型定義一覧テーブル (全9型定義ファイル)
-[UPDATED] テストファイル数: 53->64, APIモジュール数: 7->8
+[UPDATED] 最終更新タイムスタンプ (Audit Log 機能追加)
+[UPDATED] テーブル総数: 10 -> 11
+[NEW]     DynamoDBテーブル一覧: bi_audit_logs 追加 (GSI: LogsByUser, LogsByTarget)
+[NEW]     スキーマ詳細: bi_audit_logs 全属性 + クエリパターン
+[NEW]     Pydanticモデル: audit_log.py (EventType, AuditLog)
+[NEW]     TypeScript型: audit-log.ts (EventType, AuditLog, AuditLogListParams)
+[UPDATED] エンティティ関係図: mermaid/ASCII に AuditLog エンティティ追加
+
+------------------------------------------------------------------------------
+frontend.md の変更内容 (+19, 2.9%)
+------------------------------------------------------------------------------
+
+[UPDATED] 最終更新タイムスタンプ (Audit Log 機能追加)
+[NEW]     ページ: AuditLogListPage.tsx (admin専用, フィルタ+ページネーション)
+[NEW]     Hooks: use-audit-logs.ts (useAuditLogs query)
+[NEW]     API: audit-logs.ts (auditLogsApi.list)
+[NEW]     型定義: audit-log.ts (EventType, AuditLog, AuditLogListParams)
+[UPDATED] ルーティング: /admin/audit-logs 追加
+[UPDATED] Sidebar: admin 向け監査ログリンク追加 (ScrollText アイコン)
+[UPDATED] React Query キー: ['audit-logs', params?] 追加
+[UPDATED] API モジュール数: 8->9
+[UPDATED] 型定義一覧テーブル: audit-log.ts 追加
 
 ------------------------------------------------------------------------------
 スキャン統計 (更新後)
 ------------------------------------------------------------------------------
 
 Backend (app/):
-  ソースファイル:      ~50 (.py)  [前回: 37 -> Transform/スケジューラ関連追加]
-  テストファイル:      52 (.py)   [前回: 37 -> Transform関連テスト追加]
-  ルートモジュール:     6         [前回: 4 -> transforms, filter_views追加]
-  モデルモジュール:    12         [前回: 5 -> transform, transform_execution等追加]
-  リポジトリ:         10         [前回: 5 -> transform, filter_view系追加]
-  サービス:           11         [前回: 6 -> transform_execution, scheduler, schema_comparator等追加]
+  ソースファイル:      ~55 (.py)  [前回: ~50 -> Audit Log関連4ファイル追加]
+  テストファイル:      56 (.py)   [前回: 52 -> Audit Log関連テスト4ファイル追加]
+  ルートモジュール:    11         [前回: 10 -> audit_logs.py 追加]
+  モデルモジュール:    12         [前回: 12 -> audit_log.py 既存ファイル追加, 総数不変]
+  リポジトリ:         11         [前回: 10 -> audit_log_repository.py 追加]
+  サービス:           12         [前回: 11 -> audit_service.py 追加]
 
 Frontend (src/):
-  テストファイル:      64 (.ts/.tsx)  [前回: 44 -> Transform関連11ファイル追加]
-  ページ:             11             [前回: 9 -> TransformList, TransformEdit追加]
-  コンポーネント:     ~30            [前回: 24 -> transform/ 5件追加]
-  Hooks:               5 ファイル    [前回: 4 -> use-transforms.ts追加]
-  API クライアント:    8             [前回: 5 -> transforms.ts追加]
-  型定義:              9 ファイル    [前回: 5 -> transform.ts, reimport.ts等追加]
+  テストファイル:      64 (.ts/.tsx)  [変更なし]
+  ページ:             12             [前回: 11 -> AuditLogListPage 追加]
+  コンポーネント:     ~30            [変更なし]
+  Hooks:               9 ファイル    [前回: 8 -> use-audit-logs.ts 追加]
+  API クライアント:    9             [前回: 8 -> audit-logs.ts 追加]
+  型定義:             10 ファイル    [前回: 9 -> audit-log.ts 追加]
 
 DynamoDB:
-  テーブル数:         10             [前回: 8 -> bi_transforms, bi_transform_executions追加]
+  テーブル数:         11             [前回: 10 -> bi_audit_logs 追加]
+
+------------------------------------------------------------------------------
+AuditService 統合マトリクス (新規)
+------------------------------------------------------------------------------
+
+| ルートファイル | 対象イベント | 呼び出しタイミング |
+|---------------|------------|-------------------|
+| auth.py | USER_LOGIN | ログイン成功後 |
+| auth.py | USER_LOGOUT | ログアウト後 |
+| auth.py | USER_LOGIN_FAILED | 認証失敗時 (user_not_found, invalid_password) |
+| cards.py | CARD_EXECUTION_FAILED | preview/execute 失敗時 (RuntimeError) |
+| datasets.py | DATASET_CREATED | CSV インポート成功後 |
+| datasets.py | DATASET_IMPORTED | S3インポート/再取り込み成功後 |
+| datasets.py | DATASET_DELETED | データセット削除後 |
+| dashboard_shares.py | DASHBOARD_SHARE_ADDED | 共有作成後 |
+| dashboard_shares.py | DASHBOARD_SHARE_REMOVED | 共有削除後 |
+| dashboard_shares.py | DASHBOARD_SHARE_UPDATED | 共有権限更新後 |
+| transforms.py | TRANSFORM_EXECUTED | Transform 実行成功後 |
+| transforms.py | TRANSFORM_FAILED | Transform 実行失敗時 (RuntimeError) |
 
 ------------------------------------------------------------------------------
 注意事項 (更新)
@@ -159,12 +145,15 @@ DynamoDB:
 [継続] Backend の一覧ページネーションは全件取得後 Python スライスで実装。
        大量データ時はパフォーマンス懸念あり。
 [継続] E2E テストは workers:1 (シングルスレッド) で実行。
+[継続] TransformExecutionRepository は複合キー (PK: transformId, SK: startedAt) を使用。
+[継続] スケジューラは asyncio バックグラウンドタスクとして main.py の lifespan で起動。
 
-[NEW]  TransformExecutionRepository は複合キー (PK: transformId, SK: startedAt) を使用し、
-       create() と _from_dynamodb_item() をオーバーライドしている。Decimal変換に注意。
-[NEW]  スケジューラは asyncio バックグラウンドタスクとして main.py の lifespan で起動。
-       SCHEDULER_ENABLED=false (デフォルト) では起動しない。
-[NEW]  Transform実行は TransformRunner を通じて Executor と同一のサンドボックスで実行される。
-       タイムアウトは 300秒 (カード実行の 10秒と異なる)。
+[NEW]  AuditService は fire-and-forget パターン。全例外を握りつぶすため、監査ログの
+       書き込み失敗がビジネスロジックに影響しない設計。
+[NEW]  AuditLogRepository は list_all で user_id/target_id 指定時に GSI ベースの
+       Query を使用し、それ以外は Scan + FilterExpression にフォールバック。
+       大量ログ時は Scan のパフォーマンスに注意。
+[NEW]  USER_LOGIN_FAILED イベントでは user_id が "unknown" に設定される
+       (DynamoDB GSI キーは空文字不可のため)。target_id にはメールアドレスが格納される。
 
 ==============================================================================

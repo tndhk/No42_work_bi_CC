@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-最終更新: 2026-02-04 (FR-2.1 Transform基盤追加)
+最終更新: 2026-02-05 (Audit Log 機能追加)
 データベース: DynamoDB (NoSQL) + S3 (Parquet)
 
 ---
@@ -9,7 +9,7 @@
 
 テーブルプレフィックス: `bi_` (設定可能)
 BillingMode: PAY_PER_REQUEST (全テーブル)
-テーブル総数: 10
+テーブル総数: 11
 
 | テーブル名 | PK | SK | GSI | 用途 |
 |-----------|-----|-----|-----|------|
@@ -23,6 +23,7 @@ BillingMode: PAY_PER_REQUEST (全テーブル)
 | bi_groups | groupId (S) | - | GroupsByName (name) | グループ [FR-7] |
 | bi_group_members | groupId (S) | userId (S) | MembersByUser (userId) | グループメンバー [FR-7] |
 | bi_dashboard_shares | shareId (S) | - | SharesByDashboard (dashboardId), SharesByTarget (sharedToId) | ダッシュボード共有 [FR-7] |
+| bi_audit_logs | logId (S) | timestamp (N) | LogsByUser (userId + timestamp), LogsByTarget (targetId + timestamp) | 監査ログ |
 
 ---
 
@@ -149,6 +150,29 @@ GSI: `TransformsByOwner` (PK: ownerId, Projection: ALL)
 | triggeredBy | - | S | "manual" / "schedule" |
 
 クエリパターン: transformId で PK 指定 + startedAt 降順 (ScanIndexForward=False) で最新実行を取得
+
+### bi_audit_logs
+
+複合キーテーブル (logId + timestamp)。GSI 2つ。
+
+| 属性 | 型 | DynamoDB型 | 説明 |
+|------|-----|-----------|------|
+| logId | PK | S | log_ + uuid hex[:12] |
+| timestamp | SK | N | イベント発生 UNIX タイムスタンプ |
+| eventType | - | S | EventType 列挙値 (12種) |
+| userId | GSI-PK | S | 操作実行ユーザーID |
+| targetType | - | S | 対象リソース種別 |
+| targetId | GSI-PK | S | 対象リソースID |
+| details | - | M | 追加詳細情報 |
+| requestId | - | S | リクエストトレース用ID (nullable) |
+
+GSI-1: `LogsByUser` (PK: userId, SK: timestamp, Projection: ALL)
+GSI-2: `LogsByTarget` (PK: targetId, SK: timestamp, Projection: ALL)
+
+クエリパターン:
+- userId で PK 指定 + timestamp 降順 (ScanIndexForward=False) で最新ログを取得
+- targetId で PK 指定 + timestamp 降順 で特定リソースのログを取得
+- 全件 Scan + FilterExpression (eventType, start_date, end_date)
 
 ### bi_groups [FR-7]
 
@@ -447,6 +471,34 @@ class SchemaCompareResult:
     changes: list[SchemaChange]
 ```
 
+### audit_log.py
+
+```python
+class EventType(str, Enum):
+    USER_LOGIN = "USER_LOGIN"
+    USER_LOGOUT = "USER_LOGOUT"
+    USER_LOGIN_FAILED = "USER_LOGIN_FAILED"
+    DASHBOARD_SHARE_ADDED = "DASHBOARD_SHARE_ADDED"
+    DASHBOARD_SHARE_REMOVED = "DASHBOARD_SHARE_REMOVED"
+    DASHBOARD_SHARE_UPDATED = "DASHBOARD_SHARE_UPDATED"
+    DATASET_CREATED = "DATASET_CREATED"
+    DATASET_IMPORTED = "DATASET_IMPORTED"
+    DATASET_DELETED = "DATASET_DELETED"
+    TRANSFORM_EXECUTED = "TRANSFORM_EXECUTED"
+    TRANSFORM_FAILED = "TRANSFORM_FAILED"
+    CARD_EXECUTION_FAILED = "CARD_EXECUTION_FAILED"
+
+class AuditLog:
+    log_id: str
+    timestamp: datetime
+    event_type: EventType
+    user_id: str
+    target_type: str
+    target_id: str
+    details: dict = {}
+    request_id: str | None = None
+```
+
 ### dashboard_share.py [FR-7]
 
 ```python
@@ -636,6 +688,17 @@ interface TransformExecuteResponse { execution_id: string; output_dataset_id: st
 interface TransformExecution { execution_id: string; transform_id: string; status: 'running' | 'success' | 'failed'; started_at: string; finished_at?: string; duration_ms?: number; output_row_count?: number; output_dataset_id?: string; error?: string; triggered_by: 'manual' | 'schedule' }
 ```
 
+### audit-log.ts
+
+```typescript
+type EventType = 'USER_LOGIN' | 'USER_LOGOUT' | 'USER_LOGIN_FAILED'
+  | 'DASHBOARD_SHARE_ADDED' | 'DASHBOARD_SHARE_REMOVED' | 'DASHBOARD_SHARE_UPDATED'
+  | 'DATASET_CREATED' | 'DATASET_IMPORTED' | 'DATASET_DELETED'
+  | 'TRANSFORM_EXECUTED' | 'TRANSFORM_FAILED' | 'CARD_EXECUTION_FAILED'
+interface AuditLog { log_id: string; timestamp: string; event_type: EventType; user_id: string; target_type: string; target_id: string; details: Record<string, unknown>; request_id: string | null }
+interface AuditLogListParams { event_type?: EventType; user_id?: string; target_id?: string; start_date?: string; end_date?: string; limit?: number; offset?: number }
+```
+
 ### reimport.ts [FR-1.3]
 
 ```typescript
@@ -688,6 +751,11 @@ erDiagram
     Transform }o--o{ Dataset : "input (1..N)"
     Transform ||--o| Dataset : "output (0..1)"
     Transform ||--o{ TransformExecution : "execution history"
+    User ||--o{ AuditLog : "audit trail"
+    AuditLog }o--o| Dashboard : "target (dashboard)"
+    AuditLog }o--o| Dataset : "target (dataset)"
+    AuditLog }o--o| Transform : "target (transform)"
+    AuditLog }o--o| Card : "target (card)"
 ```
 
 ```
@@ -720,8 +788,11 @@ erDiagram
     |                                     +-- shared_to_type="group" --> Group
     |
     +--< member of >-- GroupMember (bi_group_members)
-                          |
-                          +-- group_id --> Group (bi_groups)
+    |                     |
+    |                     +-- group_id --> Group (bi_groups)
+    |
+    +--< audit >-- AuditLog (bi_audit_logs)
+                     +-- target_type + target_id --> Dashboard / Dataset / Transform / Card / User
 ```
 
 ## データフロー

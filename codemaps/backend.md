@@ -1,6 +1,6 @@
 # バックエンド コードマップ
 
-最終更新: 2026-02-04 (FR-2.1 Transform基盤 Phase 1: CRUD + 手動実行 + スケジューラ)
+最終更新: 2026-02-05 (Audit Log 機能追加 + 既存ルートへの監査ログ統合)
 フレームワーク: FastAPI 0.109 / Python 3.11+
 エントリポイント: `backend/app/main.py`
 
@@ -28,6 +28,7 @@ backend/
         filter_view_detail.py        # フィルタビュー詳細 (独立)
         groups.py                    # グループ管理 CRUD + メンバー管理 [FR-7]
         transforms.py                # Transform CRUD + 実行 + 実行履歴 [FR-2.1]
+        audit_logs.py                # 監査ログ一覧 (admin専用)
         users.py                     # ユーザー検索 [FR-7]
     core/
       __init__.py
@@ -52,6 +53,7 @@ backend/
       schema_change.py               # SchemaChangeType, SchemaChange, SchemaCompareResult [FR-1.3]
       transform.py                   # Transform, TransformCreate, TransformUpdate [FR-2.1]
       transform_execution.py         # TransformExecution [FR-2.1]
+      audit_log.py                   # AuditLog, EventType (12種類)
       user.py                        # User, UserInDB, UserCreate, UserUpdate
     repositories/
       __init__.py
@@ -65,6 +67,7 @@ backend/
       group_member_repository.py     # GroupMemberRepository (複合キー, GSI: MembersByUser) [FR-7]
       transform_repository.py        # TransformRepository (GSI: TransformsByOwner) [FR-2.1]
       transform_execution_repository.py  # TransformExecutionRepository (複合キー) [FR-2.1]
+      audit_log_repository.py        # AuditLogRepository (複合キー, GSI: LogsByUser, LogsByTarget)
       user_repository.py             # UserRepository (+ GSI email検索, scan_by_email_prefix)
     services/
       __init__.py
@@ -77,26 +80,28 @@ backend/
       schema_comparator.py           # compare_schemas() - スキーマ変更検知 [FR-1.3]
       transform_execution_service.py # TransformExecutionService [FR-2.1]
       transform_scheduler_service.py # TransformSchedulerService (asyncio background) [FR-2.1]
+      audit_service.py               # AuditService (fire-and-forget 監査ログ記録)
       type_inferrer.py               # 型推論 (int, float, bool, date, string)
   tests/
     conftest.py                      # 共通フィクスチャ
     core/                            # config, security, logging, password_policy テスト
     models/                          # common, user, dataset, card, dashboard,
                                      # dashboard_share, group, filter_view,
-                                     # s3_import, transform テスト
+                                     # s3_import, transform, audit_log テスト
     db/                              # dynamodb, s3 テスト
     repositories/                    # base, user, dataset, card, dashboard,
                                      # dashboard_share, group, group_member,
-                                     # filter_view, transform, transform_execution テスト
+                                     # filter_view, transform, transform_execution,
+                                     # audit_log テスト
     services/                        # csv_parser, parquet, dataset, card_execution,
                                      # dashboard, executor_client, type_inferrer,
                                      # permission_service, s3_import_service,
                                      # schema_comparator, transform_execution_service,
-                                     # transform_scheduler_service テスト
+                                     # transform_scheduler_service, audit_service テスト
     api/                             # health, deps テスト
       routes/                        # auth, cards, dashboards, datasets, filter_views,
                                      # dashboard_shares, groups, users,
-                                     # s3_import, transforms テスト
+                                     # s3_import, transforms, audit_logs テスト
     integration/                     # 統合テスト [FR-7]
       test_permission_integration.py # パーミッション統合テスト
   requirements.txt                   # pip 依存関係
@@ -221,6 +226,17 @@ prefix: `/api/users`
 パラメータ: `q` (検索文字列, 空の場合は空配列返却), `limit` (1-100, default 20)
 レスポンスフィールド: id, email, role (hashed_password は除外)
 
+### 監査ログ (Audit Log)
+
+prefix: `/api/audit-logs` (admin only -- require_admin)
+
+| メソッド | パス | ハンドラ | 認可 | 説明 | レスポンス形式 |
+|----------|------|---------|------|------|---------------|
+| GET | /api/audit-logs | audit_logs.list_audit_logs | admin | 監査ログ一覧 (フィルタ付き) | paginated_response |
+
+フィルタパラメータ: event_type, user_id, target_id, start_date (ISO 8601), end_date (ISO 8601)
+GSI 最適化: user_id 指定時は LogsByUser GSI、target_id 指定時は LogsByTarget GSI で Query を実行。
+
 ### Transform [FR-2.1]
 
 prefix: `/api/transforms`
@@ -283,6 +299,25 @@ TransformUpdate: 全フィールド Optional (exclude_unset)
 | error | Optional[str] | エラーメッセージ |
 | triggered_by | str | "manual" / "schedule" |
 
+### AuditLog (`models/audit_log.py`)
+
+| フィールド | 型 | 説明 |
+|-----------|-----|------|
+| log_id | str | log_ + uuid hex[:12] |
+| timestamp | datetime | イベント発生日時 |
+| event_type | EventType | イベント種別 (12種類) |
+| user_id | str | 操作実行ユーザーID |
+| target_type | str | 対象リソース種別 (user/dataset/dashboard/transform/card/email) |
+| target_id | str | 対象リソースID |
+| details | dict | 追加詳細情報 |
+| request_id | Optional[str] | リクエストトレース用ID |
+
+EventType (12種):
+USER_LOGIN, USER_LOGOUT, USER_LOGIN_FAILED,
+DASHBOARD_SHARE_ADDED, DASHBOARD_SHARE_REMOVED, DASHBOARD_SHARE_UPDATED,
+DATASET_CREATED, DATASET_IMPORTED, DATASET_DELETED,
+TRANSFORM_EXECUTED, TRANSFORM_FAILED, CARD_EXECUTION_FAILED
+
 ### SchemaChange (`models/schema_change.py`) [FR-1.3]
 
 SchemaChangeType: ADDED, REMOVED, TYPE_CHANGED, NULLABLE_CHANGED
@@ -340,12 +375,14 @@ main.py
         |     +-- core/security.py
         |     +-- repositories/user_repository.py
         |     +-- models/user.py
+        |     +-- services/audit_service.py
         +-- routes/cards.py
         |     +-- api/deps.py (get_current_user)
         |     +-- api/response.py (api_response, paginated_response)
         |     +-- models/card.py, user.py
         |     +-- repositories/card_repository.py, dataset_repository.py
         |     +-- services/card_execution_service.py
+        |     +-- services/audit_service.py
         |     +-- core/config.py
         +-- routes/dashboards.py
         |     +-- api/deps.py (get_current_user)
@@ -360,6 +397,7 @@ main.py
         |     |                      ReimportDryRunResponse, ReimportRequest), user.py
         |     +-- repositories/dataset_repository.py
         |     +-- services/dataset_service.py
+        |     +-- services/audit_service.py
         +-- routes/filter_views.py
         |     +-- api/deps.py (get_current_user)
         |     +-- api/response.py (api_response)
@@ -378,6 +416,7 @@ main.py
         |     +-- models/user.py, dashboard_share.py
         |     +-- repositories/dashboard_repository.py
         |     +-- repositories/dashboard_share_repository.py
+        |     +-- services/audit_service.py
         +-- routes/groups.py  [FR-7]
         |     +-- api/deps.py (require_admin)
         |     +-- api/response.py (api_response)
@@ -390,12 +429,18 @@ main.py
         |     +-- models/user.py
         |     +-- repositories/user_repository.py
         +-- routes/transforms.py  [FR-2.1]
-              +-- api/deps.py (get_current_user, get_dynamodb_resource, get_s3_client)
-              +-- api/response.py (api_response, paginated_response)
-              +-- models/transform.py (Transform, TransformCreate, TransformUpdate), user.py
-              +-- repositories/transform_repository.py
-              +-- repositories/transform_execution_repository.py
-              +-- services/transform_execution_service.py
+        |     +-- api/deps.py (get_current_user, get_dynamodb_resource, get_s3_client)
+        |     +-- api/response.py (api_response, paginated_response)
+        |     +-- models/transform.py (Transform, TransformCreate, TransformUpdate), user.py
+        |     +-- repositories/transform_repository.py
+        |     +-- repositories/transform_execution_repository.py
+        |     +-- services/transform_execution_service.py
+        |     +-- services/audit_service.py
+        +-- routes/audit_logs.py
+              +-- api/deps.py (require_admin)
+              +-- api/response.py (paginated_response)
+              +-- models/audit_log.py (EventType)
+              +-- repositories/audit_log_repository.py
 ```
 
 ### コア依存
@@ -436,6 +481,17 @@ repositories/transform_execution_repository.py  [FR-2.1]
   -- 複合キー: transformId (PK) + startedAt (SK)
   -- create/update_status/list_by_transform/has_running_execution をカスタム実装
   -- _from_dynamodb_item オーバーライド (timestamp/Decimal変換)
+
+repositories/audit_log_repository.py
+  +-- repositories/base.py (BaseRepository -- 部分的にオーバーライド)
+  +-- core/config.py (table_prefix)
+  +-- models/audit_log.py (AuditLog, EventType)
+  -- 複合キー: logId (PK) + timestamp (SK)
+  -- create オーバーライド (自動タイムスタンプなし)
+  -- _from_dynamodb_item オーバーライド (timestamp/Decimal変換)
+  -- list_all: Scan + FilterExpression (event_type/start_date/end_date)
+  -- list_by_user: GSI LogsByUser (userId + timestamp SK, ScanIndexForward=False)
+  -- list_by_target: GSI LogsByTarget (targetId + timestamp SK, ScanIndexForward=False)
 ```
 
 ### サービス依存
@@ -486,6 +542,11 @@ services/transform_scheduler_service.py  [FR-2.1]
   +-- repositories/transform_repository.py
   +-- repositories/transform_execution_repository.py
   +-- services/transform_execution_service.py
+
+services/audit_service.py
+  +-- models/audit_log.py (AuditLog, EventType)
+  +-- repositories/audit_log_repository.py
+  -- fire-and-forget: 例外は握りつぶし (ビジネスロジック非干渉)
 
 services/csv_parser.py
   +-- chardet, pandas (外部)
@@ -788,6 +849,7 @@ dashboards.py, datasets.py はインラインで owner_id チェックを実施�
 | bi_group_members | groupId | userId | MembersByUser |
 | bi_transforms | transformId | - | TransformsByOwner [FR-2.1] |
 | bi_transform_executions | transformId | startedAt | - [FR-2.1] |
+| bi_audit_logs | logId | timestamp | LogsByUser, LogsByTarget |
 
 ## 関連コードマップ
 

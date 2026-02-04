@@ -1,6 +1,6 @@
 # 社内BI・Pythonカード 実装進捗
 
-Last Updated: 2026-02-04
+Last Updated: 2026-02-05
 
 要件定義書 (docs/requirements.md) および設計書 (docs/design.md) に基づく全機能の実装ステータス。
 
@@ -75,9 +75,9 @@ Last Updated: 2026-02-04
 
 - [x] Executor sandbox (ネットワーク遮断、モジュール制限、リソース制限)
 - [x] 認証 (JWT、レート制限)
-- [ ] AuditLog モデル・リポジトリ
-- [ ] ログ記録 (共有変更、取り込み履歴、実行失敗)
-- [ ] ログ検索API
+- [x] AuditLog モデル・リポジトリ (EventType enum, AuditLogRepository, DynamoDB GSI)
+- [x] ログ記録 (ログイン/ログアウト、共有変更、Dataset作成/削除、Transform実行/失敗、Card実行失敗)
+- [x] ログ検索API (GET /api/audit-logs - event_type/user_id/target_id/date_range/pagination フィルタ対応)
 
 ---
 
@@ -115,12 +115,13 @@ Last Updated: 2026-02-04
 | FR-1.3 | Dataset再取り込み (スキーマ変化検知・警告) | -- | 2026-02-03 |
 | FR-2.1 | Transform基盤 CRUD + 手動実行 (Backend API/Repository + Frontend UI) | fb09d08 | 2026-02-04 |
 | FR-2.2/2.3 | Transform実行履歴 + スケジュール実行 + 実行制約 (TransformRunner, 300秒タイムアウト) | 5ead250 | 2026-02-04 |
+| NFR-3/4 | 監査ログ (AuditLog モデル/リポジトリ/サービス + 全API統合 + 管理画面) | -- | 2026-02-05 |
 
 ## 次期フェーズ候補
 
 | 優先度 | 機能群 | 依存関係 | 複雑度 |
 |--------|--------|----------|--------|
 | - | Transform (ETL) | 完了 (FR-2.1/2.2/2.3) | - |
+| - | 監査ログ | 完了 (NFR-3/4) | - |
 | 中 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
-| 中 | 監査ログ | 他機能に依存しない | 中 |
 | 低 | パーティションプルーニング | NFR-1 | 中 |

@@ -1,6 +1,6 @@
 # フロントエンド コードマップ
 
-最終更新: 2026-02-04 (FR-2.1 Transform基盤 Phase 1)
+最終更新: 2026-02-05 (Audit Log 機能追加)
 フレームワーク: React 18 + TypeScript + Vite 5
 エントリポイント: `frontend/src/main.tsx`
 テストカバレッジ: 64テストファイル (Unit) + 4スペック (E2E)
@@ -27,7 +27,7 @@ frontend/
   src/
     main.tsx                           # ReactDOM.createRoot, StrictMode
     App.tsx                            # QueryClientProvider + RouterProvider
-    routes.tsx                         # createBrowserRouter 定義
+    routes.tsx                         # createBrowserRouter 定義 (13ルート)
     index.css                          # TailwindCSS
     vite-env.d.ts                      # Vite 型定義
     components/
@@ -37,7 +37,7 @@ frontend/
         ErrorBoundary.tsx              # React ErrorBoundary
         Header.tsx                     # ヘッダー (ユーザーメニュー)
         Layout.tsx                     # Sidebar + Header + Outlet
-        Sidebar.tsx                    # ナビゲーション (Transform リンク追加, admin 時 グループ管理リンク表示)
+        Sidebar.tsx                    # ナビゲーション (Transform リンク, admin 時 グループ管理+監査ログリンク表示)
         LoadingSpinner.tsx             # ローディング
         ConfirmDialog.tsx              # 確認ダイアログ
         Pagination.tsx                 # ページネーション
@@ -86,12 +86,13 @@ frontend/
       use-filter-views.ts              # useFilterViews, CRUD
       use-groups.ts                    # useGroups, useGroup, CRUD + useAddMember, useRemoveMember [FR-7]
       use-transforms.ts               # useTransforms, useTransform, CRUD + execute + executions [FR-2.1]
+      use-audit-logs.ts              # useAuditLogs (query, admin向け)
     lib/
       api-client.ts                    # ky ベース HTTPクライアント (JWT自動付与)
       utils.ts                         # cn() (clsx + tailwind-merge)
       layout-utils.ts                  # toRGLLayout(), fromRGLLayout()
       api/
-        index.ts                       # barrel export (8 API モジュール)
+        index.ts                       # barrel export (9 API モジュール)
         auth.ts                        # authApi
         cards.ts                       # cardsApi
         dashboards.ts                  # dashboardsApi
@@ -100,6 +101,7 @@ frontend/
         filter-views.ts                # filterViewsApi
         groups.ts                      # groupsApi [FR-7]
         transforms.ts                  # transformsApi [FR-2.1]
+        audit-logs.ts                  # auditLogsApi (list)
     pages/
       LoginPage.tsx                    # ログインフォーム
       DashboardListPage.tsx            # ダッシュボード一覧 (権限バッジ, 権限別操作ボタン表示)
@@ -113,6 +115,7 @@ frontend/
       TransformListPage.tsx            # Transform 一覧 (CRUD + ページネーション) [FR-2.1]
       TransformEditPage.tsx            # Transform 編集 (コード/データセット選択/スケジュール/実行/履歴) [FR-2.1]
       GroupListPage.tsx                # グループ管理 (admin専用) [FR-7]
+      AuditLogListPage.tsx            # 監査ログ一覧 (admin専用、フィルタ+ページネーション)
     stores/
       auth-store.ts                    # Zustand 認証ストア
     types/
@@ -126,6 +129,7 @@ frontend/
       group.ts                         # Group, GroupDetail, GroupMember, GroupCreateRequest, GroupUpdateRequest, AddMemberRequest [FR-7]
       reimport.ts                      # SchemaChange, ReimportDryRunResponse, ReimportRequest [FR-1.3]
       transform.ts                     # Transform, TransformCreateRequest, TransformUpdateRequest, TransformExecuteResponse, TransformExecution, isTransform [FR-2.1]
+      audit-log.ts                     # EventType, AuditLog, AuditLogListParams
     __tests__/                         # Vitest テストスイート (64ファイル)
       setup.ts                         # jest-dom matchers, CSS mock
       vitest.d.ts                      # カスタム型定義
@@ -229,6 +233,7 @@ frontend/
 | `/transforms` | TransformListPage | 必要 | Transform 一覧 [FR-2.1] |
 | `/transforms/:id` | TransformEditPage | 必要 | Transform 編集 (new/既存) [FR-2.1] |
 | `/admin/groups` | GroupListPage | 必要 | グループ管理 (admin 専用, Sidebar から遷移) [FR-7] |
+| `/admin/audit-logs` | AuditLogListPage | 必要 | 監査ログ閲覧 (admin 専用, Sidebar から遷移) |
 
 ## コンポーネント依存関係グラフ
 
@@ -255,7 +260,7 @@ App.tsx
               |     +-- NavLink (react-router-dom)
               |     +-- useAuthStore (store) -- user.role チェック
               |     +-- 常時表示: ダッシュボード, データセット, Transform, カード
-              |     +-- admin の場合: グループ管理 (/admin/groups) リンクを追加表示
+              |     +-- admin の場合: グループ管理 (/admin/groups) + 監査ログ (/admin/audit-logs) リンクを追加表示
               +-- Outlet --> 各ページ
 ```
 
@@ -329,6 +334,13 @@ TransformEditPage [FR-2.1]
   |     +-- ステータスバッジ (success/failed/running)
   |     +-- 手動実行 / スケジュール実行 区分表示
   +-- 2カラムレイアウト: 左=設定+コード, 右=結果+履歴
+
+AuditLogListPage (admin専用)
+  +-- useAuditLogs (hook)
+  +-- LoadingSpinner, Pagination
+  +-- ui/table, ui/badge, ui/select
+  +-- EventType フィルタ (Select コンポーネント)
+  +-- イベントタイプ別バッジカラー表示
 
 GroupListPage [FR-7]
   +-- useGroups, useDeleteGroup
@@ -410,6 +422,7 @@ interface AuthState {
 | `['shares', dashboardId]` | useShares | ダッシュボード共有一覧 [FR-7] |
 | `['groups']` | useGroups | グループ一覧 [FR-7] |
 | `['groups', groupId]` | useGroup | グループ詳細 (メンバー含む) [FR-7] |
+| `['audit-logs', params?]` | useAuditLogs | 監査ログ一覧 |
 
 ## API クライアント層
 
@@ -426,6 +439,7 @@ lib/api-client.ts (ky ベース)
   +-- lib/api/filter-views.ts       filterViewsApi.list(), create(), update(), delete()
   +-- lib/api/groups.ts             groupsApi.list(), get(), create(), update(), delete(), addMember(), removeMember() [FR-7]
   +-- lib/api/transforms.ts         transformsApi.list(), get(), create(), update(), delete(), execute(), listExecutions() [FR-2.1]
+  +-- lib/api/audit-logs.ts         auditLogsApi.list(params?)
 ```
 
 ## hooks 一覧
@@ -501,6 +515,11 @@ lib/api-client.ts (ky ベース)
 | `useAddMember()` | mutation | グループにメンバー追加 |
 | `useRemoveMember()` | mutation | グループからメンバー削除 |
 
+### use-audit-logs.ts
+| hook | 種別 | 説明 |
+|------|------|------|
+| `useAuditLogs(params?)` | query | 監査ログ一覧 (event_type, user_id, target_id, start_date, end_date, limit, offset) |
+
 ### use-filter-views.ts
 | hook | 種別 | 説明 |
 |------|------|------|
@@ -522,6 +541,7 @@ lib/api-client.ts (ky ベース)
 | `group.ts` | Group, GroupDetail, GroupMember, GroupCreateRequest, GroupUpdateRequest, AddMemberRequest | グループ [FR-7] |
 | `reimport.ts` | SchemaChange, SchemaChangeType, ReimportDryRunResponse, ReimportRequest | 再取り込み [FR-1.3] |
 | `transform.ts` | Transform, TransformCreateRequest, TransformUpdateRequest, TransformExecuteResponse, TransformExecution, isTransform | Transform [FR-2.1] |
+| `audit-log.ts` | EventType (12種), AuditLog, AuditLogListParams | 監査ログ |
 
 ## カード描画セキュリティ
 

@@ -1,6 +1,7 @@
 """Authentication API endpoint tests - TDD RED phase."""
 import pytest
 from moto import mock_aws
+from unittest.mock import patch, AsyncMock, MagicMock
 import boto3
 from datetime import datetime
 
@@ -257,3 +258,136 @@ def test_get_me_invalid_token(client):
     assert response.status_code == 401
     data = response.json()
     assert "detail" in data
+
+
+@patch('app.api.routes.auth.AuditService')
+def test_login_success_calls_audit_log(
+    mock_audit_service_cls, client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data
+):
+    """Test that successful login calls AuditService().log_user_login()."""
+    # Setup: create users table and add test user
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    # Configure mock
+    mock_audit_instance = MagicMock()
+    mock_audit_instance.log_user_login = AsyncMock(return_value=None)
+    mock_audit_service_cls.return_value = mock_audit_instance
+
+    # Act
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "password123"},
+    )
+
+    # Assert
+    assert response.status_code == 200
+    mock_audit_instance.log_user_login.assert_called_once_with(
+        user_id=test_user_data['id'], dynamodb=mock_dynamodb_resource
+    )
+
+
+@patch('app.api.routes.auth.AuditService')
+def test_login_failed_calls_audit_log(
+    mock_audit_service_cls, client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data
+):
+    """Test that failed login calls AuditService().log_user_login_failed() for both user_not_found and invalid_password."""
+    # Disable rate limiter for this test (2 login attempts needed)
+    from app.api.routes.auth import limiter as auth_limiter
+    auth_limiter.enabled = False
+
+    try:
+        # Setup: create users table and add test user
+        table_name = f"{settings.dynamodb_table_prefix}users"
+        _create_users_table(mock_dynamodb_resource)
+        users_table = mock_dynamodb_resource.Table(table_name)
+        users_table.put_item(
+            Item={
+                'userId': test_user_data['id'],
+                'email': test_user_data['email'],
+                'hashed_password': test_user_data['hashed_password'],
+                'created_at': test_user_data['created_at'],
+                'updated_at': test_user_data['updated_at'],
+            }
+        )
+
+        # Configure mock
+        mock_audit_instance = MagicMock()
+        mock_audit_instance.log_user_login_failed = AsyncMock(return_value=None)
+        mock_audit_service_cls.return_value = mock_audit_instance
+
+        # Case 1: user_not_found
+        response = client_with_mock_dynamodb.post(
+            "/api/auth/login",
+            json={"email": "nonexistent@example.com", "password": "password123"},
+        )
+        assert response.status_code == 401
+        mock_audit_instance.log_user_login_failed.assert_called_once_with(
+            email="nonexistent@example.com", reason="user_not_found", dynamodb=mock_dynamodb_resource
+        )
+
+        # Reset mock for next case
+        mock_audit_instance.log_user_login_failed.reset_mock()
+
+        # Case 2: invalid_password
+        response = client_with_mock_dynamodb.post(
+            "/api/auth/login",
+            json={"email": "test@example.com", "password": "wrongpassword"},
+        )
+        assert response.status_code == 401
+        mock_audit_instance.log_user_login_failed.assert_called_once_with(
+            email="test@example.com", reason="invalid_password", dynamodb=mock_dynamodb_resource
+        )
+    finally:
+        # Re-enable rate limiter
+        auth_limiter.enabled = True
+
+
+@patch('app.api.routes.auth.AuditService')
+def test_logout_calls_audit_log(
+    mock_audit_service_cls, client_with_mock_dynamodb, mock_dynamodb_resource, test_user_data
+):
+    """Test that logout calls AuditService().log_user_logout()."""
+    # Setup: create users table and add test user
+    table_name = f"{settings.dynamodb_table_prefix}users"
+    _create_users_table(mock_dynamodb_resource)
+    users_table = mock_dynamodb_resource.Table(table_name)
+    users_table.put_item(
+        Item={
+            'userId': test_user_data['id'],
+            'email': test_user_data['email'],
+            'hashed_password': test_user_data['hashed_password'],
+            'created_at': test_user_data['created_at'],
+            'updated_at': test_user_data['updated_at'],
+        }
+    )
+
+    # Configure mock
+    mock_audit_instance = MagicMock()
+    mock_audit_instance.log_user_logout = AsyncMock(return_value=None)
+    mock_audit_service_cls.return_value = mock_audit_instance
+
+    # Create access token
+    token = create_access_token(data={"sub": test_user_data['id']})
+
+    # Act
+    response = client_with_mock_dynamodb.post(
+        "/api/auth/logout",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    # Assert
+    assert response.status_code == 200
+    mock_audit_instance.log_user_logout.assert_called_once_with(
+        user_id=test_user_data['id'], dynamodb=mock_dynamodb_resource
+    )

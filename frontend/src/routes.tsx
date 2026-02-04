@@ -14,6 +14,7 @@ import { CardEditPage } from '@/pages/CardEditPage';
 import { TransformListPage } from '@/pages/TransformListPage';
 import { TransformEditPage } from '@/pages/TransformEditPage';
 import { GroupListPage } from '@/pages/GroupListPage';
+import { AuditLogListPage } from '@/pages/AuditLogListPage';
 
 export const router = createBrowserRouter([
   {
@@ -77,6 +78,10 @@ export const router = createBrowserRouter([
       {
         path: 'admin/groups',
         element: <GroupListPage />,
+      },
+      {
+        path: 'admin/audit-logs',
+        element: <AuditLogListPage />,
       },
     ],
   },

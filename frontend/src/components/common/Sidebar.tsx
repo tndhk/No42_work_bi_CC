@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { BarChart3, Database, LayoutDashboard, CreditCard, Users, Repeat } from 'lucide-react';
+import { BarChart3, Database, LayoutDashboard, CreditCard, Users, Repeat, ScrollText } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 const navItems = [
@@ -16,7 +16,10 @@ export function Sidebar() {
 
   const items = [
     ...navItems,
-    ...(isAdmin ? [{ to: '/admin/groups', label: 'グループ管理', icon: Users }] : []),
+    ...(isAdmin ? [
+      { to: '/admin/groups', label: 'グループ管理', icon: Users },
+      { to: '/admin/audit-logs', label: '監査ログ', icon: ScrollText },
+    ] : []),
   ];
 
   return (

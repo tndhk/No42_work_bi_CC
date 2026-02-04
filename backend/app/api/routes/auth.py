@@ -12,6 +12,7 @@ from app.core.security import verify_password, create_access_token
 from app.core.config import settings
 from app.repositories.user_repository import UserRepository
 from app.models.user import User
+from app.services.audit_service import AuditService
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -64,12 +65,17 @@ async def login(
     repo = UserRepository()
     user = await repo.get_by_email(login_data.email, dynamodb)
 
+    audit = AuditService()
+
     if not user:
         logger.warning(
             "login_failed",
             email=login_data.email,
             reason="user_not_found",
             ip=get_remote_address(request)
+        )
+        await audit.log_user_login_failed(
+            email=login_data.email, reason="user_not_found", dynamodb=dynamodb
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -84,6 +90,9 @@ async def login(
             user_id=user.id,
             reason="invalid_password",
             ip=get_remote_address(request)
+        )
+        await audit.log_user_login_failed(
+            email=login_data.email, reason="invalid_password", dynamodb=dynamodb
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,6 +110,8 @@ async def login(
         ip=get_remote_address(request)
     )
 
+    await audit.log_user_login(user_id=user.id, dynamodb=dynamodb)
+
     return api_response({
         "access_token": access_token,
         "token_type": "bearer",
@@ -115,6 +126,7 @@ async def login(
 @router.post("/logout")
 async def logout(
     current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
 ) -> dict[str, Any]:
     """Logout current user.
 
@@ -123,10 +135,13 @@ async def logout(
 
     Args:
         current_user: Current authenticated user
+        dynamodb: DynamoDB resource
 
     Returns:
         Success message
     """
+    audit = AuditService()
+    await audit.log_user_logout(user_id=current_user.id, dynamodb=dynamodb)
     return api_response({"message": "Successfully logged out"})
 
 

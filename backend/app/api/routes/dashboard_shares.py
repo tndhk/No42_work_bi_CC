@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.dashboard_share import DashboardShareCreate, DashboardShareUpdate
 from app.repositories.dashboard_repository import DashboardRepository
 from app.repositories.dashboard_share_repository import DashboardShareRepository
+from app.services.audit_service import AuditService
 
 router = APIRouter()
 
@@ -111,6 +112,14 @@ async def create_share(
         'shared_by': current_user.id,
     }
     share = await share_repo.create(create_data, dynamodb)
+    await AuditService().log_dashboard_share_added(
+        user_id=current_user.id,
+        dashboard_id=dashboard_id,
+        shared_to_type=share_data.shared_to_type.value,
+        shared_to_id=share_data.shared_to_id,
+        permission=share_data.permission.value,
+        dynamodb=dynamodb,
+    )
     return api_response(share.model_dump())
 
 
@@ -156,6 +165,14 @@ async def update_share(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Share not found after update",
         )
+    await AuditService().log_dashboard_share_updated(
+        user_id=current_user.id,
+        dashboard_id=updated.dashboard_id,
+        shared_to_type=updated.shared_to_type.value,
+        shared_to_id=updated.shared_to_id,
+        permission=updated.permission.value,
+        dynamodb=dynamodb,
+    )
     return api_response(updated.model_dump())
 
 
@@ -186,3 +203,10 @@ async def delete_share(
             detail="Share not found",
         )
     await share_repo.delete(share_id, dynamodb)
+    await AuditService().log_dashboard_share_removed(
+        user_id=current_user.id,
+        dashboard_id=share.dashboard_id,
+        shared_to_type=share.shared_to_type.value,
+        shared_to_id=share.shared_to_id,
+        dynamodb=dynamodb,
+    )

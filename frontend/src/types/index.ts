@@ -86,3 +86,5 @@ export type {
   TransformExecution,
 } from './transform';
 export { isTransform } from './transform';
+
+export type { EventType, AuditLog, AuditLogListParams } from './audit-log';

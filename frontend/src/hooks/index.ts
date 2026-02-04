@@ -58,3 +58,4 @@ export {
   useExecuteTransform,
   useTransformExecutions,
 } from './use-transforms';
+export { useAuditLogs } from './use-audit-logs';

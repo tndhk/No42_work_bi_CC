@@ -1,6 +1,6 @@
 """Dashboard Share API endpoint tests."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
@@ -206,3 +206,91 @@ class TestDeleteShare:
              patch.object(dashboard_share_repository.DashboardShareRepository, 'get_by_id', mock_get_share):
             response = owner_client.delete("/api/dashboards/dash_1/shares/nonexistent")
             assert response.status_code == 404
+
+
+class TestAuditLogIntegration:
+    def test_create_share_calls_audit_log(self, owner_client, sample_dashboard, sample_share):
+        async def mock_get_dash(self, did, dynamodb):
+            return sample_dashboard
+        async def mock_find_share(self, did, stype, sid, dynamodb):
+            return None
+        async def mock_create(self, data, dynamodb):
+            return sample_share
+        from app.repositories import dashboard_repository, dashboard_share_repository
+        with patch.object(dashboard_repository.DashboardRepository, 'get_by_id', mock_get_dash), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'find_share', mock_find_share), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'create', mock_create), \
+             patch('app.api.routes.dashboard_shares.AuditService') as MockAuditService:
+            mock_instance = MockAuditService.return_value
+            mock_instance.log_dashboard_share_added = AsyncMock()
+            response = owner_client.post("/api/dashboards/dash_1/shares", json={
+                "shared_to_type": "user",
+                "shared_to_id": "user_2",
+                "permission": "viewer",
+            })
+            assert response.status_code == 201
+            mock_instance.log_dashboard_share_added.assert_called_once_with(
+                user_id="user_owner",
+                dashboard_id="dash_1",
+                shared_to_type="user",
+                shared_to_id="user_2",
+                permission="viewer",
+                dynamodb=owner_client.__dict__.get('_dynamodb', mock_instance.log_dashboard_share_added.call_args.kwargs.get('dynamodb')),
+            )
+
+    def test_update_share_calls_audit_log(self, owner_client, sample_dashboard, sample_share):
+        updated_share = DashboardShare(
+            id="share_1", dashboard_id="dash_1",
+            shared_to_type=SharedToType.USER, shared_to_id="user_2",
+            permission=Permission.EDITOR, shared_by="user_owner",
+            created_at=sample_share.created_at,
+        )
+        async def mock_get_dash(self, did, dynamodb):
+            return sample_dashboard
+        async def mock_get_share(self, sid, dynamodb):
+            return sample_share
+        async def mock_update(self, sid, data, dynamodb):
+            return updated_share
+        from app.repositories import dashboard_repository, dashboard_share_repository
+        with patch.object(dashboard_repository.DashboardRepository, 'get_by_id', mock_get_dash), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'get_by_id', mock_get_share), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'update', mock_update), \
+             patch('app.api.routes.dashboard_shares.AuditService') as MockAuditService:
+            mock_instance = MockAuditService.return_value
+            mock_instance.log_dashboard_share_updated = AsyncMock()
+            response = owner_client.put("/api/dashboards/dash_1/shares/share_1", json={
+                "permission": "editor",
+            })
+            assert response.status_code == 200
+            mock_instance.log_dashboard_share_updated.assert_called_once_with(
+                user_id="user_owner",
+                dashboard_id="dash_1",
+                shared_to_type="user",
+                shared_to_id="user_2",
+                permission="editor",
+                dynamodb=mock_instance.log_dashboard_share_updated.call_args.kwargs.get('dynamodb'),
+            )
+
+    def test_delete_share_calls_audit_log(self, owner_client, sample_dashboard, sample_share):
+        async def mock_get_dash(self, did, dynamodb):
+            return sample_dashboard
+        async def mock_get_share(self, sid, dynamodb):
+            return sample_share
+        async def mock_delete(self, sid, dynamodb):
+            return None
+        from app.repositories import dashboard_repository, dashboard_share_repository
+        with patch.object(dashboard_repository.DashboardRepository, 'get_by_id', mock_get_dash), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'get_by_id', mock_get_share), \
+             patch.object(dashboard_share_repository.DashboardShareRepository, 'delete', mock_delete), \
+             patch('app.api.routes.dashboard_shares.AuditService') as MockAuditService:
+            mock_instance = MockAuditService.return_value
+            mock_instance.log_dashboard_share_removed = AsyncMock()
+            response = owner_client.delete("/api/dashboards/dash_1/shares/share_1")
+            assert response.status_code == 204
+            mock_instance.log_dashboard_share_removed.assert_called_once_with(
+                user_id="user_owner",
+                dashboard_id="dash_1",
+                shared_to_type="user",
+                shared_to_id="user_2",
+                dynamodb=mock_instance.log_dashboard_share_removed.call_args.kwargs.get('dynamodb'),
+            )

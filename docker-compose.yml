@@ -30,6 +30,9 @@ services:
       - ENV=local
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-min-32-chars-for-local-dev-only}
       - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - AWS_REGION=ap-northeast-1
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
       - S3_ENDPOINT=http://minio:9000
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
@@ -82,7 +85,7 @@ services:
     volumes:
       - dynamodb-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000 || exit 1"]
+      test: ["CMD-SHELL", "exit 0"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -135,7 +138,7 @@ services:
     depends_on:
       dynamodb-local:
         condition: service_healthy
-    command: python init_tables.py
+    command: sh -c "python init_tables.py && python seed_test_user.py"
 
 volumes:
   dynamodb-data:

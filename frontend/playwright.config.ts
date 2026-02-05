@@ -27,14 +27,14 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Disable trace collection */
+    trace: 'off',
 
-    /* Screenshot on failure */
-    screenshot: 'only-on-failure',
+    /* Disable screenshot */
+    screenshot: 'off',
 
-    /* Video on failure */
-    video: 'retain-on-failure',
+    /* Disable video */
+    video: 'off',
   },
 
   /* Global timeout for each test - 60 seconds for Docker environment */

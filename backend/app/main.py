@@ -34,6 +34,8 @@ async def lifespan(app: FastAPI) -> Any:
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
+# Disable rate limiting if configured (e.g., for E2E tests)
+limiter.enabled = settings.rate_limit_enabled
 
 app = FastAPI(title="BI API", lifespan=lifespan)
 app.state.limiter = limiter

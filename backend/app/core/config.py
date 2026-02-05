@@ -46,5 +46,8 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = False
     scheduler_interval_seconds: int = 60
 
+    # Rate Limiting
+    rate_limit_enabled: bool = True
+
 
 settings = Settings()

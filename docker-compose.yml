@@ -39,6 +39,7 @@ services:
       - EXECUTOR_URL=http://executor:8080
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
+      - RATE_LIMIT_ENABLED=false
     depends_on:
       dynamodb-local:
         condition: service_healthy

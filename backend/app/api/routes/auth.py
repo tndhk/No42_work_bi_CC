@@ -16,6 +16,8 @@ from app.services.audit_service import AuditService
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+# Disable rate limiting if configured (e.g., for E2E tests)
+limiter.enabled = settings.rate_limit_enabled
 logger = structlog.get_logger(__name__)
 
 

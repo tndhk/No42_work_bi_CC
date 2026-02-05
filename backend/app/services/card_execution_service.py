@@ -24,6 +24,8 @@ RETRY_BASE_DELAY = 0.5  # seconds
 class CardCacheService:
     """Service for caching card execution results in DynamoDB."""
 
+    MAX_CACHE_BYTES = 350 * 1024  # DynamoDB item size limit (400KB) minus overhead
+
     def __init__(self, dynamodb: Any, table_name: str) -> None:
         """Initialize CardCacheService.
 
@@ -109,7 +111,22 @@ class CardCacheService:
             cache_key: Cache key
             html: HTML content to cache
             dataset_id: Associated dataset ID for invalidation
+
+        Raises:
+            TypeError: If html is None
         """
+        if html is None:
+            raise TypeError("html parameter cannot be None")
+
+        # Check HTML byte size before attempting to cache
+        html_bytes = len(html.encode('utf-8'))
+        if html_bytes >= self.MAX_CACHE_BYTES:
+            logger.info(
+                f"Skipping cache for item at or above size limit "
+                f"(cache_key={cache_key}, size={html_bytes} bytes, limit={self.MAX_CACHE_BYTES} bytes)"
+            )
+            return
+
         current_time = int(time.time())
         ttl = current_time + settings.cache_ttl_seconds
 

@@ -1,4 +1,5 @@
 """Transform API routes."""
+import uuid
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -97,6 +98,7 @@ async def create_transform(
     """
     repo = TransformRepository()
     transform_dict = transform_data.model_dump()
+    transform_dict["id"] = f"tf_{uuid.uuid4().hex[:12]}"
     transform_dict["owner_id"] = current_user.id
 
     transform = await repo.create(transform_dict, dynamodb)

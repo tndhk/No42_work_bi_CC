@@ -47,7 +47,7 @@ export function TransformListPage() {
             <TableRow key={transform.id}>
               <TableCell className="font-medium">{transform.name}</TableCell>
               <TableCell>{transform.input_dataset_ids.length}</TableCell>
-              <TableCell>{transform.owner.name}</TableCell>
+              <TableCell>{transform.owner?.name ?? transform.owner_id ?? '-'}</TableCell>
               <TableCell>{new Date(transform.updated_at).toLocaleString('ja-JP')}</TableCell>
               <TableCell>
                 <div className="flex gap-1">

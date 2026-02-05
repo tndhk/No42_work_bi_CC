@@ -4,13 +4,78 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
-from app.models.dataset import DatasetUpdate, ReimportRequest, S3ImportRequest
+from app.models.dataset import Dataset, DatasetUpdate, ReimportRequest, S3ImportRequest
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.audit_service import AuditService
 from app.services.dataset_service import DatasetService
 
 router = APIRouter()
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+async def _get_dataset_by_id(
+    dataset_id: str,
+    dynamodb: Any,
+) -> Dataset:
+    """Get dataset by ID or raise 404.
+
+    Args:
+        dataset_id: Dataset ID
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Dataset instance
+
+    Raises:
+        HTTPException: 404 if not found
+    """
+    repo = DatasetRepository()
+    dataset = await repo.get_by_id(dataset_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    return dataset
+
+
+def _check_dataset_ownership(dataset: Dataset, user_id: str) -> None:
+    """Verify user owns the dataset.
+
+    Args:
+        dataset: Dataset instance
+        user_id: Current user ID
+
+    Raises:
+        HTTPException: 403 if user is not owner
+    """
+    if dataset.owner_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this dataset",
+        )
+
+
+def _handle_value_error(e: ValueError) -> HTTPException:
+    """Convert ValueError to HTTPException.
+
+    Args:
+        e: ValueError instance
+
+    Returns:
+        HTTPException with 422 status
+    """
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=str(e),
+    )
 
 
 @router.get("")
@@ -108,10 +173,7 @@ async def create_dataset(
             partition_column=partition_column,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     await AuditService().log_dataset_created(
         user_id=current_user.id,
@@ -161,10 +223,7 @@ async def s3_import_dataset(
             partition_column=import_data.partition_column,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     await AuditService().log_dataset_imported(
         user_id=current_user.id,
@@ -196,15 +255,7 @@ async def get_dataset(
     Raises:
         HTTPException: 404 if not found
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
     return api_response(dataset.model_dump())
 
 
@@ -229,25 +280,12 @@ async def update_dataset(
     Raises:
         HTTPException: 403 if not owner, 404 if not found
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Check ownership
-    if dataset.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this dataset",
-        )
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
+    _check_dataset_ownership(dataset, current_user.id)
 
     # Update dataset
+    repo = DatasetRepository()
     update_dict = update_data.model_dump(exclude_unset=True)
-
     updated_dataset = await repo.update(dataset_id, update_dict, dynamodb)
 
     if not updated_dataset:
@@ -275,23 +313,11 @@ async def delete_dataset(
     Raises:
         HTTPException: 403 if not owner, 404 if not found
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Check ownership
-    if dataset.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to delete this dataset",
-        )
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
+    _check_dataset_ownership(dataset, current_user.id)
 
     # Delete dataset
+    repo = DatasetRepository()
     await repo.delete(dataset_id, dynamodb)
 
     await AuditService().log_dataset_deleted(
@@ -325,15 +351,7 @@ async def get_column_values(
     Raises:
         HTTPException: 404 if not found, 422 if column doesn't exist
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
     service = DatasetService()
 
     try:
@@ -343,10 +361,7 @@ async def get_column_values(
             s3_client=s3_client,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     return api_response(values)
 
@@ -375,20 +390,10 @@ async def get_dataset_preview(
     Raises:
         HTTPException: 404 if not found, 422 if max_rows invalid
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
     effective_max_rows = max_rows if max_rows is not None else (limit or 100)
 
-    # Get preview via service
     service = DatasetService()
-
     try:
         preview = await service.get_preview(
             dataset=dataset,
@@ -396,10 +401,7 @@ async def get_dataset_preview(
             max_rows=effective_max_rows,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     return api_response(preview)
 
@@ -425,21 +427,8 @@ async def reimport_dry_run(
     Raises:
         HTTPException: 403 if not owner, 404 if not found, 422 if not s3_csv source type
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Check ownership
-    if dataset.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to reimport this dataset",
-        )
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
+    _check_dataset_ownership(dataset, current_user.id)
 
     # Check source type
     if dataset.source_type != "s3_csv":
@@ -449,7 +438,6 @@ async def reimport_dry_run(
         )
 
     service = DatasetService()
-
     try:
         result = await service.reimport_dry_run(
             dataset_id=dataset_id,
@@ -459,10 +447,7 @@ async def reimport_dry_run(
             source_s3_client=s3_client,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     return api_response(result)
 
@@ -490,24 +475,10 @@ async def reimport_execute(
     Raises:
         HTTPException: 403 if not owner, 404 if not found, 422 if schema changes and force=False
     """
-    repo = DatasetRepository()
-    dataset = await repo.get_by_id(dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Check ownership
-    if dataset.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to reimport this dataset",
-        )
+    dataset = await _get_dataset_by_id(dataset_id, dynamodb)
+    _check_dataset_ownership(dataset, current_user.id)
 
     service = DatasetService()
-
     try:
         updated_dataset = await service.reimport_execute(
             dataset_id=dataset_id,
@@ -518,10 +489,7 @@ async def reimport_execute(
             force=request_body.force,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
-        )
+        raise _handle_value_error(e)
 
     await AuditService().log_dataset_imported(
         user_id=current_user.id,

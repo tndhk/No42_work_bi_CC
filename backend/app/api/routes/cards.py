@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
 from app.models.card import Card, CardCreate, CardUpdate
+from app.models.dataset import Dataset
 from app.models.user import User
 from app.repositories.card_repository import CardRepository
 from app.repositories.dataset_repository import DatasetRepository
@@ -67,6 +68,133 @@ def _check_owner_permission(card: Card, user_id: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this card",
+        )
+
+
+async def _get_card_and_dataset(
+    card_id: str,
+    dynamodb: Any,
+) -> tuple[Card, Dataset]:
+    """Get card and its associated dataset.
+
+    Args:
+        card_id: Card ID
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Tuple of (Card, Dataset)
+
+    Raises:
+        HTTPException: 404 if card not found, 422 if card has no dataset_id,
+                       404 if dataset not found
+    """
+    card_repo = CardRepository()
+    card = await card_repo.get_by_id(card_id, dynamodb)
+
+    if not card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Card not found",
+        )
+
+    if not card.dataset_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Card has no dataset_id",
+        )
+
+    dataset_repo = DatasetRepository()
+    dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    return card, dataset
+
+
+def _create_execution_services(
+    dynamodb: Any,
+    s3_client: Any,
+) -> tuple[CardExecutionService, CardCacheService]:
+    """Create card execution and cache services.
+
+    Args:
+        dynamodb: DynamoDB resource
+        s3_client: S3 client
+
+    Returns:
+        Tuple of (CardExecutionService, CardCacheService)
+    """
+    execution_service = CardExecutionService(dynamodb=dynamodb, s3_client=s3_client)
+    cache_service = CardCacheService(
+        dynamodb=dynamodb,
+        table_name=f"{settings.dynamodb_table_prefix}card_cache",
+    )
+    return execution_service, cache_service
+
+
+async def _execute_card_with_error_handling(
+    execution_service: CardExecutionService,
+    cache_service: CardCacheService,
+    card: Card,
+    dataset: Dataset,
+    filters: dict[str, Any],
+    use_cache: bool,
+    current_user: User,
+    card_id: str,
+    dynamodb: Any,
+) -> dict[str, Any]:
+    """Execute card with error handling and audit logging.
+
+    Args:
+        execution_service: Card execution service
+        cache_service: Cache service
+        card: Card instance
+        dataset: Dataset instance
+        filters: Filter parameters
+        use_cache: Whether to use cache
+        current_user: Current user
+        card_id: Card ID
+        dynamodb: DynamoDB resource
+
+    Returns:
+        API response with execution result
+
+    Raises:
+        HTTPException: 500 if execution fails
+    """
+    try:
+        result = await execution_service.execute(
+            card_id=card.id,
+            filters=filters,
+            dataset_updated_at=dataset.updated_at.isoformat(),
+            dataset_id=card.dataset_id,
+            use_cache=use_cache,
+            cache_service=cache_service,
+            code=card.code,
+        )
+
+        return api_response({
+            "html": result.html,
+            "used_columns": result.used_columns,
+            "filter_applicable": result.filter_applicable,
+            "cached": result.cached,
+            "execution_time_ms": result.execution_time_ms,
+        })
+
+    except RuntimeError as e:
+        await AuditService().log_card_execution_failed(
+            user_id=current_user.id,
+            card_id=card_id,
+            error=str(e),
+            dynamodb=dynamodb,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )
 
 
@@ -323,69 +451,20 @@ async def preview_card(
     Raises:
         HTTPException: 404 if card not found, 500 if execution fails
     """
-    # Get card
-    card_repo = CardRepository()
-    card = await card_repo.get_by_id(card_id, dynamodb)
+    card, dataset = await _get_card_and_dataset(card_id, dynamodb)
+    execution_service, cache_service = _create_execution_services(dynamodb, s3_client)
 
-    if not card:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Card not found",
-        )
-
-    # Get dataset for updated_at
-    if not card.dataset_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Card has no dataset_id",
-        )
-
-    dataset_repo = DatasetRepository()
-    dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Execute without cache
-    execution_service = CardExecutionService(dynamodb=dynamodb, s3_client=s3_client)
-    cache_service = CardCacheService(
+    return await _execute_card_with_error_handling(
+        execution_service=execution_service,
+        cache_service=cache_service,
+        card=card,
+        dataset=dataset,
+        filters=preview_req.filters,
+        use_cache=False,
+        current_user=current_user,
+        card_id=card_id,
         dynamodb=dynamodb,
-        table_name=f"{settings.dynamodb_table_prefix}card_cache",
     )
-
-    try:
-        result = await execution_service.execute(
-            card_id=card.id,
-            filters=preview_req.filters,
-            dataset_updated_at=dataset.updated_at.isoformat(),
-            dataset_id=card.dataset_id,
-            use_cache=False,
-            cache_service=cache_service,
-            code=card.code,
-        )
-
-        return api_response({
-            "html": result.html,
-            "used_columns": result.used_columns,
-            "filter_applicable": result.filter_applicable,
-            "cached": result.cached,
-            "execution_time_ms": result.execution_time_ms,
-        })
-
-    except RuntimeError as e:
-        await AuditService().log_card_execution_failed(
-            user_id=current_user.id,
-            card_id=card_id,
-            error=str(e),
-            dynamodb=dynamodb,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
 
 
 # ============================================================================
@@ -416,66 +495,17 @@ async def execute_card(
     Raises:
         HTTPException: 404 if card not found, 500 if execution fails
     """
-    # Get card
-    card_repo = CardRepository()
-    card = await card_repo.get_by_id(card_id, dynamodb)
+    card, dataset = await _get_card_and_dataset(card_id, dynamodb)
+    execution_service, cache_service = _create_execution_services(dynamodb, s3_client)
 
-    if not card:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Card not found",
-        )
-
-    # Get dataset for updated_at
-    if not card.dataset_id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Card has no dataset_id",
-        )
-
-    dataset_repo = DatasetRepository()
-    dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
-
-    if not dataset:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset not found",
-        )
-
-    # Execute with cache
-    execution_service = CardExecutionService(dynamodb=dynamodb, s3_client=s3_client)
-    cache_service = CardCacheService(
+    return await _execute_card_with_error_handling(
+        execution_service=execution_service,
+        cache_service=cache_service,
+        card=card,
+        dataset=dataset,
+        filters=execute_req.filters,
+        use_cache=execute_req.use_cache,
+        current_user=current_user,
+        card_id=card_id,
         dynamodb=dynamodb,
-        table_name=f"{settings.dynamodb_table_prefix}card_cache",
     )
-
-    try:
-        result = await execution_service.execute(
-            card_id=card.id,
-            filters=execute_req.filters,
-            dataset_updated_at=dataset.updated_at.isoformat(),
-            dataset_id=card.dataset_id,
-            use_cache=execute_req.use_cache,
-            cache_service=cache_service,
-            code=card.code,
-        )
-
-        return api_response({
-            "html": result.html,
-            "used_columns": result.used_columns,
-            "filter_applicable": result.filter_applicable,
-            "cached": result.cached,
-            "execution_time_ms": result.execution_time_ms,
-        })
-
-    except RuntimeError as e:
-        await AuditService().log_card_execution_failed(
-            user_id=current_user.id,
-            card_id=card_id,
-            error=str(e),
-            dynamodb=dynamodb,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )

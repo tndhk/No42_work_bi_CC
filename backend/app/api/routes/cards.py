@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from app.api.deps import get_current_user, get_dynamodb_resource
+from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
 from app.models.card import Card, CardCreate, CardUpdate
 from app.models.user import User
@@ -94,14 +94,28 @@ async def list_cards(
         Paginated list of cards
     """
     repo = CardRepository()
+    dataset_repo = DatasetRepository()
     all_cards = await repo.list_by_owner(current_user.id, dynamodb)
 
     # Apply pagination
     total = len(all_cards)
     cards = all_cards[offset:offset + limit]
 
+    # Enrich cards with dataset and owner info
+    enriched_cards = []
+    for card in cards:
+        card_dict = card.model_dump()
+        # Add dataset info
+        if card.dataset_id:
+            dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
+            if dataset:
+                card_dict["dataset"] = {"id": dataset.id, "name": dataset.name}
+        # Add owner info (current user owns all listed cards)
+        card_dict["owner"] = {"user_id": current_user.id, "name": current_user.email}
+        enriched_cards.append(card_dict)
+
     return paginated_response(
-        items=[c.model_dump() for c in cards],
+        items=enriched_cards,
         total=total,
         limit=limit,
         offset=offset,
@@ -185,7 +199,15 @@ async def get_card(
             detail="Card not found",
         )
 
-    return api_response(card.model_dump())
+    # Enrich with dataset info for frontend compatibility
+    card_dict = card.model_dump()
+    if card.dataset_id:
+        dataset_repo = DatasetRepository()
+        dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
+        if dataset:
+            card_dict["dataset"] = {"id": dataset.id, "name": dataset.name}
+
+    return api_response(card_dict)
 
 
 # ============================================================================
@@ -284,6 +306,7 @@ async def preview_card(
     preview_req: PreviewRequest,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
 ) -> dict[str, Any]:
     """Preview card execution with filters (no cache).
 
@@ -292,6 +315,7 @@ async def preview_card(
         preview_req: Preview request with filters
         current_user: Authenticated user
         dynamodb: DynamoDB resource
+        s3_client: S3 client for dataset access
 
     Returns:
         Execution result
@@ -326,7 +350,7 @@ async def preview_card(
         )
 
     # Execute without cache
-    execution_service = CardExecutionService(dynamodb=dynamodb)
+    execution_service = CardExecutionService(dynamodb=dynamodb, s3_client=s3_client)
     cache_service = CardCacheService(
         dynamodb=dynamodb,
         table_name=f"{settings.dynamodb_table_prefix}card_cache",
@@ -375,6 +399,7 @@ async def execute_card(
     execute_req: ExecuteRequest,
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
 ) -> dict[str, Any]:
     """Execute card with optional caching.
 
@@ -383,6 +408,7 @@ async def execute_card(
         execute_req: Execute request with filters and cache setting
         current_user: Authenticated user
         dynamodb: DynamoDB resource
+        s3_client: S3 client for dataset access
 
     Returns:
         Execution result
@@ -417,7 +443,7 @@ async def execute_card(
         )
 
     # Execute with cache
-    execution_service = CardExecutionService(dynamodb=dynamodb)
+    execution_service = CardExecutionService(dynamodb=dynamodb, s3_client=s3_client)
     cache_service = CardCacheService(
         dynamodb=dynamodb,
         table_name=f"{settings.dynamodb_table_prefix}card_cache",

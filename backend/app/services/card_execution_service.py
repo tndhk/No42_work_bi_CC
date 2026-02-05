@@ -11,6 +11,8 @@ import httpx
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+from app.repositories.dataset_repository import DatasetRepository
+from app.services.parquet_storage import ParquetReader
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +147,41 @@ class CardExecutionResult:
 class CardExecutionService:
     """Service for executing cards via Executor API."""
 
-    def __init__(self, dynamodb: Any) -> None:
+    def __init__(self, dynamodb: Any, s3_client: Any = None) -> None:
         """Initialize CardExecutionService.
 
         Args:
             dynamodb: DynamoDB resource instance
+            s3_client: S3 client instance for reading dataset data
         """
         self.dynamodb = dynamodb
+        self.s3_client = s3_client
+
+    async def _get_dataset_rows(self, dataset_id: str) -> list[dict[str, Any]]:
+        """Fetch dataset rows from S3.
+
+        Args:
+            dataset_id: Dataset identifier
+
+        Returns:
+            List of row dictionaries
+        """
+        # Get dataset metadata to find s3_path
+        dataset_repo = DatasetRepository()
+        dataset = await dataset_repo.get_by_id(dataset_id, self.dynamodb)
+
+        if not dataset or not dataset.s3_path:
+            return []
+
+        # Read from S3 using ParquetReader
+        if not self.s3_client:
+            return []
+
+        reader = ParquetReader(self.s3_client, settings.s3_bucket_datasets)
+        df = await reader.read_full(dataset.s3_path)
+
+        # Convert DataFrame to list of dicts
+        return df.to_dict(orient='records')
 
     async def execute(
         self,
@@ -198,12 +228,16 @@ class CardExecutionService:
                     execution_time_ms=elapsed_ms,
                 )
 
+        # Fetch dataset rows from S3
+        dataset_rows = await self._get_dataset_rows(dataset_id)
+
         # Execute via Executor API with retry
         data = await self._execute_with_retry(
             card_id=card_id,
             code=code,
             filters=filters,
             dataset_id=dataset_id,
+            dataset_rows=dataset_rows,
         )
 
         # Save to cache if enabled
@@ -225,6 +259,7 @@ class CardExecutionService:
         code: str,
         filters: dict[str, Any],
         dataset_id: str,
+        dataset_rows: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Execute card via Executor API with exponential backoff retry.
 
@@ -236,6 +271,7 @@ class CardExecutionService:
             code: Python code for the card
             filters: Filter parameters
             dataset_id: Dataset identifier
+            dataset_rows: Dataset row data for executor
 
         Returns:
             Response data dict from executor
@@ -257,6 +293,7 @@ class CardExecutionService:
                             "code": code,
                             "filters": filters,
                             "dataset_id": dataset_id,
+                            "dataset_rows": dataset_rows,
                         },
                     )
                     response.raise_for_status()

@@ -32,7 +32,7 @@ export function PreviewTable({ preview, isLoading, maxRows = 20 }: PreviewTableP
                   {preview.columns.map((col) => (
                     <TableHead key={col}>{col}</TableHead>
                   ))}
-                </TableHeader>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.rows.slice(0, maxRows).map((row, i) => (

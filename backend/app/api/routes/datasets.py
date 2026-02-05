@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from app.api.deps import get_current_user, get_dynamodb_resource, get_s3_client
 from app.api.response import api_response, paginated_response
-from app.models.dataset import Dataset, DatasetUpdate, ReimportDryRunResponse, ReimportRequest, S3ImportRequest
+from app.models.dataset import DatasetUpdate, ReimportRequest, S3ImportRequest
 from app.models.user import User
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.audit_service import AuditService

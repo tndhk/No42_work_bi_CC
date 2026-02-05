@@ -311,3 +311,105 @@ src/lib/api/index.ts:9 - auditLogsApi
 ## Test gate results
 - Pre-delete: `npm run test:coverage` passed.
 - Post-delete: `npm run test:coverage` passed.
+
+---
+
+# Backend Dead Code Analysis
+
+Date: 2026-02-05
+Scope: backend (行数上位ファイル)
+
+## Target Files Analyzed
+1. `backend/app/services/dataset_service.py` (633行)
+2. `backend/app/api/routes/datasets.py` (535行)
+3. `backend/app/api/routes/cards.py` (482行)
+4. `backend/app/services/parquet_storage.py` (378行)
+5. `backend/app/api/routes/dashboards.py` (376行)
+6. `backend/app/services/card_execution_service.py` (376行)
+7. `backend/app/api/routes/transforms.py` (364行)
+8. `backend/app/services/audit_service.py` (313行)
+9. `backend/app/services/transform_execution_service.py` (301行)
+10. `backend/app/repositories/base.py` (298行)
+
+## Commands
+- `python3 -m vulture <target_files> --min-confidence 60`
+- `python3 -m ruff check --select F401,F841 <target_files>`
+- `docker compose exec -T api pytest tests/api/routes/test_datasets.py --cov=app.api.routes.datasets` (pre/post-delete)
+
+## Tool outputs
+
+### vulture
+```
+app/api/routes/cards.py:41: unused class 'ExecutionResponse' (60% confidence)
+app/api/routes/cards.py:78: unused function 'list_cards' (60% confidence)
+app/api/routes/cards.py:130: unused function 'create_card' (60% confidence)
+app/api/routes/cards.py:174: unused function 'get_card' (60% confidence)
+app/api/routes/cards.py:218: unused function 'update_card' (60% confidence)
+app/api/routes/cards.py:268: unused function 'delete_card' (60% confidence)
+app/api/routes/cards.py:303: unused function 'preview_card' (60% confidence)
+app/api/routes/cards.py:396: unused function 'execute_card' (60% confidence)
+app/api/routes/dashboards.py:47: unused function 'list_dashboards' (60% confidence)
+app/api/routes/dashboards.py:121: unused function 'create_dashboard' (60% confidence)
+app/api/routes/dashboards.py:164: unused function 'get_dashboard' (60% confidence)
+app/api/routes/dashboards.py:200: unused function 'update_dashboard' (60% confidence)
+app/api/routes/dashboards.py:250: unused function 'delete_dashboard' (60% confidence)
+app/api/routes/dashboards.py:285: unused function 'clone_dashboard' (60% confidence)
+app/api/routes/datasets.py:7: unused import 'ReimportDryRunResponse' (90% confidence)
+app/api/routes/datasets.py:16: unused function 'list_datasets' (60% confidence)
+app/api/routes/datasets.py:49: unused function 'create_dataset' (60% confidence)
+app/api/routes/datasets.py:126: unused function 's3_import_dataset' (60% confidence)
+app/api/routes/datasets.py:180: unused function 'get_dataset' (60% confidence)
+app/api/routes/datasets.py:211: unused function 'update_dataset' (60% confidence)
+app/api/routes/datasets.py:262: unused function 'delete_dataset' (60% confidence)
+app/api/routes/datasets.py:354: unused function 'get_dataset_preview' (60% confidence)
+app/api/routes/transforms.py:45: unused function 'list_transforms' (60% confidence)
+app/api/routes/transforms.py:83: unused function 'create_transform' (60% confidence)
+app/api/routes/transforms.py:113: unused function 'get_transform' (60% confidence)
+app/api/routes/transforms.py:149: unused function 'update_transform' (60% confidence)
+app/api/routes/transforms.py:199: unused function 'delete_transform' (60% confidence)
+app/api/routes/transforms.py:234: unused function 'execute_transform' (60% confidence)
+app/api/routes/transforms.py:318: unused function 'list_transform_executions' (60% confidence)
+app/repositories/base.py:10: unused class 'BaseRepository' (60% confidence)
+app/services/audit_service.py:60: unused method 'log_user_login' (60% confidence)
+app/services/audit_service.py:76: unused method 'log_user_logout' (60% confidence)
+app/services/audit_service.py:92: unused method 'log_user_login_failed' (60% confidence)
+app/services/audit_service.py:117: unused method 'log_dashboard_share_added' (60% confidence)
+app/services/audit_service.py:142: unused method 'log_dashboard_share_removed' (60% confidence)
+app/services/audit_service.py:165: unused method 'log_dashboard_share_updated' (60% confidence)
+app/services/card_execution_service.py:157: unused method 'invalidate_by_dataset' (60% confidence)
+app/services/parquet_storage.py:31: unused variable 'partitioned' (60% confidence)
+app/services/parquet_storage.py:33: unused variable 'partitions' (60% confidence)
+```
+
+### ruff
+```
+F401 `app.models.dataset.Dataset` imported but unused (app/api/routes/datasets.py:7:32)
+F401 `app.models.dataset.ReimportDryRunResponse` imported but unused (app/api/routes/datasets.py:7:56)
+```
+
+## Categorized findings
+
+### SAFE (削除済み)
+- `app/api/routes/datasets.py:7` - 未使用インポート `Dataset` と `ReimportDryRunResponse`
+
+### CAUTION (削除しない)
+- `app/services/card_execution_service.py:157` - `invalidate_by_dataset` メソッド（将来使用の可能性）
+- `app/services/parquet_storage.py:31,33` - `StorageResult` のフィールド `partitioned`, `partitions`（実際には使用されている）
+
+### DANGER (削除不可・誤検知)
+- FastAPI ルートハンドラー関数（`@router.get`, `@router.post` などでデコレータ経由で使用されている）
+- `app/repositories/base.py:10` - `BaseRepository` クラス（多くのリポジトリクラスで継承されている）
+- `app/services/audit_service.py` の各種ログメソッド（`auth.py`, `dashboard_shares.py` で使用されている）
+
+## Deletions applied
+- `app/api/routes/datasets.py`: 未使用インポート `Dataset` と `ReimportDryRunResponse` を削除
+
+## Test gate results
+- Pre-delete: `pytest tests/api/routes/test_datasets.py` 37 passed
+- Post-delete: `pytest tests/api/routes/test_datasets.py` 37 passed
+- ruff check: All checks passed
+
+## Summary
+- 削除したコード: 2件の未使用インポート
+- テスト結果: 削除前後でテストは全て成功
+- 注意: vulture は FastAPI のデコレータ経由の使用を検出できないため、多くの誤検知が発生。実際の削除は ruff の静的解析結果に基づいて実施。

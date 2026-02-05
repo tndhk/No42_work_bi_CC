@@ -30,6 +30,16 @@ class LayoutItem(BaseModel):
     h: int = Field(ge=1)
 
 
+class DashboardLayout(BaseModel):
+    """Dashboard layout with grid configuration."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    cards: list[LayoutItem] = Field(default_factory=list)
+    columns: int = Field(default=12, ge=1)
+    row_height: int = Field(default=100, ge=1)
+
+
 class DashboardCreate(BaseModel):
     """Dashboard creation request model."""
 
@@ -37,7 +47,7 @@ class DashboardCreate(BaseModel):
 
     name: str = Field(min_length=1)
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -56,7 +66,7 @@ class DashboardUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1)
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -76,7 +86,7 @@ class Dashboard(TimestampMixin, BaseModel):
     id: str
     name: str
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     owner_id: Optional[str] = None
     filters: Optional[list[FilterDefinition]] = None
     default_filter_view_id: Optional[str] = None

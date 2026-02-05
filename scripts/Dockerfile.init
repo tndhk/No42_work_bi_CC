@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir boto3==1.34.0 bcrypt==4.1.3
+RUN pip install --no-cache-dir boto3==1.34.0 bcrypt==4.1.3 pandas==2.1.4 pyarrow==14.0.2
 
 WORKDIR /scripts
-COPY init_tables.py seed_test_user.py /scripts/
+COPY init_tables.py seed_test_user.py seed_test_dataset.py /scripts/
 
-CMD ["sh", "-c", "python init_tables.py && python seed_test_user.py"]
+CMD ["sh", "-c", "python init_tables.py && python seed_test_user.py && python seed_test_dataset.py"]

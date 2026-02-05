@@ -3,7 +3,7 @@ from app.models.common import BaseResponse, TimestampMixin
 from app.models.user import User, UserCreate, UserInDB, UserUpdate
 from app.models.dataset import Dataset, DatasetCreate, DatasetUpdate, ColumnSchema
 from app.models.card import Card, CardCreate, CardUpdate
-from app.models.dashboard import Dashboard, DashboardCreate, DashboardUpdate, LayoutItem, FilterDefinition
+from app.models.dashboard import Dashboard, DashboardCreate, DashboardUpdate, DashboardLayout, LayoutItem, FilterDefinition
 from app.models.transform import Transform, TransformCreate, TransformUpdate
 from app.models.audit_log import AuditLog, EventType
 
@@ -24,6 +24,7 @@ __all__ = [
     "Dashboard",
     "DashboardCreate",
     "DashboardUpdate",
+    "DashboardLayout",
     "LayoutItem",
     "FilterDefinition",
     "Transform",

@@ -1,6 +1,7 @@
 """Card execution and caching services."""
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -32,7 +33,17 @@ class CardCacheService:
         """
         self.dynamodb = dynamodb
         self.table_name = table_name
-        self.table = dynamodb.Table(table_name)
+
+    async def _execute_db_operation(self, operation: Any) -> Any:
+        """Execute a DynamoDB operation, handling both sync (boto3) and async (aioboto3)."""
+        if inspect.iscoroutine(operation):
+            return await operation
+        return operation
+
+    async def _get_table(self) -> Any:
+        """Get DynamoDB table, handling aioboto3 coroutine."""
+        table_result = self.dynamodb.Table(self.table_name)
+        return await self._execute_db_operation(table_result)
 
     def generate_cache_key(
         self,
@@ -55,7 +66,7 @@ class CardCacheService:
         hash_digest = hashlib.sha256(combined.encode()).hexdigest()
         return hash_digest[:16]
 
-    def get(self, cache_key: str) -> dict[str, Any] | None:
+    async def get(self, cache_key: str) -> dict[str, Any] | None:
         """Retrieve cached HTML from DynamoDB.
 
         Args:
@@ -65,7 +76,10 @@ class CardCacheService:
             Dict with html and metadata if found and not expired, None otherwise
         """
         try:
-            response = self.table.get_item(Key={"cache_key": cache_key})
+            table = await self._get_table()
+            response = await self._execute_db_operation(
+                table.get_item(Key={"cache_key": cache_key})
+            )
             item = response.get("Item")
 
             if not item:
@@ -88,7 +102,7 @@ class CardCacheService:
         except ClientError:
             return None
 
-    def set(self, cache_key: str, html: str, dataset_id: str) -> None:
+    async def set(self, cache_key: str, html: str, dataset_id: str) -> None:
         """Store HTML in cache with TTL.
 
         Args:
@@ -108,26 +122,36 @@ class CardCacheService:
         }
 
         try:
-            self.table.put_item(Item=item)
+            table = await self._get_table()
+            await self._execute_db_operation(table.put_item(Item=item))
         except ClientError as e:
-            raise RuntimeError(f"Failed to cache item: {e}") from e
+            # Log warning but don't raise - caching is optional
+            logger.warning(f"Failed to cache item (cache_key={cache_key}): {e}")
+        except Exception as e:
+            # Log any other errors but don't fail the request
+            logger.warning(f"Unexpected error caching item (cache_key={cache_key}): {e}")
 
-    def invalidate_by_dataset(self, dataset_id: str) -> None:
+    async def invalidate_by_dataset(self, dataset_id: str) -> None:
         """Invalidate all cache entries for a dataset.
 
         Args:
             dataset_id: Dataset ID to invalidate
         """
         try:
-            response = self.table.query(
-                IndexName="dataset_id-index",
-                KeyConditionExpression="dataset_id = :dataset_id",
-                ExpressionAttributeValues={":dataset_id": dataset_id},
+            table = await self._get_table()
+            response = await self._execute_db_operation(
+                table.query(
+                    IndexName="dataset_id-index",
+                    KeyConditionExpression="dataset_id = :dataset_id",
+                    ExpressionAttributeValues={":dataset_id": dataset_id},
+                )
             )
 
             items = response.get("Items", [])
             for item in items:
-                self.table.delete_item(Key={"cache_key": item["cache_key"]})
+                await self._execute_db_operation(
+                    table.delete_item(Key={"cache_key": item["cache_key"]})
+                )
 
         except ClientError as e:
             raise RuntimeError(f"Failed to invalidate cache: {e}") from e
@@ -217,7 +241,7 @@ class CardExecutionService:
             cache_key = cache_service.generate_cache_key(
                 card_id, filters, dataset_updated_at
             )
-            cached = cache_service.get(cache_key)
+            cached = await cache_service.get(cache_key)
             if cached:
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000)
                 return CardExecutionResult(
@@ -242,7 +266,7 @@ class CardExecutionService:
 
         # Save to cache if enabled
         if use_cache:
-            cache_service.set(cache_key, data["html"], dataset_id)
+            await cache_service.set(cache_key, data["html"], dataset_id)
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         return CardExecutionResult(

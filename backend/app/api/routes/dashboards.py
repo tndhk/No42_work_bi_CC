@@ -1,9 +1,7 @@
 """Dashboard API routes."""
 import uuid
-import json
-import time
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import get_current_user, get_dynamodb_resource
 from app.api.response import api_response, paginated_response

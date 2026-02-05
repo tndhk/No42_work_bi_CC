@@ -3,45 +3,18 @@ from dataclasses import dataclass
 from typing import Any
 import io
 import inspect
-import json
 import logging
-import time
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
-DEBUG_LOG_PATH = "/Users/takahikotsunoda/Dev/No42_work_bi_CC/.cursor/debug.log"
 
 
 async def _maybe_await(result: Any) -> Any:
     if inspect.isawaitable(result):
         return await result
     return result
-
-
-def _append_agent_log(
-    session_id: str,
-    run_id: str,
-    hypothesis_id: str,
-    location: str,
-    message: str,
-    data: dict[str, Any],
-) -> None:
-    payload = {
-        "sessionId": session_id,
-        "runId": run_id,
-        "hypothesisId": hypothesis_id,
-        "location": location,
-        "message": message,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    try:
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        logger.debug("Failed to write agent debug log", exc_info=True)
 
 
 @dataclass(frozen=True)
@@ -159,39 +132,12 @@ class ParquetConverter:
             data: Data to upload
         """
         # region agent log
-        _append_agent_log(
-            session_id="debug-session",
-            run_id="post-fix",
-            hypothesis_id="A",
-            location="ParquetConverter._upload_to_s3",
-            message="s3 put_object start",
-            data={
-                "bucket": self.bucket,
-                "key": s3_path,
-                "sizeBytes": len(data),
-            },
-        )
-        # endregion
         put_result = self.s3_client.put_object(
             Bucket=self.bucket,
             Key=s3_path,
             Body=data
         )
         await _maybe_await(put_result)
-        # region agent log
-        _append_agent_log(
-            session_id="debug-session",
-            run_id="post-fix",
-            hypothesis_id="A",
-            location="ParquetConverter._upload_to_s3",
-            message="s3 put_object done",
-            data={
-                "bucket": self.bucket,
-                "key": s3_path,
-                "sizeBytes": len(data),
-            },
-        )
-        # endregion
 
     async def _save_partitioned(
         self,
@@ -365,39 +311,12 @@ class ParquetReader:
             Exception: If S3 read or Parquet parsing fails
         """
         try:
-            # region agent log
-            _append_agent_log(
-                session_id="debug-session",
-                run_id="post-fix",
-                hypothesis_id="B",
-                location="ParquetReader._read_single_file",
-                message="s3 get_object start",
-                data={
-                    "bucket": self.bucket,
-                    "key": s3_path,
-                },
-            )
-            # endregion
             response = await _maybe_await(self.s3_client.get_object(
                 Bucket=self.bucket,
                 Key=s3_path
             ))
             read_result = response['Body'].read()
             parquet_data = await _maybe_await(read_result)
-            # region agent log
-            _append_agent_log(
-                session_id="debug-session",
-                run_id="post-fix",
-                hypothesis_id="B",
-                location="ParquetReader._read_single_file",
-                message="s3 get_object done",
-                data={
-                    "bucket": self.bucket,
-                    "key": s3_path,
-                    "sizeBytes": len(parquet_data),
-                },
-            )
-            # endregion
 
             parquet_file = pq.ParquetFile(io.BytesIO(parquet_data))
             table = parquet_file.read()
@@ -405,20 +324,6 @@ class ParquetReader:
             result: pd.DataFrame = table.to_pandas()
             return result
         except Exception as e:
-            # region agent log
-            _append_agent_log(
-                session_id="debug-session",
-                run_id="post-fix",
-                hypothesis_id="C",
-                location="ParquetReader._read_single_file",
-                message="s3 get_object error",
-                data={
-                    "bucket": self.bucket,
-                    "key": s3_path,
-                    "error": str(e),
-                },
-            )
-            # endregion
             logger.error(f"Failed to read file from {s3_path}: {e}")
             raise
 

@@ -15,7 +15,7 @@ dynamodb = boto3.resource(
     aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY', 'dummy'),
 )
 
-# テーブル定義 (全11テーブル)
+# テーブル定義 (全12テーブル)
 TABLES = [
     {
         'TableName': 'bi_users',
@@ -224,6 +224,23 @@ TABLES = [
                 'KeySchema': [
                     {'AttributeName': 'targetId', 'KeyType': 'HASH'},
                     {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    {
+        'TableName': 'bi_card_cache',
+        'KeySchema': [{'AttributeName': 'cache_key', 'KeyType': 'HASH'}],
+        'AttributeDefinitions': [
+            {'AttributeName': 'cache_key', 'AttributeType': 'S'},
+            {'AttributeName': 'dataset_id', 'AttributeType': 'S'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'dataset_id-index',
+                'KeySchema': [
+                    {'AttributeName': 'dataset_id', 'KeyType': 'HASH'},
                 ],
                 'Projection': {'ProjectionType': 'ALL'},
             },

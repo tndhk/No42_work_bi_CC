@@ -51,6 +51,8 @@ test.describe('Dashboard共有フロー', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
     adminToken = await getAccessToken(ADMIN_EMAIL, ADMIN_PASSWORD);
   });
@@ -122,6 +124,8 @@ test.describe('共有されたダッシュボードの閲覧', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
 
     adminToken = await getAccessToken(ADMIN_EMAIL, ADMIN_PASSWORD);
@@ -205,6 +209,8 @@ test.describe('権限別操作制限', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
 
     adminToken = await getAccessToken(ADMIN_EMAIL, ADMIN_PASSWORD);
@@ -323,6 +329,8 @@ test.describe('Group管理', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
     adminToken = await getAccessToken(ADMIN_EMAIL, ADMIN_PASSWORD);
   });

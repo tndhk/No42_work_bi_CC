@@ -11,6 +11,8 @@ export interface TestDataCleanup {
   dashboardIds: string[];
   shareIds: { dashboardId: string; shareId: string }[];
   groupIds: string[];
+  transformIds: string[];
+  filterViewIds: string[];
 }
 
 /**
@@ -294,10 +296,120 @@ export async function registerUser(
 }
 
 /**
+ * トランスフォームを作成
+ */
+export async function createTransform(
+  token: string,
+  name: string,
+  datasetIds: string[],
+  code: string = 'import pandas as pd\n\n# Transform code\ndf_0'
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/transforms`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      description: `Test transform: ${name}`,
+      dataset_ids: datasetIds,
+      code,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create transform failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data.id;
+}
+
+/**
+ * トランスフォームを削除
+ */
+export async function deleteTransform(token: string, transformId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/transforms/${transformId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Delete transform failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
+ * トランスフォームを実行
+ */
+export async function executeTransform(token: string, transformId: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/transforms/${transformId}/execute`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Execute transform failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data.output_dataset_id;
+}
+
+/**
+ * フィルタービューを作成
+ */
+export async function createFilterView(
+  token: string,
+  dashboardId: string,
+  name: string,
+  filters: Record<string, unknown>,
+  isShared: boolean = false
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/dashboards/${dashboardId}/filter-views`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      filters,
+      is_shared: isShared,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Create filter view failed: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.data.id;
+}
+
+/**
+ * フィルタービューを削除
+ */
+export async function deleteFilterView(token: string, filterViewId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/filter-views/${filterViewId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Delete filter view failed: ${response.status} ${response.statusText}`);
+  }
+}
+
+/**
  * テストデータを一括削除
  */
 export async function cleanupTestData(token: string, cleanup: TestDataCleanup): Promise<void> {
-  // 逆順で削除 (Share → Dashboard → Card → Dataset → Group)
+  // 逆順で削除 (FilterView → Share → Dashboard → Card → Transform → Dataset → Group)
+  for (const filterViewId of cleanup.filterViewIds) {
+    await deleteFilterView(token, filterViewId);
+  }
   for (const share of cleanup.shareIds) {
     await deleteShare(token, share.dashboardId, share.shareId);
   }
@@ -306,6 +418,9 @@ export async function cleanupTestData(token: string, cleanup: TestDataCleanup): 
   }
   for (const cardId of cleanup.cardIds) {
     await deleteCard(token, cardId);
+  }
+  for (const transformId of cleanup.transformIds) {
+    await deleteTransform(token, transformId);
   }
   for (const datasetId of cleanup.datasetIds) {
     await deleteDataset(token, datasetId);

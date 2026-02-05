@@ -21,6 +21,8 @@ test.describe('Dataset', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
 
     // ログイン

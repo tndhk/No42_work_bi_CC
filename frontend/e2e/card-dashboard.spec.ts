@@ -27,6 +27,8 @@ test.describe('Card + Dashboard', () => {
       dashboardIds: [],
       shareIds: [],
       groupIds: [],
+      transformIds: [],
+      filterViewIds: [],
     };
 
     // トークン取得

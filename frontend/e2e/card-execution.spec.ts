@@ -9,8 +9,6 @@ import {
   getAccessToken,
   createDataset,
   createCard,
-  deleteCard,
-  deleteDataset,
   cleanupTestData,
   type TestDataCleanup,
 } from './helpers/api-helper';

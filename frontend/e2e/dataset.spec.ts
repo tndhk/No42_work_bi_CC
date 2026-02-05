@@ -3,13 +3,12 @@
  */
 import { test, expect } from '@playwright/test';
 import { loginViaUI } from './helpers/login-helper';
-import { getAccessToken, cleanupTestData, type TestDataCleanup } from './helpers/api-helper';
+import { getAccessToken, cleanupTestData, createDataset, type TestDataCleanup } from './helpers/api-helper';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 // テストユーザ情報
 const TEST_USER_EMAIL = 'e2e@example.com';
@@ -91,7 +90,7 @@ test.describe('Dataset', () => {
     // 事前にデータセットを作成 (API経由)
     const token = await getAccessToken(TEST_USER_EMAIL, TEST_USER_PASSWORD);
     const csvContent = 'date,product,amount,quantity\n2024-01-01,Widget A,1000,10\n';
-    const { createDataset } = await import('./helpers/api-helper');
+
     const datasetName = `E2E Test Dataset for Delete ${Date.now()}`;
     const datasetId = await createDataset(token, datasetName, csvContent);
     cleanup.datasetIds.push(datasetId);
@@ -130,7 +129,7 @@ test.describe('Dataset', () => {
 2024-01-01,Widget A,1000,10
 2024-01-02,Widget B,1500,15
 2024-01-03,Widget A,2000,20`;
-    const { createDataset } = await import('./helpers/api-helper');
+
     const datasetName = `E2E Test Dataset Preview ${Date.now()}`;
     const datasetId = await createDataset(token, datasetName, csvContent);
     cleanup.datasetIds.push(datasetId);

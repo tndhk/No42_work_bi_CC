@@ -21,6 +21,23 @@ limiter.enabled = settings.rate_limit_enabled
 logger = structlog.get_logger(__name__)
 
 
+def _build_user_info(user: User) -> dict[str, Any]:
+    """Build user information dict for API responses.
+
+    Args:
+        user: User model instance
+
+    Returns:
+        Dict with user_id, email, role, created_at
+    """
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role or "member",
+        "created_at": user.created_at.isoformat() if user.created_at else "",
+    }
+
+
 class LoginRequest(BaseModel):
     """Login request model."""
 
@@ -118,12 +135,7 @@ async def login(
         "access_token": access_token,
         "token_type": "bearer",
         "expires_in": expires_in,
-        "user": {
-            "user_id": user.id,
-            "email": user.email,
-            "role": user.role or "member",
-            "created_at": user.created_at.isoformat() if user.created_at else "",
-        }
+        "user": _build_user_info(user),
     })
 
 
@@ -161,9 +173,4 @@ async def get_me(
     Returns:
         User information (excludes sensitive fields)
     """
-    return api_response({
-        "user_id": current_user.id,
-        "email": current_user.email,
-        "role": current_user.role or "member",
-        "created_at": current_user.created_at.isoformat() if current_user.created_at else "",
-    })
+    return api_response(_build_user_info(current_user))

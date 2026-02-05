@@ -22,7 +22,7 @@ def _to_dashboard_response(dashboard_dict: dict) -> dict:
     """Convert dashboard dict to frontend-expected format (id -> dashboard_id)."""
     result = {**dashboard_dict}
     if 'id' in result:
-        result['dashboard_id'] = result.pop('id')
+        result['dashboard_id'] = result['id']
     return result
 
 
@@ -105,7 +105,7 @@ async def list_dashboards(
     for d in page:
         item = _to_dashboard_response(d.model_dump())
         item['my_permission'] = permission_map.get(d.id, "viewer")
-        item['card_count'] = len(d.layout.cards) if d.layout else 0
+        item['card_count'] = len(d.layout) if d.layout else 0
         owner_name = owner_map.get(d.owner_id, "Unknown")
         item['owner'] = {"user_id": d.owner_id or "", "name": owner_name}
         items.append(item)

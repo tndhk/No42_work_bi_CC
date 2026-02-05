@@ -21,6 +21,12 @@ MAX_RETRIES = 3
 RETRY_BASE_DELAY = 0.5  # seconds
 
 
+async def _maybe_await(result: Any) -> Any:
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 class CardCacheService:
     """Service for caching card execution results in DynamoDB."""
 
@@ -219,7 +225,7 @@ class CardExecutionService:
             return []
 
         reader = ParquetReader(self.s3_client, settings.s3_bucket_datasets)
-        df = await reader.read_full(dataset.s3_path)
+        df = await _maybe_await(reader.read_full(dataset.s3_path))
 
         # Convert DataFrame to list of dicts
         return df.to_dict(orient='records')

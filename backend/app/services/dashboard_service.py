@@ -96,8 +96,13 @@ class DashboardService:
         Returns:
             List of card IDs
         """
-        cards = dashboard.layout.cards if dashboard.layout else []
-        return [item.card_id for item in cards]
+        if not dashboard.layout:
+            return []
+
+        if isinstance(dashboard.layout, list):
+            return [item.card_id for item in dashboard.layout]
+
+        return [item.card_id for item in dashboard.layout.cards]
 
     async def _fetch_cards(
         self, card_ids: list[str], dynamodb: Any

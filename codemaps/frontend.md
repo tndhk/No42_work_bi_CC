@@ -1,6 +1,6 @@
 # フロントエンド コードマップ
 
-最終更新: 2026-02-05 (Audit Log 機能追加)
+最終更新: 2026-02-05 17:00 JST (Codemap refresh)
 フレームワーク: React 18 + TypeScript + Vite 5
 エントリポイント: `frontend/src/main.tsx`
 テストカバレッジ: 64テストファイル (Unit) + 4スペック (E2E)
@@ -71,11 +71,11 @@ frontend/
         GroupCreateDialog.tsx           # グループ新規作成ダイアログ
         GroupDetailPanel.tsx            # グループ詳細 + メンバー一覧パネル
         MemberAddDialog.tsx             # メンバー追加ダイアログ
-      ui/                              # shadcn/ui コンポーネント
+      ui/                              # shadcn/ui コンポーネント (14ファイル)
         alert-dialog.tsx, badge.tsx, button.tsx, calendar.tsx,
         card.tsx, checkbox.tsx, dialog.tsx, dropdown-menu.tsx,
         form.tsx, input.tsx, label.tsx, popover.tsx,
-        select.tsx, separator.tsx, sheet.tsx, table.tsx
+        select.tsx, table.tsx
     hooks/
       index.ts                         # barrel export (全 hook 再エクスポート)
       use-auth.ts                      # useLogin, useLogout, useCurrentUser

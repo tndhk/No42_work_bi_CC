@@ -354,7 +354,8 @@ async def get_column_values(
 @router.get("/{dataset_id}/preview")
 async def get_dataset_preview(
     dataset_id: str,
-    max_rows: int = Query(100, ge=1, le=1000, alias="limit"),
+    max_rows: int | None = Query(None, ge=1, le=1000),
+    limit: int | None = Query(None, ge=1, le=1000),
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
     s3_client: Any = Depends(get_s3_client),
@@ -383,6 +384,8 @@ async def get_dataset_preview(
             detail="Dataset not found",
         )
 
+    effective_max_rows = max_rows if max_rows is not None else (limit or 100)
+
     # Get preview via service
     service = DatasetService()
 
@@ -390,7 +393,7 @@ async def get_dataset_preview(
         preview = await service.get_preview(
             dataset=dataset,
             s3_client=s3_client,
-            max_rows=max_rows,
+            max_rows=effective_max_rows,
         )
     except ValueError as e:
         raise HTTPException(
@@ -420,7 +423,7 @@ async def reimport_dry_run(
         ReimportDryRunResponse with schema changes info
 
     Raises:
-        HTTPException: 404 if not found, 422 if not s3_csv source type
+        HTTPException: 403 if not owner, 404 if not found, 422 if not s3_csv source type
     """
     repo = DatasetRepository()
     dataset = await repo.get_by_id(dataset_id, dynamodb)
@@ -429,6 +432,13 @@ async def reimport_dry_run(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found",
+        )
+
+    # Check ownership
+    if dataset.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to reimport this dataset",
         )
 
     # Check source type
@@ -478,7 +488,7 @@ async def reimport_execute(
         Updated Dataset
 
     Raises:
-        HTTPException: 404 if not found, 422 if schema changes and force=False
+        HTTPException: 403 if not owner, 404 if not found, 422 if schema changes and force=False
     """
     repo = DatasetRepository()
     dataset = await repo.get_by_id(dataset_id, dynamodb)
@@ -487,6 +497,13 @@ async def reimport_execute(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Dataset not found",
+        )
+
+    # Check ownership
+    if dataset.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to reimport this dataset",
         )
 
     service = DatasetService()

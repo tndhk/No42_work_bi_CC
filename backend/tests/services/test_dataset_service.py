@@ -961,6 +961,30 @@ class TestReimportExecute:
                 'updated_at': existing_dataset.updated_at.isoformat(),
             }
         }
+        # Mock update_item to return updated dataset (DynamoDB format: camelCase keys)
+        # Note: schema is a list of dicts, each dict has camelCase keys
+        updated_attrs = {
+            'id': existing_dataset.id,
+            'name': existing_dataset.name,
+            'sourceType': existing_dataset.source_type,
+            'schema': [
+                {'name': col.name, 'dataType': col.data_type, 'nullable': col.nullable}
+                for col in existing_dataset.columns
+            ],
+            's3Path': existing_dataset.s3_path,
+            'sourceConfig': existing_dataset.source_config,
+            'rowCount': 3,
+            'columnCount': 2,
+            'ownerId': existing_dataset.owner_id,
+            'createdAt': int(existing_dataset.created_at.timestamp()),
+            'updatedAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportBy': 'user_123',
+        }
+        # Mock update_item to return result directly (sync, handled by _execute_db_operation)
+        # The return value will be passed to _execute_db_operation which checks if it's a coroutine
+        # Since it's a dict, it will be returned as-is
+        mock_table.update_item = MagicMock(return_value={'Attributes': updated_attrs})
 
         # Mock source S3 to return new CSV (same schema)
         mock_source_s3_client.get_object.return_value = {
@@ -982,12 +1006,14 @@ class TestReimportExecute:
         assert result.id == existing_dataset.id
         assert result.row_count == 3
         assert result.last_import_by == 'user_123'
+        # Verify created_at is preserved
+        assert result.created_at == existing_dataset.created_at
 
         # Verify S3 upload was called
         mock_s3_client.put_object.assert_called()
 
-        # Verify DynamoDB update was called
-        mock_table.put_item.assert_called()
+        # Verify DynamoDB update was called (not create/put_item)
+        mock_table.update_item.assert_called()
 
     @pytest.mark.asyncio
     async def test_reimport_execute_with_schema_changes_no_force(
@@ -1070,6 +1096,28 @@ class TestReimportExecute:
                 'updated_at': existing_dataset.updated_at.isoformat(),
             }
         }
+        # Mock update_item to return updated dataset (DynamoDB format: camelCase keys)
+        updated_attrs = {
+            'id': existing_dataset.id,
+            'name': existing_dataset.name,
+            'sourceType': existing_dataset.source_type,
+            'schema': [{'name': col.name, 'dataType': col.data_type, 'nullable': col.nullable} for col in existing_dataset.columns] + [
+                {'name': 'email', 'dataType': 'string', 'nullable': False}
+            ],
+            's3Path': existing_dataset.s3_path,
+            'sourceConfig': existing_dataset.source_config,
+            'rowCount': 2,
+            'columnCount': 3,
+            'ownerId': existing_dataset.owner_id,
+            'createdAt': int(existing_dataset.created_at.timestamp()),
+            'updatedAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportBy': 'user_123',
+        }
+        # Mock update_item to return result directly (sync, handled by _execute_db_operation)
+        # The return value will be passed to _execute_db_operation which checks if it's a coroutine
+        # Since it's a dict, it will be returned as-is
+        mock_table.update_item = MagicMock(return_value={'Attributes': updated_attrs})
 
         # Mock source S3 to return CSV with different schema
         mock_source_s3_client.get_object.return_value = {
@@ -1092,12 +1140,14 @@ class TestReimportExecute:
         assert result.row_count == 2
         assert result.column_count == 3
         assert len(result.columns) == 3
+        # Verify created_at is preserved even with force=True
+        assert result.created_at == existing_dataset.created_at
 
         # Verify S3 upload was called
         mock_s3_client.put_object.assert_called()
 
-        # Verify DynamoDB update was called
-        mock_table.put_item.assert_called()
+        # Verify DynamoDB update was called (not create/put_item)
+        mock_table.update_item.assert_called()
 
     @pytest.mark.asyncio
     async def test_reimport_execute_dataset_not_found(
@@ -1125,3 +1175,110 @@ class TestReimportExecute:
                 source_s3_client=mock_source_s3_client,
                 force=False,
             )
+
+    @pytest.mark.asyncio
+    async def test_reimport_execute_preserves_created_at(
+        self,
+        existing_dataset: Dataset,
+        mock_dynamodb: Any,
+        mock_s3_client: Any,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test reimport_execute preserves created_at timestamp."""
+        # Given: Dataset with specific created_at
+        original_created_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dataset_with_timestamp = Dataset(
+            **{
+                **existing_dataset.model_dump(by_alias=True),
+                'created_at': original_created_at,
+            }
+        )
+        new_csv_content = b"name,age\nAlice,30\nBob,25\n"
+
+        # Mock DynamoDB
+        mock_table = MagicMock()
+        mock_dynamodb.Table.return_value = mock_table
+        mock_table.get_item.return_value = {
+            'Item': {
+                'id': dataset_with_timestamp.id,
+                'name': dataset_with_timestamp.name,
+                'source_type': dataset_with_timestamp.source_type,
+                'schema': [col.model_dump() for col in dataset_with_timestamp.columns],
+                's3_path': dataset_with_timestamp.s3_path,
+                'source_config': dataset_with_timestamp.source_config,
+                'row_count': dataset_with_timestamp.row_count,
+                'column_count': dataset_with_timestamp.column_count,
+                'owner_id': dataset_with_timestamp.owner_id,
+                'created_at': original_created_at.isoformat(),
+                'updated_at': dataset_with_timestamp.updated_at.isoformat(),
+            }
+        }
+        # Mock update_item to return updated item with preserved created_at (DynamoDB format: camelCase keys)
+        updated_attrs = {
+            'id': dataset_with_timestamp.id,
+            'name': dataset_with_timestamp.name,
+            'sourceType': dataset_with_timestamp.source_type,
+            'schema': [{'name': col.name, 'dataType': col.data_type, 'nullable': col.nullable} for col in dataset_with_timestamp.columns],
+            's3Path': dataset_with_timestamp.s3_path,
+            'sourceConfig': dataset_with_timestamp.source_config,
+            'rowCount': 2,
+            'columnCount': 2,
+            'ownerId': dataset_with_timestamp.owner_id,
+            'createdAt': int(original_created_at.timestamp()),
+            'updatedAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportAt': int(datetime.now(timezone.utc).timestamp()),
+            'lastImportBy': 'user_123',
+        }
+        # Mock update_item to return result directly (sync, handled by _execute_db_operation)
+        # Ensure it returns a dict directly, not wrapped in MagicMock
+        # The function will be called and its return value passed to _execute_db_operation
+        update_item_result = {'Attributes': updated_attrs}
+        mock_table.update_item = MagicMock(return_value=update_item_result)
+
+        mock_source_s3_client.get_object.return_value = {
+            'Body': MagicMock(read=MagicMock(return_value=new_csv_content))
+        }
+
+        # When: Reimport is executed
+        service = DatasetService()
+        result = await service.reimport_execute(
+            dataset_id=dataset_with_timestamp.id,
+            user_id='user_123',
+            dynamodb=mock_dynamodb,
+            s3_client=mock_s3_client,
+            source_s3_client=mock_source_s3_client,
+            force=False,
+        )
+
+        # Then: created_at is preserved
+        assert result.created_at == original_created_at
+
+    @pytest.mark.asyncio
+    async def test_fetch_s3_csv_with_async_client(
+        self,
+        mock_source_s3_client: Any,
+    ) -> None:
+        """Test _fetch_s3_csv handles async S3 client correctly."""
+        # Given: Async S3 client (returns coroutines)
+        from unittest.mock import AsyncMock
+        service = DatasetService()
+        csv_content = b"name,age\nAlice,30\n"
+
+        async_get_object = AsyncMock(return_value={
+            'Body': AsyncMock(read=AsyncMock(return_value=csv_content))
+        })
+        mock_source_s3_client.get_object = async_get_object
+
+        # When: Fetching CSV from async client
+        result = await service._fetch_s3_csv(
+            source_s3_client=mock_source_s3_client,
+            s3_bucket='test-bucket',
+            s3_key='data/test.csv',
+        )
+
+        # Then: CSV content is returned correctly
+        assert result == csv_content
+        async_get_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='data/test.csv'
+        )

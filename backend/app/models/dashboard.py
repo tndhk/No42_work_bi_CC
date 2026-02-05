@@ -47,7 +47,7 @@ class DashboardCreate(BaseModel):
 
     name: str = Field(min_length=1)
     description: Optional[str] = None
-    layout: Optional[DashboardLayout] = None
+    layout: Optional[list[LayoutItem]] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -66,7 +66,7 @@ class DashboardUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1)
     description: Optional[str] = None
-    layout: Optional[DashboardLayout] = None
+    layout: Optional[list[LayoutItem]] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -86,7 +86,7 @@ class Dashboard(TimestampMixin, BaseModel):
     id: str
     name: str
     description: Optional[str] = None
-    layout: Optional[DashboardLayout] = None
+    layout: Optional[list[LayoutItem]] = None
     owner_id: Optional[str] = None
     filters: Optional[list[FilterDefinition]] = None
     default_filter_view_id: Optional[str] = None

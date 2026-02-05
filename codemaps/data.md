@@ -1,6 +1,6 @@
 # データモデルとスキーマ コードマップ
 
-最終更新: 2026-02-05 (Audit Log 機能追加)
+最終更新: 2026-02-05 17:00 JST (Codemap refresh)
 データベース: DynamoDB (NoSQL) + S3 (Parquet)
 
 ---

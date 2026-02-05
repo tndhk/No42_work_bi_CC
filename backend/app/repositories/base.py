@@ -58,12 +58,20 @@ class BaseRepository(Generic[T]):
             # Handle timestamps: convert datetime to UNIX timestamp (Number)
             if isinstance(value, datetime):
                 dynamodb_item[camel_key] = int(value.timestamp())
-            # Handle nested lists of dicts (e.g., layout items)
-            elif isinstance(value, list) and value and isinstance(value[0], dict):
-                dynamodb_item[camel_key] = [
-                    {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
-                    for item in value
-                ]
+            # Handle nested lists (e.g., layout items)
+            elif isinstance(value, list) and value:
+                if isinstance(value[0], BaseModel):
+                    dynamodb_item[camel_key] = [
+                        {self._to_camel_case(k): v for k, v in item.model_dump().items()}
+                        for item in value
+                    ]
+                elif isinstance(value[0], dict):
+                    dynamodb_item[camel_key] = [
+                        {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
+                        for item in value
+                    ]
+                else:
+                    dynamodb_item[camel_key] = value
             else:
                 dynamodb_item[camel_key] = value
 
@@ -189,7 +197,7 @@ class BaseRepository(Generic[T]):
         response = await self._execute_db_operation(table.get_item(Key={self.pk_name: item_id}))
 
         item = response.get('Item')
-        if not item:
+        if not item or not isinstance(item, dict):
             return None
 
         # Convert from DynamoDB format to Python dict
@@ -237,12 +245,20 @@ class BaseRepository(Generic[T]):
             # Convert datetime to timestamp
             if isinstance(value, datetime):
                 expression_attribute_values[placeholder_value] = int(value.timestamp())
-            # Handle nested lists of dicts
-            elif isinstance(value, list) and value and isinstance(value[0], dict):
-                expression_attribute_values[placeholder_value] = [
-                    {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
-                    for item in value
-                ]
+            # Handle nested lists
+            elif isinstance(value, list) and value:
+                if isinstance(value[0], BaseModel):
+                    expression_attribute_values[placeholder_value] = [
+                        {self._to_camel_case(k): v for k, v in item.model_dump().items()}
+                        for item in value
+                    ]
+                elif isinstance(value[0], dict):
+                    expression_attribute_values[placeholder_value] = [
+                        {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
+                        for item in value
+                    ]
+                else:
+                    expression_attribute_values[placeholder_value] = value
             else:
                 expression_attribute_values[placeholder_value] = value
 
@@ -263,7 +279,7 @@ class BaseRepository(Generic[T]):
 
         # Convert and return updated item
         updated_item = response.get('Attributes')
-        if not updated_item:
+        if not updated_item or not isinstance(updated_item, dict):
             return None
 
         python_dict = self._from_dynamodb_item(updated_item)

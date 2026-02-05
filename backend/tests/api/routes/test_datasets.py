@@ -588,6 +588,30 @@ class TestReimportDryRun:
         )
         assert response.status_code == 403
 
+    def test_reimport_dry_run_not_owner(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test reimport dry-run returns 403 when user is not the owner."""
+        # Given: Dataset owned by different user
+        other_owner_dataset = Dataset(
+            **{
+                **s3_csv_dataset.model_dump(by_alias=True),
+                'owner_id': 'user_other',
+            }
+        )
+
+        # When: Owner tries to reimport
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = other_owner_dataset
+
+            response = authenticated_client.post(
+                f"/api/datasets/{other_owner_dataset.id}/reimport/dry-run",
+            )
+
+        # Then: Returns 403 Forbidden
+        assert response.status_code == 403
+        assert "Not authorized" in response.json()["detail"]
+
 
 class TestReimportExecute:
     """Tests for POST /api/datasets/{dataset_id}/reimport."""
@@ -709,6 +733,31 @@ class TestReimportExecute:
             json={"force": False},
         )
         assert response.status_code == 403
+
+    def test_reimport_execute_not_owner(
+        self, authenticated_client: TestClient, mock_user: User, s3_csv_dataset: Dataset
+    ) -> None:
+        """Test reimport execute returns 403 when user is not the owner."""
+        # Given: Dataset owned by different user
+        other_owner_dataset = Dataset(
+            **{
+                **s3_csv_dataset.model_dump(by_alias=True),
+                'owner_id': 'user_other',
+            }
+        )
+
+        # When: Non-owner tries to reimport
+        with patch('app.repositories.dataset_repository.DatasetRepository.get_by_id') as mock_get:
+            mock_get.return_value = other_owner_dataset
+
+            response = authenticated_client.post(
+                f"/api/datasets/{other_owner_dataset.id}/reimport",
+                json={"force": False},
+            )
+
+        # Then: Returns 403 Forbidden
+        assert response.status_code == 403
+        assert "Not authorized" in response.json()["detail"]
 
 
 class TestAuditLogIntegration:

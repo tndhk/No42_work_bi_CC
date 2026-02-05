@@ -1,5 +1,6 @@
 """Transform execution service for running transforms via Executor API."""
 import asyncio
+import inspect
 import logging
 import time
 import uuid
@@ -22,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 0.5  # seconds
+
+
+async def _maybe_await(result: Any) -> Any:
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 @dataclass(frozen=True)
@@ -114,7 +121,7 @@ class TransformExecutionService:
             # Step 2: Read Parquet data from S3
             parquet_reader = ParquetReader(s3, settings.s3_bucket_datasets)
             for dataset in input_datasets:
-                df = await parquet_reader.read_full(dataset.s3_path)
+                df = await _maybe_await(parquet_reader.read_full(dataset.s3_path))
                 input_dataframes.append(df)
 
             # Step 3: Call Executor API
@@ -129,9 +136,11 @@ class TransformExecutionService:
 
             # Save to S3
             parquet_converter = ParquetConverter(s3, settings.s3_bucket_datasets)
-            storage_result = await parquet_converter.convert_and_save(
-                df=output_df,
-                dataset_id=output_dataset_id,
+            storage_result = await _maybe_await(
+                parquet_converter.convert_and_save(
+                    df=output_df,
+                    dataset_id=output_dataset_id,
+                )
             )
 
             # Build column schema from output DataFrame

@@ -1,4 +1,5 @@
 """Dataset service for CSV import and preview operations."""
+import inspect
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -12,6 +13,12 @@ from app.services.csv_parser import CsvImportOptions, parse_full
 from app.services.parquet_storage import ParquetConverter, ParquetReader
 from app.services.schema_comparator import compare_schemas
 from app.services.type_inferrer import infer_schema
+
+
+async def _maybe_await(result: Any) -> Any:
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 class DatasetService:
@@ -202,7 +209,7 @@ class DatasetService:
             s3_client=s3_client,
             bucket=settings.s3_bucket_datasets,
         )
-        df = await reader.read_full(dataset.s3_path)
+        df = await _maybe_await(reader.read_full(dataset.s3_path))
 
         if column_name not in df.columns:
             raise ValueError(f"Column '{column_name}' not found in dataset")
@@ -406,7 +413,7 @@ class DatasetService:
             bucket=settings.s3_bucket_datasets,
         )
 
-        return await reader.read_preview(s3_path, max_rows)
+        return await _maybe_await(reader.read_preview(s3_path, max_rows))
 
     def _format_preview(
         self,
@@ -566,10 +573,9 @@ class DatasetService:
             df, dataset_id, s3_client, dataset.partition_column
         )
 
-        # Update metadata in DynamoDB (full overwrite via put_item)
+        # Update metadata in DynamoDB (preserve created_at via update)
         now = datetime.now(timezone.utc)
         updated_data = {
-            'id': dataset.id,
             'name': dataset.name,
             'description': dataset.description,
             'source_type': dataset.source_type,
@@ -582,11 +588,11 @@ class DatasetService:
             'source_config': dataset.source_config,
             'last_import_at': now,
             'last_import_by': user_id,
-            'created_at': dataset.created_at,
-            'updated_at': now,
         }
 
-        updated_dataset = await repo.create(updated_data, dynamodb)
+        updated_dataset = await repo.update(dataset_id, updated_data, dynamodb)
+        if not updated_dataset:
+            raise ValueError("Dataset not found after update")
         return updated_dataset
 
     async def _fetch_s3_csv(
@@ -609,15 +615,16 @@ class DatasetService:
             ValueError: If S3 file not found
         """
         try:
-            response = source_s3_client.get_object(
+            # Handle both sync and async get_object
+            get_object_result = source_s3_client.get_object(
                 Bucket=s3_bucket, Key=s3_key
             )
+            response = await _maybe_await(get_object_result)
             body = response['Body']
             # Handle both sync and async read
             read_result = body.read()
-            if hasattr(read_result, '__await__'):
-                return await read_result
-            return read_result
+            read_bytes = await _maybe_await(read_result)
+            return read_bytes
         except Exception as e:
             error_str = str(e)
             if 'NoSuchKey' in error_str or 'Not Found' in error_str or '404' in error_str:

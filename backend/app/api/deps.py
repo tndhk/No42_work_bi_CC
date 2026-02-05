@@ -9,7 +9,7 @@ from app.repositories.user_repository import UserRepository
 from app.models.user import User
 
 # HTTP Bearer token security scheme
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_dynamodb_resource() -> AsyncGenerator[Any, None]:
@@ -49,22 +49,18 @@ async def get_s3_client() -> AsyncGenerator[Any, None]:
         yield s3
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    dynamodb: Any = Depends(get_dynamodb_resource),
+async def _get_current_user_from_credentials(
+    credentials: HTTPAuthorizationCredentials | None,
+    dynamodb: Any,
+    missing_status: int,
 ) -> User:
-    """Get current authenticated user from JWT token.
+    """Resolve current user from JWT credentials."""
+    if credentials is None:
+        raise HTTPException(
+            status_code=missing_status,
+            detail="Not authenticated",
+        )
 
-    Args:
-        credentials: HTTP Bearer token credentials
-        dynamodb: DynamoDB resource
-
-    Returns:
-        Current authenticated user
-
-    Raises:
-        HTTPException: 401 if token is invalid or user not found
-    """
     # Extract token from credentials
     token = credentials.credentials
 
@@ -104,6 +100,41 @@ async def get_current_user(
     )
 
     return user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+) -> User:
+    """Get current authenticated user from JWT token.
+
+    Args:
+        credentials: HTTP Bearer token credentials
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Current authenticated user
+
+    Raises:
+        HTTPException: 401 if token is invalid or user not found
+    """
+    return await _get_current_user_from_credentials(
+        credentials=credentials,
+        dynamodb=dynamodb,
+        missing_status=status.HTTP_403_FORBIDDEN,
+    )
+
+
+async def get_current_user_401(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+) -> User:
+    """Get current authenticated user, returning 401 if missing."""
+    return await _get_current_user_from_credentials(
+        credentials=credentials,
+        dynamodb=dynamodb,
+        missing_status=status.HTTP_401_UNAUTHORIZED,
+    )
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

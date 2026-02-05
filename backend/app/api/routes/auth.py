@@ -6,7 +6,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 import structlog
 
-from app.api.deps import get_current_user, get_dynamodb_resource
+from app.api.deps import get_current_user_401, get_dynamodb_resource
 from app.api.response import api_response
 from app.core.security import verify_password, create_access_token
 from app.core.config import settings
@@ -125,7 +125,7 @@ async def login(
 
 @router.post("/logout")
 async def logout(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_401),
     dynamodb: Any = Depends(get_dynamodb_resource),
 ) -> dict[str, Any]:
     """Logout current user.
@@ -147,7 +147,7 @@ async def logout(
 
 @router.get("/me")
 async def get_me(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_401),
 ) -> dict[str, Any]:
     """Get current authenticated user information.
 

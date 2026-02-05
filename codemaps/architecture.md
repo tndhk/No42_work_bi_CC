@@ -1,6 +1,6 @@
 # 全体アーキテクチャ コードマップ
 
-最終更新: 2026-02-05 (Audit Log 機能追加)
+最終更新: 2026-02-05 17:00 JST (Codemap refresh)
 プロジェクト: BI Tool (社内BI・Pythonカード MVP)
 ステージ: MVP
 
@@ -73,7 +73,7 @@ work_BI_ClaudeCode/
       models/          # Pydantic モデル (12ファイル)
       repositories/    # DynamoDB リポジトリ (CRUD, 11リポジトリ)
       services/        # ビジネスロジック (11サービス + AuditService)
-    tests/             # pytest テスト (56テストファイル)
+    tests/             # pytest テスト (61テストファイル)
   frontend/            # React SPA
     src/
       components/      # UI コンポーネント (transform/ 含む)
@@ -499,8 +499,8 @@ Backend API プロセス (main.py lifespan)
 |------|---------------|-----------------|-----------|
 | Frontend (Unit) | Vitest + Testing Library | 64 | - |
 | Frontend (E2E) | Playwright | 4 specs | - |
-| Backend | pytest | 56 | - |
-| Executor | pytest | 6 | - |
+| Backend | pytest | 61 | - |
+| Executor | pytest | 8 | - |
 
 ### E2E テスト構成
 

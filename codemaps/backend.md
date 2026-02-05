@@ -1,6 +1,6 @@
 # バックエンド コードマップ
 
-最終更新: 2026-02-05 (Audit Log 機能追加 + 既存ルートへの監査ログ統合)
+最終更新: 2026-02-05 17:00 JST (Codemap refresh)
 フレームワーク: FastAPI 0.109 / Python 3.11+
 エントリポイント: `backend/app/main.py`
 

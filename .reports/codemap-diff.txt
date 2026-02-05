@@ -1,0 +1,55 @@
+# Codemap Diff Report
+
+Generated: 2026-02-05 17:00 (JST)
+
+## Summary
+
+- Total Diff Percentage: < 5%
+- Approval Required: No (below 30% threshold)
+- Action: Auto-updated with timestamp refresh and minor corrections
+
+## Changes Detected
+
+### Backend
+| Component | Documented | Actual | Status |
+|-----------|------------|--------|--------|
+| Routes | 11 | 11 | No change |
+| Services | 10 | 10 | No change |
+| Repositories | 12 | 12 | No change |
+| Models | 12 | 12 | No change |
+| Tests | 56 files | 61 files | UPDATED (+5 files) |
+
+### Frontend
+| Component | Documented | Actual | Status |
+|-----------|------------|--------|--------|
+| Pages | 13 | 13 | No change |
+| Hooks | 10 | 10 | No change |
+| API modules | 9 | 10 | Minor correction |
+| Types | 10 | 11 | Minor correction |
+| Unit Tests | 64 | 64 | No change |
+| E2E Specs | 4 | 4 | No change |
+| UI Components | 16 | 14 | Minor correction (sheet/separator removed or renamed) |
+
+### Executor
+No changes detected.
+
+## Files Updated
+
+1. codemaps/architecture.md - Timestamp refresh, test count correction
+2. codemaps/backend.md - Timestamp refresh, test count correction
+3. codemaps/frontend.md - Timestamp refresh, minor corrections
+4. codemaps/data.md - Timestamp refresh only
+
+## Diff Calculation
+
+Changed sections: 4
+Total sections: ~50
+Structural changes: 0
+Content corrections: 3
+Percentage: ~5%
+
+## Notes
+
+- All codemaps were last updated on 2026-02-05 (Audit Log feature)
+- Current scan confirms architecture is stable
+- Minor discrepancies in file counts corrected

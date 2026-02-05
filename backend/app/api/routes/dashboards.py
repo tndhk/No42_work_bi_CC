@@ -1,4 +1,5 @@
 """Dashboard API routes."""
+import uuid
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -10,10 +11,19 @@ from app.models.user import User
 from app.repositories.dashboard_repository import DashboardRepository
 from app.repositories.dashboard_share_repository import DashboardShareRepository
 from app.repositories.group_member_repository import GroupMemberRepository
+from app.repositories.user_repository import UserRepository
 from app.services.dashboard_service import DashboardService
 from app.services.permission_service import PERMISSION_LEVELS, PermissionService
 
 router = APIRouter()
+
+
+def _to_dashboard_response(dashboard_dict: dict) -> dict:
+    """Convert dashboard dict to frontend-expected format (id -> dashboard_id)."""
+    result = {**dashboard_dict}
+    if 'id' in result:
+        result['dashboard_id'] = result.pop('id')
+    return result
 
 
 async def _process_shares(shares, repo, dashboard_map, permission_map, dynamodb):
@@ -81,10 +91,23 @@ async def list_dashboards(
     total = len(all_dashboards)
     page = all_dashboards[offset:offset + limit]
 
+    # 5. Collect unique owner IDs and fetch user info
+    user_repo = UserRepository()
+    owner_ids = {d.owner_id for d in page if d.owner_id}
+    owner_map: dict[str, str] = {}
+    for owner_id in owner_ids:
+        user = await user_repo.get_by_id(owner_id, dynamodb)
+        if user:
+            owner_map[owner_id] = user.email
+
+    # 6. Build response items with owner info and card_count
     items = []
     for d in page:
-        item = d.model_dump()
+        item = _to_dashboard_response(d.model_dump())
         item['my_permission'] = permission_map.get(d.id, "viewer")
+        item['card_count'] = len(d.layout) if d.layout else 0
+        owner_name = owner_map.get(d.owner_id, "Unknown")
+        item['owner'] = {"user_id": d.owner_id or "", "name": owner_name}
         items.append(item)
 
     return paginated_response(
@@ -123,6 +146,7 @@ async def create_dashboard(
 
     # Prepare creation data
     create_data = {
+        'id': f"dash_{uuid.uuid4().hex[:12]}",
         'name': dashboard_data.name.strip(),
         'description': dashboard_data.description,
         'layout': dashboard_data.layout,
@@ -134,7 +158,7 @@ async def create_dashboard(
     repo = DashboardRepository()
     dashboard = await repo.create(create_data, dynamodb)
 
-    return api_response(dashboard.model_dump())
+    return api_response(_to_dashboard_response(dashboard.model_dump()))
 
 
 @router.get("/{dashboard_id}")
@@ -170,7 +194,7 @@ async def get_dashboard(
         dashboard, current_user.id, Permission.VIEWER, dynamodb
     )
 
-    return api_response(dashboard.model_dump())
+    return api_response(_to_dashboard_response(dashboard.model_dump()))
 
 
 @router.put("/{dashboard_id}")
@@ -220,7 +244,7 @@ async def update_dashboard(
             detail="Dashboard not found after update",
         )
 
-    return api_response(updated_dashboard.model_dump())
+    return api_response(_to_dashboard_response(updated_dashboard.model_dump()))
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -294,6 +318,7 @@ async def clone_dashboard(
 
     # Create cloned dashboard with new name and owner
     clone_data = {
+        'id': f"dash_{uuid.uuid4().hex[:12]}",
         'name': f"{source_dashboard.name} (Copy)",
         'description': source_dashboard.description,
         'layout': source_dashboard.layout,
@@ -303,7 +328,7 @@ async def clone_dashboard(
 
     cloned_dashboard = await repo.create(clone_data, dynamodb)
 
-    return api_response(cloned_dashboard.model_dump())
+    return api_response(_to_dashboard_response(cloned_dashboard.model_dump()))
 
 
 @router.get("/{dashboard_id}/referenced-datasets")

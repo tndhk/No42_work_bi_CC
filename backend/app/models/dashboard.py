@@ -1,6 +1,6 @@
 """Dashboard models."""
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.common import TimestampMixin
 
@@ -47,7 +47,7 @@ class DashboardCreate(BaseModel):
 
     name: str = Field(min_length=1)
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -66,7 +66,7 @@ class DashboardUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1)
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     filters: Optional[list[FilterDefinition]] = None
 
     @field_validator("name")
@@ -86,9 +86,23 @@ class Dashboard(TimestampMixin, BaseModel):
     id: str
     name: str
     description: Optional[str] = None
-    layout: Optional[list[LayoutItem]] = None
+    layout: Optional[DashboardLayout] = None
     owner_id: Optional[str] = None
     filters: Optional[list[FilterDefinition]] = None
     default_filter_view_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("layout", mode="before")
+    @classmethod
+    def convert_layout_from_list(cls, v: Any) -> Optional[DashboardLayout | dict]:
+        """Convert legacy list format to DashboardLayout.
+
+        For backward compatibility with existing data stored as list[LayoutItem].
+        """
+        if v is None:
+            return None
+        if isinstance(v, list):
+            # Legacy format: list of LayoutItem dicts
+            return {"cards": v, "columns": 12, "row_height": 100}
+        return v

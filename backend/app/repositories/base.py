@@ -58,6 +58,9 @@ class BaseRepository(Generic[T]):
             # Handle timestamps: convert datetime to UNIX timestamp (Number)
             if isinstance(value, datetime):
                 dynamodb_item[camel_key] = int(value.timestamp())
+            # Handle nested dicts (e.g., DashboardLayout)
+            elif isinstance(value, dict):
+                dynamodb_item[camel_key] = self._convert_dict_to_camel_case(value)
             # Handle nested lists (e.g., layout items)
             elif isinstance(value, list) and value:
                 if isinstance(value[0], BaseModel):
@@ -67,7 +70,7 @@ class BaseRepository(Generic[T]):
                     ]
                 elif isinstance(value[0], dict):
                     dynamodb_item[camel_key] = [
-                        {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
+                        self._convert_dict_to_camel_case(item)
                         for item in value
                     ]
                 else:
@@ -100,16 +103,59 @@ class BaseRepository(Generic[T]):
             # Handle timestamps: convert UNIX timestamp to datetime
             if key in ('createdAt', 'updatedAt'):
                 python_dict[python_key] = datetime.fromtimestamp(int(value), tz=timezone.utc)
+            # Handle nested dicts (e.g., DashboardLayout)
+            elif isinstance(value, dict):
+                python_dict[python_key] = self._convert_dict_to_snake_case(value)
             # Handle nested lists of dicts
             elif isinstance(value, list) and value and isinstance(value[0], dict):
                 python_dict[python_key] = [
-                    {self._to_snake_case(k): v for k, v in nested_item.items()}  # type: ignore[assignment]
+                    self._convert_dict_to_snake_case(nested_item)
                     for nested_item in value
                 ]
             else:
                 python_dict[python_key] = value
 
         return python_dict
+
+    def _convert_dict_to_camel_case(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Recursively convert dict keys from snake_case to camelCase.
+
+        Args:
+            data: Dictionary with snake_case keys
+
+        Returns:
+            Dictionary with camelCase keys
+        """
+        result = {}
+        for key, value in data.items():
+            camel_key = self._to_camel_case(key)
+            if isinstance(value, dict):
+                result[camel_key] = self._convert_dict_to_camel_case(value)
+            elif isinstance(value, list) and value and isinstance(value[0], dict):
+                result[camel_key] = [self._convert_dict_to_camel_case(item) for item in value]
+            else:
+                result[camel_key] = value
+        return result
+
+    def _convert_dict_to_snake_case(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Recursively convert dict keys from camelCase to snake_case.
+
+        Args:
+            data: Dictionary with camelCase keys
+
+        Returns:
+            Dictionary with snake_case keys
+        """
+        result = {}
+        for key, value in data.items():
+            snake_key = self._to_snake_case(key)
+            if isinstance(value, dict):
+                result[snake_key] = self._convert_dict_to_snake_case(value)
+            elif isinstance(value, list) and value and isinstance(value[0], dict):
+                result[snake_key] = [self._convert_dict_to_snake_case(item) for item in value]
+            else:
+                result[snake_key] = value
+        return result
 
     def _to_camel_case(self, snake_str: str) -> str:
         """Convert snake_case to camelCase.
@@ -245,6 +291,9 @@ class BaseRepository(Generic[T]):
             # Convert datetime to timestamp
             if isinstance(value, datetime):
                 expression_attribute_values[placeholder_value] = int(value.timestamp())
+            # Handle nested dicts (e.g., DashboardLayout)
+            elif isinstance(value, dict):
+                expression_attribute_values[placeholder_value] = self._convert_dict_to_camel_case(value)
             # Handle nested lists
             elif isinstance(value, list) and value:
                 if isinstance(value[0], BaseModel):
@@ -254,7 +303,7 @@ class BaseRepository(Generic[T]):
                     ]
                 elif isinstance(value[0], dict):
                     expression_attribute_values[placeholder_value] = [
-                        {self._to_camel_case(k): v for k, v in item.items()}  # type: ignore[assignment]
+                        self._convert_dict_to_camel_case(item)
                         for item in value
                     ]
                 else:

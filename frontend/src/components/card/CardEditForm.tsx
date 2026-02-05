@@ -48,7 +48,6 @@ export function CardEditForm({
                 <SelectValue placeholder="選択してください" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">選択してください</SelectItem>
                 {datasets?.map((ds) => (
                   <SelectItem key={ds.id} value={ds.id}>
                     {ds.name}

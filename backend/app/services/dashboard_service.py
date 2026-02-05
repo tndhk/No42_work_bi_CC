@@ -99,9 +99,6 @@ class DashboardService:
         if not dashboard.layout:
             return []
 
-        if isinstance(dashboard.layout, list):
-            return [item.card_id for item in dashboard.layout]
-
         return [item.card_id for item in dashboard.layout.cards]
 
     async def _fetch_cards(

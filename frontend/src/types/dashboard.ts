@@ -1,4 +1,4 @@
-import type { OwnerRef } from './dataset';
+import type { OwnerRef } from './card';
 
 export interface LayoutItem {
   card_id: string;

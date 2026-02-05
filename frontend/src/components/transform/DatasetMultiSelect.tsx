@@ -23,13 +23,13 @@ export function DatasetMultiSelect({ datasets, selectedIds, onChange }: DatasetM
     <div className="space-y-2 max-h-60 overflow-y-auto">
       {datasets.map((dataset) => (
         <label
-          key={dataset.dataset_id}
+          key={dataset.id}
           className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted cursor-pointer"
         >
           <input
             type="checkbox"
-            checked={selectedIds.includes(dataset.dataset_id)}
-            onChange={() => handleToggle(dataset.dataset_id)}
+            checked={selectedIds.includes(dataset.id)}
+            onChange={() => handleToggle(dataset.id)}
             className="rounded border-input"
           />
           <span className="text-sm">{dataset.name}</span>

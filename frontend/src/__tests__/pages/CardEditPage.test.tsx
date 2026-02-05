@@ -79,7 +79,7 @@ describe('CardEditPage', () => {
   });
 
   it('データセット選択フィールドがある', () => {
-    const datasets = [createMockDataset({ dataset_id: 'ds-1', name: 'Dataset 1' })];
+    const datasets = [createMockDataset({ id: 'ds-1', name: 'Dataset 1' })];
     mockUseCard.mockReturnValue({ data: null, isLoading: false } as any);
     mockUseDatasets.mockReturnValue({
       data: createMockPaginatedResponse(datasets),

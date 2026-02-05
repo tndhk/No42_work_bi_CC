@@ -93,11 +93,11 @@ export function DatasetDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dataset.schema.map((col) => (
+              {dataset.columns.map((col) => (
                 <TableRow key={col.name}>
                   <TableCell className="font-mono">{col.name}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{col.type}</Badge>
+                    <Badge variant="secondary">{col.data_type}</Badge>
                   </TableCell>
                   <TableCell>{col.nullable ? 'Yes' : 'No'}</TableCell>
                 </TableRow>

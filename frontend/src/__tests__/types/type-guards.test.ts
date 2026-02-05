@@ -42,20 +42,20 @@ describe('Type Guards', () => {
   describe('isDataset', () => {
     it('returns true for valid dataset', () => {
       expect(isDataset({
-        dataset_id: 'ds1', name: 'test', source_type: 'local_csv', row_count: 100,
+        id: 'ds1', name: 'test', source_type: 'local_csv', row_count: 100,
       })).toBe(true);
     });
     it('returns false for wrong types', () => {
-      expect(isDataset({ dataset_id: 123 })).toBe(false);
+      expect(isDataset({ id: 123 })).toBe(false);
     });
   });
 
   describe('isColumnSchema', () => {
     it('returns true for valid column schema', () => {
-      expect(isColumnSchema({ name: 'col1', type: 'string', nullable: false })).toBe(true);
+      expect(isColumnSchema({ name: 'col1', data_type: 'string', nullable: false })).toBe(true);
     });
     it('returns false for missing nullable', () => {
-      expect(isColumnSchema({ name: 'col1', type: 'string' })).toBe(false);
+      expect(isColumnSchema({ name: 'col1', data_type: 'string' })).toBe(false);
     });
   });
 

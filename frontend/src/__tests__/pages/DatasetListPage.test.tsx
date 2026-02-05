@@ -54,8 +54,8 @@ describe('DatasetListPage', () => {
 
   it('データセット一覧をテーブルに表示する', () => {
     const datasets = [
-      createMockDataset({ dataset_id: 'dataset-1', name: 'Dataset 1' }),
-      createMockDataset({ dataset_id: 'dataset-2', name: 'Dataset 2' }),
+      createMockDataset({ id: 'dataset-1', name: 'Dataset 1' }),
+      createMockDataset({ id: 'dataset-2', name: 'Dataset 2' }),
     ];
 
     mockUseDatasets.mockReturnValue({
@@ -109,7 +109,7 @@ describe('DatasetListPage', () => {
   it('詳細ボタンクリックで遷移する', async () => {
     const user = userEvent.setup();
     const datasets = [
-      createMockDataset({ dataset_id: 'dataset-1', name: 'Dataset 1' }),
+      createMockDataset({ id: 'dataset-1', name: 'Dataset 1' }),
     ];
 
     mockUseDatasets.mockReturnValue({
@@ -135,7 +135,7 @@ describe('DatasetListPage', () => {
 
   it('削除ボタンクリックで確認ダイアログを表示する', () => {
     const datasets = [
-      createMockDataset({ dataset_id: 'dataset-1', name: 'Dataset 1' }),
+      createMockDataset({ id: 'dataset-1', name: 'Dataset 1' }),
     ];
 
     mockUseDatasets.mockReturnValue({
@@ -156,7 +156,7 @@ describe('DatasetListPage', () => {
 
   it('確認ダイアログで削除を実行する', () => {
     const datasets = [
-      createMockDataset({ dataset_id: 'dataset-1', name: 'Dataset 1' }),
+      createMockDataset({ id: 'dataset-1', name: 'Dataset 1' }),
     ];
 
     mockUseDatasets.mockReturnValue({
@@ -177,7 +177,7 @@ describe('DatasetListPage', () => {
 
   it('ページネーションが表示される', () => {
     const datasets = Array.from({ length: 10 }, (_, i) =>
-      createMockDataset({ dataset_id: `dataset-${i}` })
+      createMockDataset({ id: `dataset-${i}` })
     );
 
     const response = createMockPaginatedResponse(datasets, 100);

@@ -40,7 +40,7 @@ describe('useDatasets', () => {
   });
 
   it('データセット一覧を取得する', async () => {
-    const mockDatasets = [createMockDataset(), createMockDataset({ dataset_id: 'dataset-2' })];
+    const mockDatasets = [createMockDataset(), createMockDataset({ id: 'dataset-2' })];
     const mockResponse = createMockPaginatedResponse(mockDatasets);
 
     mockList.mockResolvedValue(mockResponse.data);
@@ -62,7 +62,7 @@ describe('useDataset', () => {
   it('データセット詳細を取得する', async () => {
     const mockDataset: DatasetDetail = {
       ...createMockDataset(),
-      schema: [],
+      columns: [],
       updated_at: '2026-01-01T00:00:00Z',
     };
 
@@ -115,8 +115,8 @@ describe('useCreateDataset', () => {
 
   it('成功時にdatasetsクエリを無効化する', async () => {
     const mockDataset: DatasetDetail = {
-      ...createMockDataset({ dataset_id: 'dataset-new' }),
-      schema: [],
+      ...createMockDataset({ id: 'dataset-new' }),
+      columns: [],
       updated_at: '2026-01-01T00:00:00Z',
     };
 
@@ -145,7 +145,7 @@ describe('useUpdateDataset', () => {
     const updateData: DatasetUpdateRequest = { name: 'Updated Dataset' };
     const mockDataset: DatasetDetail = {
       ...createMockDataset({ name: 'Updated Dataset' }),
-      schema: [],
+      columns: [],
       updated_at: '2026-01-02T00:00:00Z',
     };
 
@@ -187,8 +187,8 @@ describe('useS3ImportDataset', () => {
 
   it('S3インポートAPIを呼び出してデータセットを作成する', async () => {
     const mockDataset: DatasetDetail = {
-      ...createMockDataset({ dataset_id: 'ds-imported', name: 'S3 Imported', source_type: 's3_csv' }),
-      schema: [],
+      ...createMockDataset({ id: 'ds-imported', name: 'S3 Imported', source_type: 's3_csv' }),
+      columns: [],
       updated_at: '2026-01-01T00:00:00Z',
     };
 
@@ -212,8 +212,8 @@ describe('useS3ImportDataset', () => {
 
   it('オプションパラメータ付きでS3インポートを呼び出す', async () => {
     const mockDataset: DatasetDetail = {
-      ...createMockDataset({ dataset_id: 'ds-imported-2', name: 'S3 TSV', source_type: 's3_csv' }),
-      schema: [],
+      ...createMockDataset({ id: 'ds-imported-2', name: 'S3 TSV', source_type: 's3_csv' }),
+      columns: [],
       updated_at: '2026-01-01T00:00:00Z',
     };
 

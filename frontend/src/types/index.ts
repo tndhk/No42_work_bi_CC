@@ -9,7 +9,6 @@ export { isUser, isLoginResponse } from './user';
 
 export type {
   ColumnSchema,
-  OwnerRef,
   Dataset,
   DatasetDetail,
   DatasetCreateRequest,
@@ -22,6 +21,7 @@ export { isDataset, isColumnSchema } from './dataset';
 export type {
   Card,
   CardRef,
+  OwnerRef,
   CardDetail,
   CardCreateRequest,
   CardUpdateRequest,

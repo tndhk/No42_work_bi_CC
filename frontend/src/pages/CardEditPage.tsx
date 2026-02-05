@@ -35,7 +35,7 @@ export function CardEditPage() {
     if (card) {
       setName(card.name);
       setCode(card.code);
-      setDatasetId(card.dataset?.dataset_id || '');
+      setDatasetId(card.dataset?.id || '');
     }
   }, [card]);
 
@@ -103,7 +103,7 @@ export function CardEditPage() {
                 >
                   <option value="">選択してください</option>
                   {datasetsData?.data.map((ds) => (
-                    <option key={ds.dataset_id} value={ds.dataset_id}>{ds.name}</option>
+                    <option key={ds.id} value={ds.id}>{ds.name}</option>
                   ))}
                 </select>
               </div>

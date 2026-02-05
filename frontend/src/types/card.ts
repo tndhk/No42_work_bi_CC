@@ -1,7 +1,10 @@
-import type { OwnerRef } from './dataset';
-
 export interface CardRef {
-  dataset_id: string;
+  id: string;
+  name: string;
+}
+
+export interface OwnerRef {
+  user_id: string;
   name: string;
 }
 

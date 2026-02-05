@@ -87,15 +87,15 @@ describe('datasetsApi', () => {
   describe('get', () => {
     it('指定IDのデータセット詳細を取得する', async () => {
       const mockDataset: DatasetDetail = {
-        dataset_id: 'dataset-1',
+        id: 'dataset-1',
         name: 'Test Dataset',
         source_type: 'csv',
         row_count: 100,
         column_count: 5,
-        owner: { user_id: 'owner-1', name: 'Owner' },
+        owner_id: 'owner-1',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
-        schema: [],
+        columns: [],
       };
 
       const mockApiResponse: ApiResponse<DatasetDetail> = {
@@ -119,15 +119,15 @@ describe('datasetsApi', () => {
       formData.append('name', 'New Dataset');
 
       const mockDataset: DatasetDetail = {
-        dataset_id: 'dataset-2',
+        id: 'dataset-2',
         name: 'New Dataset',
         source_type: 'csv',
         row_count: 0,
         column_count: 0,
-        owner: { user_id: 'owner-1', name: 'Owner' },
+        owner_id: 'owner-1',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
-        schema: [],
+        columns: [],
       };
 
       const mockApiResponse: ApiResponse<DatasetDetail> = {
@@ -150,15 +150,15 @@ describe('datasetsApi', () => {
       const updateData = { name: 'Updated Dataset' };
 
       const mockDataset: DatasetDetail = {
-        dataset_id: 'dataset-1',
+        id: 'dataset-1',
         name: 'Updated Dataset',
         source_type: 'csv',
         row_count: 100,
         column_count: 5,
-        owner: { user_id: 'owner-1', name: 'Owner' },
+        owner_id: 'owner-1',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-02T00:00:00Z',
-        schema: [],
+        columns: [],
       };
 
       const mockApiResponse: ApiResponse<DatasetDetail> = {
@@ -238,15 +238,15 @@ describe('datasetsApi', () => {
   describe('s3Import', () => {
     it('S3インポートデータをPOSTリクエストで送信する', async () => {
       const mockDataset: DatasetDetail = {
-        dataset_id: 'ds_test123',
+        id: 'ds_test123',
         name: 'test-dataset',
         source_type: 's3_csv',
         row_count: 0,
         column_count: 0,
-        owner: { user_id: 'owner-1', name: 'Owner' },
+        owner_id: 'owner-1',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
-        schema: [],
+        columns: [],
       };
 
       const mockApiResponse: ApiResponse<DatasetDetail> = {
@@ -274,15 +274,15 @@ describe('datasetsApi', () => {
 
     it('全オプションパラメータを含めてPOSTリクエストを送信する', async () => {
       const mockDataset: DatasetDetail = {
-        dataset_id: 'ds_test456',
+        id: 'ds_test456',
         name: 'full-dataset',
         source_type: 's3_csv',
         row_count: 0,
         column_count: 10,
-        owner: { user_id: 'owner-1', name: 'Owner' },
+        owner_id: 'owner-1',
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
-        schema: [],
+        columns: [],
       };
 
       const mockApiResponse: ApiResponse<DatasetDetail> = {

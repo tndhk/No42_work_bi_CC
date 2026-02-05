@@ -96,12 +96,12 @@ describe('DatasetDetailPage', () => {
   it('データセット名と行列数を表示する', () => {
     const dataset = {
       ...createMockDataset({
-        dataset_id: 'dataset-1',
+        id: 'dataset-1',
         name: 'Test Dataset',
         row_count: 1000,
         column_count: 5,
       }),
-      schema: [],
+      columns: [],
     };
 
     mockUseDataset.mockReturnValue({ data: dataset, isLoading: false } as any);
@@ -123,10 +123,10 @@ describe('DatasetDetailPage', () => {
   it('スキーマセクションを表示する', () => {
     const dataset = {
       ...createMockDataset({
-        dataset_id: 'dataset-1',
+        id: 'dataset-1',
         name: 'Test Dataset',
       }),
-      schema: [],
+      columns: [],
     };
 
     mockUseDataset.mockReturnValue({ data: dataset, isLoading: false } as any);
@@ -147,10 +147,10 @@ describe('DatasetDetailPage', () => {
   it('戻るボタンがある', () => {
     const dataset = {
       ...createMockDataset({
-        dataset_id: 'dataset-1',
+        id: 'dataset-1',
         name: 'Test Dataset',
       }),
-      schema: [],
+      columns: [],
     };
 
     mockUseDataset.mockReturnValue({ data: dataset, isLoading: false } as any);
@@ -191,22 +191,22 @@ describe('再取り込み機能', () => {
 
   const createS3CsvDataset = (overrides?: Record<string, unknown>) => ({
     ...createMockDataset({
-      dataset_id: 'dataset-1',
+      id: 'dataset-1',
       name: 'S3 CSV Dataset',
       source_type: 's3_csv',
     }),
-    schema: [{ name: 'id', type: 'INTEGER', nullable: false }],
+    columns: [{ name: 'id', data_type: 'INTEGER', nullable: false }],
     s3_path: 's3://bucket/path/file.csv',
     ...overrides,
   });
 
   const createCsvDataset = (overrides?: Record<string, unknown>) => ({
     ...createMockDataset({
-      dataset_id: 'dataset-1',
+      id: 'dataset-1',
       name: 'CSV Dataset',
       source_type: 'csv',
     }),
-    schema: [{ name: 'id', type: 'INTEGER', nullable: false }],
+    columns: [{ name: 'id', data_type: 'INTEGER', nullable: false }],
     ...overrides,
   });
 

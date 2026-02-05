@@ -58,12 +58,12 @@ export function createMockUser(overrides?: Partial<User>): User {
 
 export function createMockDataset(overrides?: Partial<Dataset>): Dataset {
   return {
-    dataset_id: 'test-dataset-id',
+    id: 'test-dataset-id',
     name: 'Test Dataset',
     source_type: 'csv',
     row_count: 100,
     column_count: 5,
-    owner: { user_id: 'owner-id', name: 'Test Owner' },
+    owner_id: 'owner-id',
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };
@@ -74,7 +74,7 @@ export function createMockCard(overrides?: Partial<Card>): Card {
     card_id: 'test-card-id',
     name: 'Test Card',
     dataset: {
-      dataset_id: 'dataset-1',
+      id: 'dataset-1',
       name: 'Test Dataset',
     },
     owner: { user_id: 'owner-id', name: 'Test Owner' },

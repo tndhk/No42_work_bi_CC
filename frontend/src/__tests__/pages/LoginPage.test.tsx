@@ -106,6 +106,8 @@ describe('LoginPage', () => {
     const emailInput = screen.getByLabelText('メールアドレス') as HTMLInputElement;
     const passwordInput = screen.getByLabelText('パスワード') as HTMLInputElement;
 
+    await user.clear(emailInput);
+    await user.clear(passwordInput);
     await user.type(emailInput, 'test@example.com');
     await user.type(passwordInput, 'password123');
 

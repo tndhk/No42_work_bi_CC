@@ -1,32 +1,27 @@
 export interface ColumnSchema {
   name: string;
-  type: string;
+  data_type: string;
   nullable: boolean;
 }
 
-export interface OwnerRef {
-  user_id: string;
-  name: string;
-}
-
 export interface Dataset {
-  dataset_id: string;
+  id: string;
   name: string;
   source_type: string;
   row_count: number;
   column_count: number;
-  owner: OwnerRef;
+  owner_id: string | null;
   created_at: string;
   last_import_at?: string;
 }
 
 export interface DatasetDetail extends Dataset {
   source_config?: Record<string, unknown> | null;
-  schema: ColumnSchema[];
+  columns: ColumnSchema[];
   s3_path?: string;
   partition_column?: string;
   updated_at: string;
-  last_import_by?: OwnerRef;
+  last_import_by?: string | null;
 }
 
 export interface DatasetCreateRequest {
@@ -64,7 +59,7 @@ export function isDataset(value: unknown): value is Dataset {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   return (
-    typeof obj.dataset_id === 'string' &&
+    typeof obj.id === 'string' &&
     typeof obj.name === 'string' &&
     typeof obj.source_type === 'string' &&
     typeof obj.row_count === 'number'
@@ -76,7 +71,7 @@ export function isColumnSchema(value: unknown): value is ColumnSchema {
   const obj = value as Record<string, unknown>;
   return (
     typeof obj.name === 'string' &&
-    typeof obj.type === 'string' &&
+    typeof obj.data_type === 'string' &&
     typeof obj.nullable === 'boolean'
   );
 }

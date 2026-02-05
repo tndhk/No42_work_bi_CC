@@ -50,7 +50,7 @@ export function DatasetImportPage() {
 
     createMutation.mutate(formData, {
       onSuccess: (dataset) => {
-        navigate(`/datasets/${dataset.dataset_id}`);
+        navigate(`/datasets/${dataset.id}`);
       },
     });
   };
@@ -58,7 +58,7 @@ export function DatasetImportPage() {
   const handleS3Submit = (data: S3ImportRequest) => {
     s3ImportMutation.mutate(data, {
       onSuccess: (dataset) => {
-        navigate(`/datasets/${dataset.dataset_id}`);
+        navigate(`/datasets/${dataset.id}`);
       },
     });
   };

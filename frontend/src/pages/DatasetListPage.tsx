@@ -46,19 +46,19 @@ export function DatasetListPage() {
         </TableHeader>
         <TableBody>
           {data?.data.map((dataset) => (
-            <TableRow key={dataset.dataset_id}>
+            <TableRow key={dataset.id}>
               <TableCell className="font-medium">{dataset.name}</TableCell>
               <TableCell>{dataset.source_type}</TableCell>
               <TableCell>{dataset.row_count.toLocaleString()}</TableCell>
               <TableCell>{dataset.column_count}</TableCell>
-              <TableCell>{dataset.owner.name}</TableCell>
+              <TableCell>{dataset.owner_id ?? '-'}</TableCell>
               <TableCell>{new Date(dataset.created_at).toLocaleString('ja-JP')}</TableCell>
               <TableCell>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/datasets/${dataset.dataset_id}`)}>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/datasets/${dataset.id}`)}>
                     <Eye className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(dataset.dataset_id)}>
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(dataset.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

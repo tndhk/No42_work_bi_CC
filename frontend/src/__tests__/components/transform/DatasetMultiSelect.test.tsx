@@ -5,21 +5,21 @@ import type { Dataset } from '@/types';
 
 const mockDatasets: Dataset[] = [
   {
-    dataset_id: 'ds-1',
+    id: 'ds-1',
     name: 'Dataset 1',
     source_type: 'csv',
     row_count: 100,
     column_count: 5,
-    owner: { user_id: 'owner-id', name: 'Owner' },
+    owner_id: 'owner-id',
     created_at: '2026-01-01T00:00:00Z',
   },
   {
-    dataset_id: 'ds-2',
+    id: 'ds-2',
     name: 'Dataset 2',
     source_type: 'csv',
     row_count: 200,
     column_count: 3,
-    owner: { user_id: 'owner-id', name: 'Owner' },
+    owner_id: 'owner-id',
     created_at: '2026-01-01T00:00:00Z',
   },
 ];

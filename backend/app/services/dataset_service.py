@@ -63,7 +63,7 @@ class DatasetService:
         schema = infer_schema(df)
 
         # Convert and save to S3
-        storage_result = self._save_to_s3(
+        storage_result = await self._save_to_s3(
             df, dataset_id, s3_client, partition_column
         )
 
@@ -151,7 +151,7 @@ class DatasetService:
         schema = infer_schema(df)
 
         # Convert and save to S3
-        storage_result = self._save_to_s3(
+        storage_result = await self._save_to_s3(
             df, dataset_id, s3_client, partition_column
         )
 
@@ -202,7 +202,7 @@ class DatasetService:
             s3_client=s3_client,
             bucket=settings.s3_bucket_datasets,
         )
-        df = reader.read_full(dataset.s3_path)
+        df = await reader.read_full(dataset.s3_path)
 
         if column_name not in df.columns:
             raise ValueError(f"Column '{column_name}' not found in dataset")
@@ -245,7 +245,7 @@ class DatasetService:
             }
 
         # Read from S3
-        df = self._read_from_s3(dataset.s3_path, s3_client, max_rows)
+        df = await self._read_from_s3(dataset.s3_path, s3_client, max_rows)
 
         # Convert to preview format
         return self._format_preview(df, dataset.row_count)
@@ -303,7 +303,7 @@ class DatasetService:
             has_header=True,
         )
 
-    def _save_to_s3(
+    async def _save_to_s3(
         self,
         df: pd.DataFrame,
         dataset_id: str,
@@ -326,7 +326,7 @@ class DatasetService:
             bucket=settings.s3_bucket_datasets,
         )
 
-        return converter.convert_and_save(
+        return await converter.convert_and_save(
             df=df,
             dataset_id=dataset_id,
             partition_column=partition_column,
@@ -385,7 +385,7 @@ class DatasetService:
 
         return dataset
 
-    def _read_from_s3(
+    async def _read_from_s3(
         self,
         s3_path: str,
         s3_client: Any,
@@ -406,7 +406,7 @@ class DatasetService:
             bucket=settings.s3_bucket_datasets,
         )
 
-        return reader.read_preview(s3_path, max_rows)
+        return await reader.read_preview(s3_path, max_rows)
 
     def _format_preview(
         self,
@@ -420,11 +420,13 @@ class DatasetService:
             total_rows: Total rows in full dataset
 
         Returns:
-            Preview dictionary
+            Preview dictionary with rows as array of arrays
         """
+        # Convert DataFrame rows to list of lists for frontend compatibility
+        rows_as_lists = df.values.tolist()
         return {
             'columns': df.columns.tolist(),
-            'rows': df.to_dict('records'),
+            'rows': rows_as_lists,
             'total_rows': total_rows,
             'preview_rows': len(df),
         }
@@ -560,7 +562,7 @@ class DatasetService:
             raise ValueError("Schema changes detected. Use force=True to proceed.")
 
         # Save to S3 (overwrite existing path)
-        storage_result = self._save_to_s3(
+        storage_result = await self._save_to_s3(
             df, dataset_id, s3_client, dataset.partition_column
         )
 

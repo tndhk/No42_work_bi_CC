@@ -26,6 +26,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+      - ${PWD}/.cursor:${PWD}/.cursor
     environment:
       - ENV=local
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-min-32-chars-for-local-dev-only}

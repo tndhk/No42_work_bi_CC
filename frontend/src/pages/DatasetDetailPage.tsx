@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,24 @@ export function DatasetDetailPage() {
   const { mutateAsync: reimportMutateAsync, isPending: isReimportPending } = useReimportDataset();
 
   const isPending = isDryRunPending || isReimportPending;
+
+  useEffect(() => {
+    const rowsIsArray = Array.isArray(preview?.rows);
+    const firstRow = rowsIsArray ? preview?.rows?.[0] : undefined;
+    const firstRowType = firstRow === null ? 'null' : Array.isArray(firstRow) ? 'array' : typeof firstRow;
+    const firstRowKeys = firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow) ? Object.keys(firstRow) : null;
+    const columnsLength = Array.isArray(preview?.columns) ? preview.columns.length : null;
+
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/78a5a759-9581-4a4e-9ccc-07469b56efc6', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'A', location: 'DatasetDetailPage.useEffect.preview', message: 'preview effect triggered', data: { hasPreview: Boolean(preview), rowsIsArray, columnsLength }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/78a5a759-9581-4a4e-9ccc-07469b56efc6', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'B', location: 'DatasetDetailPage.useEffect.preview', message: 'preview first row shape', data: { rowsIsArray, firstRowType, firstRowKeys, columnsLength }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/78a5a759-9581-4a4e-9ccc-07469b56efc6', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: 'debug-session', runId: 'pre-fix', hypothesisId: 'C', location: 'DatasetDetailPage.useEffect.preview', message: 'preview row counts', data: { rowsLength: rowsIsArray ? preview?.rows?.length ?? null : null, previewRows: preview?.preview_rows ?? null, totalRows: preview?.total_rows ?? null }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
+  }, [preview]);
 
   const handleReimport = async () => {
     const result = await dryRunMutateAsync(id!);

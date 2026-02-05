@@ -80,15 +80,19 @@ class TestStorageResult:
         assert result_dict['partitions'] == ['Sales', 'Engineering']
 
 
+@pytest.mark.asyncio
 class TestParquetConverter:
     """Test ParquetConverter class."""
 
-    def test_convert_and_save_non_partitioned(self, s3_client, sample_dataframe):
+    async def test_convert_and_save_non_partitioned(self, s3_client, sample_dataframe):
         """Test converting and saving DataFrame without partitioning."""
+        # Given: a sample DataFrame and dataset id
+        # When: converting and saving without partitioning
+        # Then: storage result and S3 object are created
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-001'
 
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -107,12 +111,15 @@ class TestParquetConverter:
         assert 'Contents' in response
         assert len(response['Contents']) == 1
 
-    def test_convert_and_save_partitioned(self, s3_client, sample_dataframe):
+    async def test_convert_and_save_partitioned(self, s3_client, sample_dataframe):
         """Test converting and saving DataFrame with partitioning."""
+        # Given: a sample DataFrame with partition column
+        # When: converting and saving with partitioning
+        # Then: storage result shows partitions and S3 objects exist
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-002'
 
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column='department'
@@ -131,12 +138,15 @@ class TestParquetConverter:
         assert 'Contents' in response
         assert len(response['Contents']) == 3  # 3 departments
 
-    def test_s3_path_format_non_partitioned(self, s3_client, sample_dataframe):
+    async def test_s3_path_format_non_partitioned(self, s3_client, sample_dataframe):
         """Test S3 path format for non-partitioned data."""
+        # Given: a sample DataFrame and dataset id
+        # When: saving without partitioning
+        # Then: S3 path matches expected format
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-003'
 
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -145,12 +155,15 @@ class TestParquetConverter:
         expected_path = f'datasets/{dataset_id}/data/part-0000.parquet'
         assert result.s3_path == expected_path
 
-    def test_s3_path_format_partitioned(self, s3_client, sample_dataframe):
+    async def test_s3_path_format_partitioned(self, s3_client, sample_dataframe):
         """Test S3 path format for partitioned data."""
+        # Given: a sample DataFrame with partition column
+        # When: saving with partitioning
+        # Then: partitioned keys contain expected values
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-004'
 
-        converter.convert_and_save(
+        await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column='department'
@@ -167,12 +180,15 @@ class TestParquetConverter:
         assert any('department=Engineering' in key for key in keys)
         assert any('department=HR' in key for key in keys)
 
-    def test_compression_snappy(self, s3_client, sample_dataframe):
+    async def test_compression_snappy(self, s3_client, sample_dataframe):
         """Test that files are compressed with snappy."""
+        # Given: a sample DataFrame and dataset id
+        # When: saving to S3 as Parquet
+        # Then: Parquet compression is snappy
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-005'
 
-        converter.convert_and_save(
+        await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -191,12 +207,15 @@ class TestParquetConverter:
         metadata = parquet_file.metadata
         assert metadata.row_group(0).column(0).compression == 'SNAPPY'
 
-    def test_empty_dataframe(self, s3_client, empty_dataframe):
+    async def test_empty_dataframe(self, s3_client, empty_dataframe):
         """Test handling of empty DataFrame."""
+        # Given: an empty DataFrame and dataset id
+        # When: saving to S3 as Parquet
+        # Then: storage result exists and object is created
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-006'
 
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=empty_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -212,12 +231,15 @@ class TestParquetConverter:
         )
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    def test_data_type_preservation(self, s3_client, sample_dataframe):
+    async def test_data_type_preservation(self, s3_client, sample_dataframe):
         """Test that data types are preserved correctly."""
+        # Given: a sample DataFrame with multiple dtypes
+        # When: saving and reading back from S3
+        # Then: column dtypes are preserved
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-007'
 
-        converter.convert_and_save(
+        await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -226,7 +248,7 @@ class TestParquetConverter:
         # Read back and verify types
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
         s3_path = f'datasets/{dataset_id}/data/part-0000.parquet'
-        df_read = reader.read_full(s3_path)
+        df_read = await reader.read_full(s3_path)
 
         assert df_read['id'].dtype == 'int64'
         assert df_read['name'].dtype == 'object'  # string
@@ -234,15 +256,19 @@ class TestParquetConverter:
         assert df_read['salary'].dtype == 'float64'
 
 
+@pytest.mark.asyncio
 class TestParquetReader:
     """Test ParquetReader class."""
 
-    def test_read_full_non_partitioned(self, s3_client, sample_dataframe):
+    async def test_read_full_non_partitioned(self, s3_client, sample_dataframe):
         """Test reading full non-partitioned dataset."""
+        # Given: a saved non-partitioned dataset in S3
+        # When: reading full dataset from S3
+        # Then: DataFrame matches the original
         # First save data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-008'
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -250,16 +276,19 @@ class TestParquetReader:
 
         # Read back
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
-        df_read = reader.read_full(result.s3_path)
+        df_read = await reader.read_full(result.s3_path)
 
         pd.testing.assert_frame_equal(df_read, sample_dataframe)
 
-    def test_read_full_partitioned(self, s3_client, sample_dataframe):
+    async def test_read_full_partitioned(self, s3_client, sample_dataframe):
         """Test reading full partitioned dataset."""
+        # Given: a saved partitioned dataset in S3
+        # When: reading full dataset from base path
+        # Then: DataFrame matches the original after sorting
         # First save data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-009'
-        converter.convert_and_save(
+        await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column='department'
@@ -269,7 +298,7 @@ class TestParquetReader:
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
         # For partitioned data, read_full should handle the base path
         base_path = f'datasets/{dataset_id}/partitions/'
-        df_read = reader.read_full(base_path)
+        df_read = await reader.read_full(base_path)
 
         # Sort both dataframes for comparison (partition order may differ)
         df_read_sorted = df_read.sort_values('id').reset_index(drop=True)
@@ -277,12 +306,15 @@ class TestParquetReader:
 
         pd.testing.assert_frame_equal(df_read_sorted, df_expected_sorted)
 
-    def test_read_preview_limits_rows(self, s3_client, sample_dataframe):
+    async def test_read_preview_limits_rows(self, s3_client, sample_dataframe):
         """Test read_preview returns limited rows."""
+        # Given: a saved dataset in S3
+        # When: reading a preview with max_rows=3
+        # Then: preview contains only 3 rows
         # First save data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-010'
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -290,7 +322,7 @@ class TestParquetReader:
 
         # Read preview
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
-        df_preview = reader.read_preview(result.s3_path, max_rows=3)
+        df_preview = await reader.read_preview(result.s3_path, max_rows=3)
 
         assert len(df_preview) == 3
         pd.testing.assert_frame_equal(
@@ -298,12 +330,15 @@ class TestParquetReader:
             sample_dataframe.head(3)
         )
 
-    def test_read_preview_max_rows_exceeds_total(self, s3_client, sample_dataframe):
+    async def test_read_preview_max_rows_exceeds_total(self, s3_client, sample_dataframe):
         """Test read_preview when max_rows exceeds total rows."""
+        # Given: a saved dataset in S3
+        # When: reading a preview with large max_rows
+        # Then: preview returns all rows
         # First save data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-011'
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
@@ -311,30 +346,33 @@ class TestParquetReader:
 
         # Read preview with large max_rows
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
-        df_preview = reader.read_preview(result.s3_path, max_rows=1000)
+        df_preview = await reader.read_preview(result.s3_path, max_rows=1000)
 
         assert len(df_preview) == len(sample_dataframe)
         pd.testing.assert_frame_equal(df_preview, sample_dataframe)
 
-    def test_roundtrip_preserves_data(self, s3_client, sample_dataframe):
+    async def test_roundtrip_preserves_data(self, s3_client, sample_dataframe):
         """Test complete roundtrip: convert, save, read back."""
+        # Given: a sample DataFrame and empty S3 keyspace
+        # When: saving and reading full/preview data
+        # Then: read results match the original data
         converter = ParquetConverter(s3_client, settings.s3_bucket_datasets)
         reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
         dataset_id = 'test-dataset-012'
 
         # Save
-        result = converter.convert_and_save(
+        result = await converter.convert_and_save(
             df=sample_dataframe,
             dataset_id=dataset_id,
             partition_column=None
         )
 
         # Read full
-        df_full = reader.read_full(result.s3_path)
+        df_full = await reader.read_full(result.s3_path)
         pd.testing.assert_frame_equal(df_full, sample_dataframe)
 
         # Read preview
-        df_preview = reader.read_preview(result.s3_path, max_rows=2)
+        df_preview = await reader.read_preview(result.s3_path, max_rows=2)
         pd.testing.assert_frame_equal(
             df_preview,
             sample_dataframe.head(2)

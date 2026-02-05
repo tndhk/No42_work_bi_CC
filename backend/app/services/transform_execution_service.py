@@ -114,7 +114,7 @@ class TransformExecutionService:
             # Step 2: Read Parquet data from S3
             parquet_reader = ParquetReader(s3, settings.s3_bucket_datasets)
             for dataset in input_datasets:
-                df = parquet_reader.read_full(dataset.s3_path)  # type: ignore
+                df = await parquet_reader.read_full(dataset.s3_path)
                 input_dataframes.append(df)
 
             # Step 3: Call Executor API
@@ -129,7 +129,7 @@ class TransformExecutionService:
 
             # Save to S3
             parquet_converter = ParquetConverter(s3, settings.s3_bucket_datasets)
-            storage_result = parquet_converter.convert_and_save(
+            storage_result = await parquet_converter.convert_and_save(
                 df=output_df,
                 dataset_id=output_dataset_id,
             )

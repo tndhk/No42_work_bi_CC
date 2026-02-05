@@ -354,7 +354,7 @@ async def get_column_values(
 @router.get("/{dataset_id}/preview")
 async def get_dataset_preview(
     dataset_id: str,
-    max_rows: int = Query(100, ge=1, le=1000),
+    max_rows: int = Query(100, ge=1, le=1000, alias="limit"),
     current_user: User = Depends(get_current_user),
     dynamodb: Any = Depends(get_dynamodb_resource),
     s3_client: Any = Depends(get_s3_client),

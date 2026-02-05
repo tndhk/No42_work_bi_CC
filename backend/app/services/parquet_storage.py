@@ -2,12 +2,46 @@
 from dataclasses import dataclass
 from typing import Any
 import io
+import inspect
+import json
 import logging
+import time
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
+DEBUG_LOG_PATH = "/Users/takahikotsunoda/Dev/No42_work_bi_CC/.cursor/debug.log"
+
+
+async def _maybe_await(result: Any) -> Any:
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
+def _append_agent_log(
+    session_id: str,
+    run_id: str,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any],
+) -> None:
+    payload = {
+        "sessionId": session_id,
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        logger.debug("Failed to write agent debug log", exc_info=True)
 
 
 @dataclass(frozen=True)
@@ -39,7 +73,7 @@ class ParquetConverter:
         self.s3_client = s3_client
         self.bucket = bucket
 
-    def convert_and_save(
+    async def convert_and_save(
         self,
         df: pd.DataFrame,
         dataset_id: str,
@@ -56,11 +90,11 @@ class ParquetConverter:
             StorageResult with storage information
         """
         if partition_column is None:
-            return self._save_non_partitioned(df, dataset_id)
+            return await self._save_non_partitioned(df, dataset_id)
         else:
-            return self._save_partitioned(df, dataset_id, partition_column)
+            return await self._save_partitioned(df, dataset_id, partition_column)
 
-    def _save_non_partitioned(
+    async def _save_non_partitioned(
         self,
         df: pd.DataFrame,
         dataset_id: str
@@ -88,7 +122,7 @@ class ParquetConverter:
         try:
             # Convert and upload
             parquet_bytes = self._convert_to_parquet_bytes(df)
-            self._upload_to_s3(s3_path, parquet_bytes)
+            await self._upload_to_s3(s3_path, parquet_bytes)
 
             logger.info(f"Saved non-partitioned data to {s3_path}")
 
@@ -117,20 +151,49 @@ class ParquetConverter:
         buffer.seek(0)
         return buffer.getvalue()
 
-    def _upload_to_s3(self, s3_path: str, data: bytes) -> None:
+    async def _upload_to_s3(self, s3_path: str, data: bytes) -> None:
         """Upload data to S3.
 
         Args:
             s3_path: S3 key path
             data: Data to upload
         """
-        self.s3_client.put_object(
+        # region agent log
+        _append_agent_log(
+            session_id="debug-session",
+            run_id="post-fix",
+            hypothesis_id="A",
+            location="ParquetConverter._upload_to_s3",
+            message="s3 put_object start",
+            data={
+                "bucket": self.bucket,
+                "key": s3_path,
+                "sizeBytes": len(data),
+            },
+        )
+        # endregion
+        put_result = self.s3_client.put_object(
             Bucket=self.bucket,
             Key=s3_path,
             Body=data
         )
+        await _maybe_await(put_result)
+        # region agent log
+        _append_agent_log(
+            session_id="debug-session",
+            run_id="post-fix",
+            hypothesis_id="A",
+            location="ParquetConverter._upload_to_s3",
+            message="s3 put_object done",
+            data={
+                "bucket": self.bucket,
+                "key": s3_path,
+                "sizeBytes": len(data),
+            },
+        )
+        # endregion
 
-    def _save_partitioned(
+    async def _save_partitioned(
         self,
         df: pd.DataFrame,
         dataset_id: str,
@@ -162,7 +225,7 @@ class ParquetConverter:
             partition_values = self._extract_partition_values(df, partition_column)
 
             # Save each partition
-            self._save_all_partitions(
+            await self._save_all_partitions(
                 df, base_path, partition_column, partition_values
             )
 
@@ -203,7 +266,7 @@ class ParquetConverter:
         partition_values = df[partition_column].unique().tolist()
         return [str(v) for v in partition_values]
 
-    def _save_all_partitions(
+    async def _save_all_partitions(
         self,
         df: pd.DataFrame,
         base_path: str,
@@ -219,11 +282,11 @@ class ParquetConverter:
             partition_values: List of partition values
         """
         for partition_value in partition_values:
-            self._save_single_partition(
+            await self._save_single_partition(
                 df, base_path, partition_column, partition_value
             )
 
-    def _save_single_partition(
+    async def _save_single_partition(
         self,
         df: pd.DataFrame,
         base_path: str,
@@ -245,7 +308,7 @@ class ParquetConverter:
         )
 
         parquet_bytes = self._convert_to_parquet_bytes(partition_df)
-        self._upload_to_s3(s3_path, parquet_bytes)
+        await self._upload_to_s3(s3_path, parquet_bytes)
 
 
 class ParquetReader:
@@ -261,7 +324,7 @@ class ParquetReader:
         self.s3_client = s3_client
         self.bucket = bucket
 
-    def read_full(self, s3_path: str) -> pd.DataFrame:
+    async def read_full(self, s3_path: str) -> pd.DataFrame:
         """Read full Parquet dataset from S3.
 
         Args:
@@ -272,11 +335,11 @@ class ParquetReader:
         """
         # Check if path is a directory (ends with /)
         if s3_path.endswith('/'):
-            return self._read_partitioned(s3_path)
+            return await self._read_partitioned(s3_path)
         else:
-            return self._read_single_file(s3_path)
+            return await self._read_single_file(s3_path)
 
-    def read_preview(self, s3_path: str, max_rows: int) -> pd.DataFrame:
+    async def read_preview(self, s3_path: str, max_rows: int) -> pd.DataFrame:
         """Read preview of Parquet dataset from S3.
 
         Args:
@@ -286,10 +349,10 @@ class ParquetReader:
         Returns:
             DataFrame with limited rows
         """
-        df = self.read_full(s3_path)
+        df = await self.read_full(s3_path)
         return df.head(max_rows)
 
-    def _read_single_file(self, s3_path: str) -> pd.DataFrame:
+    async def _read_single_file(self, s3_path: str) -> pd.DataFrame:
         """Read single Parquet file from S3.
 
         Args:
@@ -302,11 +365,39 @@ class ParquetReader:
             Exception: If S3 read or Parquet parsing fails
         """
         try:
-            response = self.s3_client.get_object(
+            # region agent log
+            _append_agent_log(
+                session_id="debug-session",
+                run_id="post-fix",
+                hypothesis_id="B",
+                location="ParquetReader._read_single_file",
+                message="s3 get_object start",
+                data={
+                    "bucket": self.bucket,
+                    "key": s3_path,
+                },
+            )
+            # endregion
+            response = await _maybe_await(self.s3_client.get_object(
                 Bucket=self.bucket,
                 Key=s3_path
+            ))
+            read_result = response['Body'].read()
+            parquet_data = await _maybe_await(read_result)
+            # region agent log
+            _append_agent_log(
+                session_id="debug-session",
+                run_id="post-fix",
+                hypothesis_id="B",
+                location="ParquetReader._read_single_file",
+                message="s3 get_object done",
+                data={
+                    "bucket": self.bucket,
+                    "key": s3_path,
+                    "sizeBytes": len(parquet_data),
+                },
             )
-            parquet_data = response['Body'].read()
+            # endregion
 
             parquet_file = pq.ParquetFile(io.BytesIO(parquet_data))
             table = parquet_file.read()
@@ -314,10 +405,24 @@ class ParquetReader:
             result: pd.DataFrame = table.to_pandas()
             return result
         except Exception as e:
+            # region agent log
+            _append_agent_log(
+                session_id="debug-session",
+                run_id="post-fix",
+                hypothesis_id="C",
+                location="ParquetReader._read_single_file",
+                message="s3 get_object error",
+                data={
+                    "bucket": self.bucket,
+                    "key": s3_path,
+                    "error": str(e),
+                },
+            )
+            # endregion
             logger.error(f"Failed to read file from {s3_path}: {e}")
             raise
 
-    def _read_partitioned(self, base_path: str) -> pd.DataFrame:
+    async def _read_partitioned(self, base_path: str) -> pd.DataFrame:
         """Read partitioned Parquet dataset from S3.
 
         Args:
@@ -330,10 +435,10 @@ class ParquetReader:
             Exception: If S3 list or read operations fail
         """
         try:
-            response = self.s3_client.list_objects_v2(
+            response = await _maybe_await(self.s3_client.list_objects_v2(
                 Bucket=self.bucket,
                 Prefix=base_path
-            )
+            ))
 
             if 'Contents' not in response:
                 logger.warning(f"No files found at {base_path}")
@@ -345,7 +450,7 @@ class ParquetReader:
                 logger.warning(f"No parquet files found at {base_path}")
                 return pd.DataFrame()
 
-            dfs = [self._read_single_file(key) for key in parquet_files]
+            dfs = [await self._read_single_file(key) for key in parquet_files]
 
             return pd.concat(dfs, ignore_index=True)
         except Exception as e:

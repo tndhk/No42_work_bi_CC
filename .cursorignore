@@ -1,0 +1,19 @@
+# Cursor AI インデックス除外設定
+node_modules/
+venv/
+.venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+dist/
+build/
+coverage/
+htmlcov/
+.pytest_cache/
+*.log
+uv.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.claude/

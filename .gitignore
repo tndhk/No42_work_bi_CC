@@ -1,4 +1,6 @@
+# ===================
 # Python
+# ===================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,57 +20,70 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Virtual environments
 venv/
+.venv/
 ENV/
 env/
 
-# Node
+# Test / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ===================
+# Node.js
+# ===================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-dist/
 .vite/
 .cache/
 
-# IDEs
+# Test / Coverage
+coverage/
+
+# ===================
+# Environment / Secrets
+# ===================
+.env
+.env.local
+.env.*.local
+secrets/
+*.pem
+*.key
+service-account.json
+gcp-sa.json
+
+# ===================
+# IDE / Editor
+# ===================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
+# ===================
 # OS
+# ===================
 .DS_Store
 Thumbs.db
 
-# Virtual environments
-.venv/
-
-# Claude Code
+# ===================
+# AI Tools
+# ===================
 .claude/
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Lock files (uv)
+# ===================
+# Package managers
+# ===================
 uv.lock
 
-# Test coverage
-coverage/
-.coverage
-htmlcov/
-.pytest_cache/
-
-# Docker
+# ===================
+# Logs
+# ===================
 *.log
-
-# Secrets
-secrets/
-*.pem
-*.key
-service-account.json
-gcp-sa.json

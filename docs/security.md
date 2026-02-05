@@ -677,6 +677,7 @@ PERMISSION_LEVELS = {
 | TRANSFORM_EXECUTED | Transform実行 | 中 |
 | TRANSFORM_FAILED | Transform失敗 | 高 |
 | CARD_EXECUTION_FAILED | カード実行失敗 | 中 |
+| CHATBOT_QUERY | チャットボット問い合わせ | 中 |
 
 ### 5.2 監査ログ実装
 

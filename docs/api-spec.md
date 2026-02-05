@@ -1133,6 +1133,7 @@ Response (200):
 ```
 
 Errors:
+- `404 NOT_FOUND`: データセットファイルが見つかりません
 - `408 EXECUTION_TIMEOUT`: 実行がタイムアウトしました
 - `500 EXECUTION_ERROR`: 実行中にエラーが発生しました
 
@@ -1167,6 +1168,11 @@ Response (200):
   }
 }
 ```
+
+Errors:
+- `404 NOT_FOUND`: データセットファイルが見つかりません
+- `408 EXECUTION_TIMEOUT`: 実行がタイムアウトしました
+- `500 EXECUTION_ERROR`: 実行中にエラーが発生しました
 
 ---
 
@@ -1706,36 +1712,55 @@ Response (204): No Content
 
 ### POST /api/dashboards/{dashboardId}/chat
 
-Chatbot質問
+ダッシュボードAI分析 (SSEストリーミング)
 
 Request:
 ```json
 {
-  "message": "このダッシュボードで最も売上が高いカテゴリは何ですか？",
-  "conversation_id": "conv_abc123"
+  "question": "このダッシュボードで最も売上が高いカテゴリは何ですか？",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "前回の質問"
+    },
+    {
+      "role": "assistant",
+      "content": "前回の回答"
+    }
+  ]
 }
 ```
 
-`conversation_id`は会話を継続する場合に指定（省略時は新規会話）
+- `question`: 必須。ユーザーの質問文。
+- `conversation_history`: 任意。会話履歴の配列 (`ChatMessage[]`)。`role` は `"user"` または `"assistant"`。
 
-Response (200):
-```json
-{
-  "data": {
-    "conversation_id": "conv_abc123",
-    "message": "このダッシュボードのデータによると、最も売上が高いカテゴリは「電子機器」で、総売上は1,500万円です。次いで「衣料品」が800万円となっています。",
-    "sources": [
-      {
-        "dataset_id": "ds_abc123",
-        "dataset_name": "売上データ"
-      }
-    ]
-  }
-}
+Response (200 OK, `text/event-stream`):
+
+Server-Sent Events (SSE) ストリーミング形式で返却される。
+
+イベントタイプ:
+- `token`: AIが生成したテキストの断片
+- `done`: 生成完了
+- `error`: エラー発生
+
+```
+event: token
+data: {"content": "このダッシュボードのデータによると、"}
+
+event: token
+data: {"content": "最も売上が高いカテゴリは「電子機器」で、"}
+
+event: token
+data: {"content": "総売上は1,500万円です。"}
+
+event: done
+data: {}
 ```
 
 Errors:
-- `429 RATE_LIMIT_EXCEEDED`: リクエスト数が上限に達しました
+- `403 FORBIDDEN`: ダッシュボードへのアクセス権限がありません
+- `404 NOT_FOUND`: ダッシュボードが見つかりません
+- `429 RATE_LIMIT_EXCEEDED`: リクエスト数が上限に達しました (5リクエスト/分/IP)
 - `500 EXECUTION_ERROR`: AI応答の生成に失敗しました
 
 ---
@@ -1782,9 +1807,10 @@ Response (200):
 }
 ```
 
-イベント種別:
+イベント種別 (全13種):
 - `USER_LOGIN`
 - `USER_LOGOUT`
+- `USER_LOGIN_FAILED`
 - `DATASET_CREATED`
 - `DATASET_IMPORTED`
 - `DATASET_DELETED`
@@ -1796,3 +1822,4 @@ Response (200):
 - `DASHBOARD_SHARE_ADDED`
 - `DASHBOARD_SHARE_REMOVED`
 - `DASHBOARD_SHARE_UPDATED`
+- `CHATBOT_QUERY`

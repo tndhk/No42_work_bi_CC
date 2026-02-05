@@ -158,6 +158,29 @@ docker compose exec api python -c "from app.db.dynamodb import get_table; print(
 | Executorリソース不足 | ECS メトリクス | CPU/メモリ増加 |
 | 無限ループ | タイムアウトログ | コードレビュー |
 
+### データセットファイル未検出
+
+| 原因 | 診断 | 対策 |
+|------|------|------|
+| S3ファイル削除 | S3コンソールでファイル存在確認 | データセット再取り込み |
+| S3パス不整合 | DynamoDB `s3_path` と S3実態を比較 | メタデータ修正 or 再取り込み |
+| Dataset未登録 | DynamoDB `bi_datasets` テーブル確認 | Dataset登録処理の再実行 |
+
+確認手順:
+```bash
+# 1. APIログでエラー確認
+docker compose logs api | grep "DatasetFileNotFoundError"
+
+# 2. S3ファイル存在確認
+aws s3 ls s3://bi-datasets-local/datasets/<dataset_id>/data/ --endpoint-url http://localhost:9000
+
+# 3. DynamoDBメタデータ確認
+aws dynamodb get-item \
+  --table-name bi_datasets \
+  --key '{"PK": {"S": "DATASET#<dataset_id>"}, "SK": {"S": "METADATA"}}' \
+  --endpoint-url http://localhost:8001
+```
+
 ### CSVインポート失敗
 
 | 原因 | エラーメッセージ | 対策 |
@@ -480,7 +503,7 @@ curl -s http://localhost:8080/health | jq .
 
 ### 監査ログ (NFR-3/4) -- 2026-02-05 追加
 
-監査ログは admin ユーザーのみがアクセス可能。全主要操作 (認証、共有変更、Dataset操作、Transform/Card実行) のイベントを自動記録する。
+監査ログは admin ユーザーのみがアクセス可能。全主要操作 (認証、共有変更、Dataset操作、Transform/Card実行、チャットボット問い合わせ) のイベントを自動記録する。
 
 管理画面: `/admin/audit-logs` (Sidebar の "監査ログ" リンク、admin ユーザーのみ表示)
 
@@ -490,7 +513,11 @@ API エンドポイント:
 curl -s http://localhost:8000/api/audit-logs \
   -H "Authorization: Bearer <admin_token>" | jq .
 
-# イベントタイプフィルタ
+# イベントタイプフィルタ (CHATBOT_QUERY の例)
+curl -s "http://localhost:8000/api/audit-logs?event_type=CHATBOT_QUERY&limit=20" \
+  -H "Authorization: Bearer <admin_token>" | jq .
+
+# USER_LOGIN フィルタ
 curl -s "http://localhost:8000/api/audit-logs?event_type=USER_LOGIN&limit=20" \
   -H "Authorization: Bearer <admin_token>" | jq .
 
@@ -533,3 +560,26 @@ DynamoDB テーブル: `bi_audit_logs`
 3. フロントエンド `SchemaChangeWarningDialog` で変更内容を表示
 4. ユーザーが続行を選択した場合 force=true で再リクエスト
 5. 破壊的変更 (列削除・型変更) がある場合は依存する Card/Transform に影響がある可能性があるため注意
+
+### Chatbot (ダッシュボードAI分析) -- 2026-02-05 追加
+
+環境変数:
+```bash
+VERTEX_AI_PROJECT_ID=<GCP プロジェクトID>
+VERTEX_AI_LOCATION=<リージョン (例: asia-northeast1)>
+VERTEX_AI_MODEL=<モデル名 (例: gemini-1.5-flash)>
+GOOGLE_APPLICATION_CREDENTIALS=<サービスアカウントキーのパス>
+```
+
+レート制限:
+- 5リクエスト/分/IP (SlowAPI による制限)
+- 超過時は `429 Too Many Requests` を返却
+
+トラブルシューティング:
+
+| 問題 | 原因 | 対策 |
+|------|------|------|
+| 500 EXECUTION_ERROR | Vertex AI 認証エラー | GOOGLE_APPLICATION_CREDENTIALS 確認、サービスアカウント権限確認 |
+| 429 RATE_LIMIT_EXCEEDED | レート制限超過 | 1分待機、またはレート制限設定を緩和 |
+| 空回答が返る | Dataset要約が空 | Dataset要約の再生成、データセット確認 |
+| SSEストリーミング途切れ | ネットワークタイムアウト | クライアント側のタイムアウト設定を延長 |

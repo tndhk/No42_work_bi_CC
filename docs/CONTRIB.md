@@ -45,6 +45,12 @@ docker compose up --build
 
 `.env.example` を `.env` にコピーして設定。
 
+Chatbot 機能を使用する場合は、以下の Vertex AI 関連の環境変数が必要:
+- `VERTEX_AI_PROJECT_ID`
+- `VERTEX_AI_LOCATION`
+- `VERTEX_AI_MODEL`
+- `GOOGLE_APPLICATION_CREDENTIALS`
+
 > 詳細は [tech-spec.md Section 3.1](tech-spec.md#31-環境変数) を参照
 
 ---
@@ -207,44 +213,48 @@ work_BI_ClaudeCode/
   backend/              # FastAPI バックエンド
     app/
       api/routes/       # APIルート (auth, datasets, dashboards, cards, filter_views,
-                        #   filter_view_detail, users, groups, dashboard_shares, transforms, audit_logs)
+                        #   filter_view_detail, users, groups, dashboard_shares, transforms, audit_logs, chat)
       core/             # 認証・設定 (config, auth, dependencies)
       db/               # DynamoDB接続
-      models/           # Pydanticモデル (audit_log, card, common, dashboard, dashboard_share,
-                        #   dataset, filter_view, group, schema_change, transform,
+      exceptions.py     # カスタム例外 (DatasetFileNotFoundError 等)
+      models/           # Pydanticモデル (audit_log, card, chat, common, dashboard, dashboard_share,
+                        #   dataset, dataset_summary, filter_view, group, schema_change, transform,
                         #   transform_execution, user)
       repositories/     # データアクセス層 (base + 10リポジトリ)
       services/         # ビジネスロジック
+        audit_service.py                # 監査ログ記録サービス
         card_execution_service.py       # Card実行
+        chatbot_service.py              # Chatbot AI分析
         csv_parser.py                   # CSVパーサー
         dashboard_service.py            # Dashboard操作
         dataset_service.py              # Dataset管理
+        dataset_summarizer.py           # Dataset要約生成
         parquet_storage.py              # Parquetストレージ
         permission_service.py           # Dashboard権限チェック
         schema_comparator.py            # スキーマ変更比較
         transform_execution_service.py  # Transform実行
         transform_scheduler_service.py  # Transformスケジューラー
         type_inferrer.py                # 型推論
-        audit_service.py                # 監査ログ記録サービス
     tests/              # pytestテスト
   executor/             # Python Sandbox (カード/Transform実行)
   frontend/             # React SPA
     src/
       components/       # UIコンポーネント
         card/           # Card編集 (CardEditor) ・プレビュー (CardPreview)
+        chat/           # Chatbot (ChatPanel, ChatMessage, ChatInput 等)
         common/         # 共通レイアウト・認証・エラー処理 (Layout, Sidebar, Header, AuthGuard, ErrorBoundary 等)
         dashboard/      # Dashboard閲覧・編集・フィルタ・共有 (DashboardViewer/Editor, FilterBar, ShareDialog 等)
         dataset/        # S3ImportForm
         datasets/       # SchemaChangeWarningDialog
         group/          # グループ管理 (GroupCreateDialog, GroupDetailPanel, MemberAddDialog)
         transform/      # Transform (TransformCodeEditor, DatasetMultiSelect, TransformExecutionResult, TransformExecutionHistory, TransformScheduleConfig)
-        ui/             # shadcn/ui 基盤コンポーネント
-      hooks/            # カスタムフック (use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-groups, use-dashboard-shares, use-transforms, use-audit-logs)
+        ui/             # shadcn/ui 基盤コンポーネント (alert, sheet, textarea 等)
+      hooks/            # カスタムフック (use-auth, use-cards, use-chatbot, use-dashboards, use-datasets, use-filter-views, use-groups, use-dashboard-shares, use-transforms, use-audit-logs)
       lib/              # ユーティリティ・APIクライアント
-        api/            # RESTful APIモジュール (auth, cards, dashboards, datasets, dashboard-shares, filter-views, groups, transforms, audit-logs)
+        api/            # RESTful APIモジュール (auth, cards, chat, dashboards, datasets, dashboard-shares, filter-views, groups, transforms, audit-logs)
       pages/            # ページコンポーネント (13ページ)
-      stores/           # Zustand ストア (auth-store)
-      types/            # TypeScript型定義 (api, audit-log, card, dashboard, dataset, filter-view, group, reimport, transform, user)
+      stores/           # Zustand ストア (auth-store, chat-store)
+      types/            # TypeScript型定義 (api, audit-log, card, chat, dashboard, dataset, filter-view, group, reimport, transform, user)
     e2e/                # Playwright E2Eテスト
     __tests__/          # Vitest単体テスト (src/__tests__/)
   scripts/              # 初期化スクリプト (init_tables.py, seed_test_user.py)
@@ -304,17 +314,54 @@ work_BI_ClaudeCode/
 | croniter | >=2.0.0 | cron式パース (Transformスケジューラー) |
 | structlog | 24.1.0 | 構造化ログ |
 | slowapi | 0.1.9 | レート制限 |
+| google-cloud-aiplatform | 最新 | Vertex AI (Chatbot機能) |
 
 ---
 
 ## 9. 最近の主要変更
+
+### DatasetFileNotFoundError + Chatbot機能 (2026-02-05)
+
+追加されたバックエンド:
+- `app/exceptions.py` -- カスタム例外 (`DatasetFileNotFoundError`)
+- `app/models/chat.py` -- Chat Pydantic モデル (`ChatMessage`, `ChatRequest`)
+- `app/models/dataset_summary.py` -- Dataset要約モデル
+- `app/api/routes/chat.py` -- Chatbot API (POST /api/dashboards/{id}/chat, SSE ストリーミング)
+- `app/services/chatbot_service.py` -- ChatbotService (Vertex AI による AI分析)
+- `app/services/dataset_summarizer.py` -- DatasetSummarizer (Dataset要約生成)
+
+変更されたバックエンド:
+- `app/services/parquet_storage.py` -- S3 NoSuchKey → `DatasetFileNotFoundError` 変換
+- `app/services/card_execution_service.py` -- `DatasetFileNotFoundError` の `dataset_id` 補完、監査ログ記録
+- `app/core/config.py` -- Vertex AI 環境変数追加 (`VERTEX_AI_PROJECT_ID`, `VERTEX_AI_LOCATION`, `VERTEX_AI_MODEL`)
+- `app/api/routes/cards.py` -- `DatasetFileNotFoundError` → 404 レスポンス
+
+追加されたフロントエンド:
+- `src/types/chat.ts` -- Chat 型定義 (`ChatMessage`, `ChatRequest`)
+- `src/lib/api/chat.ts` -- Chat API クライアント (SSE ストリーミング対応)
+- `src/hooks/use-chatbot.ts` -- useChatbot カスタムフック
+- `src/stores/chat-store.ts` -- Chat Zustand ストア
+- `src/components/chat/ChatPanel.tsx` -- チャットパネル UI
+- `src/components/chat/ChatMessage.tsx` -- チャットメッセージ表示
+- `src/components/chat/ChatInput.tsx` -- チャット入力フォーム
+- `src/components/ui/sheet.tsx`, `alert.tsx`, `textarea.tsx` -- shadcn/ui 追加コンポーネント
+
+変更されたフロントエンド:
+- `src/pages/DashboardViewPage.tsx` -- ChatPanel 統合
+- `src/components/dashboard/DashboardHeader.tsx` -- チャット開閉ボタン追加
+
+例外ハンドリングの層化パターン:
+- 低レイヤー (`parquet_storage.py`): プロトコル固有エラー (NoSuchKey) → ドメイン例外 (`DatasetFileNotFoundError`)
+- 中間レイヤー (`card_execution_service.py`): コンテキスト情報の補完 (`dataset_id` の追加)
+- API層 (`cards.py`): HTTPステータスコードへの変換 (404)
+- 各層で監査ログ記録
 
 ### NFR-3/4 監査ログ (2026-02-05)
 
 追加されたバックエンド:
 - `app/models/audit_log.py` -- AuditLog Pydantic モデル (EventType enum, AuditLog)
 - `app/repositories/audit_log_repository.py` -- AuditLogRepository (DynamoDB CRUD, GSI Query: LogsByUser, LogsByTarget)
-- `app/services/audit_service.py` -- AuditService (全12イベントタイプの記録ヘルパー)
+- `app/services/audit_service.py` -- AuditService (全13イベントタイプの記録ヘルパー)
 - `app/api/routes/audit_logs.py` -- Audit Logs API (GET /api/audit-logs, admin限定)
 
 追加されたフロントエンド:
@@ -323,15 +370,16 @@ work_BI_ClaudeCode/
 - `src/hooks/use-audit-logs.ts` -- useAuditLogs カスタムフック
 - `src/pages/AuditLogListPage.tsx` -- 監査ログ一覧ページ (admin限定、イベントタイプフィルタ、ページネーション)
 
-イベントタイプ一覧:
+イベントタイプ一覧 (全13種):
 - `USER_LOGIN` / `USER_LOGOUT` / `USER_LOGIN_FAILED` -- 認証関連
 - `DASHBOARD_SHARE_ADDED` / `DASHBOARD_SHARE_REMOVED` / `DASHBOARD_SHARE_UPDATED` -- 共有変更
 - `DATASET_CREATED` / `DATASET_IMPORTED` / `DATASET_DELETED` -- Dataset操作
 - `TRANSFORM_EXECUTED` / `TRANSFORM_FAILED` -- Transform実行
 - `CARD_EXECUTION_FAILED` -- Card実行失敗
+- `CHATBOT_QUERY` -- チャットボット問い合わせ
 
 監査ログの特徴:
-- 全APIルート (auth, cards, datasets, dashboard_shares, transforms) に AuditService を統合済み
+- 全APIルート (auth, cards, datasets, dashboard_shares, transforms, chat) に AuditService を統合済み
 - ログ記録の失敗はビジネスロジックに影響しない (例外は握りつぶす)
 - DynamoDB GSI (LogsByUser, LogsByTarget) による効率的なクエリ
 - タイムスタンプは Unix epoch (秒) で DynamoDB に格納、ISO 8601 で API レスポンス

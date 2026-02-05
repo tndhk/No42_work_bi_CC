@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード 技術仕様書 v0.3
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: 技術スタック・設定値・エラーコードの正式仕様
+- 関連: 開発者ガイドは [CONTRIB.md](CONTRIB.md)、運用は [RUNBOOK.md](RUNBOOK.md) を参照
 
 ## 1. 技術スタック
 
@@ -80,113 +85,7 @@ Last Updated: 2026-02-03
 
 ## 2. プロジェクト構成
 
-```
-work_BI/
-├── docs/                          # ドキュメント
-│   ├── requirements.md
-│   ├── design.md
-│   ├── tech-spec.md
-│   └── api-spec.md
-├── frontend/                      # フロントエンド
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── common/           # 共通コンポーネント
-│   │   │   ├── dashboard/        # Dashboard関連（ShareDialog含む）
-│   │   │   ├── dataset/          # Dataset関連
-│   │   │   ├── transform/        # Transform関連
-│   │   │   ├── card/             # Card関連
-│   │   │   ├── group/            # Group関連（GroupCreateDialog, GroupDetailPanel, MemberAddDialog）
-│   │   │   └── chatbot/          # Chatbot関連
-│   │   ├── hooks/                # カスタムフック
-│   │   ├── lib/                  # ユーティリティ
-│   │   ├── pages/                # ページコンポーネント
-│   │   ├── stores/               # Zustandストア
-│   │   ├── types/                # 型定義
-│   │   └── App.tsx
-│   ├── public/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   └── Dockerfile
-├── backend/                       # バックエンド（API）
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── routes/           # APIルート
-│   │   │   │   ├── auth.py
-│   │   │   │   ├── users.py
-│   │   │   │   ├── groups.py
-│   │   │   │   ├── datasets.py
-│   │   │   │   ├── transforms.py
-│   │   │   │   ├── cards.py
-│   │   │   │   ├── dashboards.py
-│   │   │   │   ├── dashboard_shares.py  # 共有CRUD
-│   │   │   │   ├── filter_views.py
-│   │   │   │   ├── filter_view_detail.py
-│   │   │   │   └── chatbot.py
-│   │   │   └── deps.py           # 依存性注入
-│   │   ├── core/
-│   │   │   ├── config.py         # 設定
-│   │   │   ├── security.py       # 認証・認可
-│   │   │   └── logging.py        # ログ設定
-│   │   ├── db/
-│   │   │   ├── dynamodb.py       # DynamoDB接続
-│   │   │   └── s3.py             # S3接続
-│   │   ├── models/               # Pydanticモデル
-│   │   │   ├── user.py
-│   │   │   ├── group.py           # Group, GroupCreate, GroupUpdate, GroupMember
-│   │   │   ├── dataset.py
-│   │   │   ├── transform.py
-│   │   │   ├── card.py
-│   │   │   ├── dashboard.py
-│   │   │   ├── dashboard_share.py # DashboardShare, Permission, SharedToType
-│   │   │   └── filter_view.py
-│   │   ├── services/             # ビジネスロジック
-│   │   │   ├── dataset_service.py
-│   │   │   ├── transform_service.py
-│   │   │   ├── card_service.py
-│   │   │   ├── dashboard_service.py
-│   │   │   ├── executor_service.py
-│   │   │   ├── chatbot_service.py
-│   │   │   └── permission_service.py  # Dashboard権限チェック
-│   │   ├── repositories/          # データアクセス層
-│   │   │   ├── base.py                          # BaseRepository 基底クラス
-│   │   │   ├── user_repository.py
-│   │   │   ├── group_repository.py              # GroupRepository
-│   │   │   ├── group_member_repository.py       # GroupMemberRepository（複合キー）
-│   │   │   ├── dataset_repository.py
-│   │   │   ├── card_repository.py
-│   │   │   ├── dashboard_repository.py
-│   │   │   ├── dashboard_share_repository.py    # DashboardShareRepository
-│   │   │   └── filter_view_repository.py
-│   │   └── main.py               # エントリポイント
-│   ├── tests/
-│   ├── requirements.txt
-│   ├── pyproject.toml
-│   └── Dockerfile
-├── executor/                      # Python実行基盤
-│   ├── app/
-│   │   ├── runner.py             # 実行エンジン
-│   │   ├── sandbox.py            # サンドボックス
-│   │   └── main.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── infra/                         # インフラ（Terraform）
-│   ├── modules/
-│   │   ├── ecs/
-│   │   ├── dynamodb/
-│   │   ├── s3/
-│   │   └── networking/
-│   ├── environments/
-│   │   ├── dev/
-│   │   ├── staging/
-│   │   └── prod/
-│   └── main.tf
-├── docker-compose.yml             # ローカル開発用
-├── docker-compose.override.yml
-├── .env.example
-├── .gitignore
-└── README.md
-```
+> 詳細は [CONTRIB.md Section 8](CONTRIB.md#8-プロジェクト構造) を参照
 
 ---
 
@@ -408,27 +307,7 @@ def verify_token(token: str) -> dict:
 
 ### 5.3 CSP設定
 
-```python
-CSP_POLICY = {
-    "default-src": ["'self'"],
-    "script-src": [
-        "'self'",
-        "https://cdn.internal.company.com",  # 許可JSライブラリ
-    ],
-    "style-src": [
-        "'self'",
-        "'unsafe-inline'",  # Plotly等で必要
-    ],
-    "img-src": [
-        "'self'",
-        "data:",  # Base64画像
-    ],
-    "font-src": ["'self'"],
-    "connect-src": ["'self'"],
-    "frame-ancestors": ["'self'"],
-    "form-action": ["'self'"],
-}
-```
+> 詳細は [security.md Section 3.2](security.md#32-csp設定詳細) を参照
 
 ### 5.4 iframe sandbox
 

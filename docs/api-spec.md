@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード API詳細仕様書 v0.1
 
-Last Updated: 2026-02-04
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: APIエンドポイント・リクエスト/レスポンス形式の正式仕様
+- 関連: 設計は [design.md](design.md)、技術仕様は [tech-spec.md](tech-spec.md) を参照
 
 ## 1. 概要
 

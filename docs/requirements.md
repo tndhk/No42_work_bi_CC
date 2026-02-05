@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード 要件定義書 v0.3
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: ビジネス要件・機能要件の正式仕様
+- 関連: 設計は [design.md](design.md)、API仕様は [api-spec.md](api-spec.md) を参照
 
 ## 1. 目的・背景・スコープ
 

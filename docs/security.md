@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード セキュリティ実装ガイド v0.2
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: セキュリティ実装の詳細仕様（サンドボックス、CSP、認証・認可、監査ログ）
+- 関連: 技術仕様は [tech-spec.md](tech-spec.md)、データフローは [data-flow.md](data-flow.md) を参照
 
 ## 1. セキュリティ概要
 
@@ -282,52 +287,7 @@ class SecureExecutor:
 
 ### 2.7 リソース制限
 
-```python
-# executor/app/resource_limiter.py
-import resource
-import signal
-from contextlib import contextmanager
-
-class ResourceLimiter:
-    """リソース使用量を制限"""
-    
-    def __init__(
-        self,
-        timeout_seconds: int = 10,
-        max_memory_mb: int = 2048,
-        max_file_size_mb: int = 100,
-    ):
-        self.timeout = timeout_seconds
-        self.max_memory = max_memory_mb * 1024 * 1024
-        self.max_file_size = max_file_size_mb * 1024 * 1024
-    
-    @contextmanager
-    def limit(self):
-        """リソース制限を適用"""
-        # タイムアウト設定
-        def timeout_handler(signum, frame):
-            raise TimeoutError(f"実行が{self.timeout}秒を超えました")
-        
-        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(self.timeout)
-        
-        # メモリ制限
-        old_mem_limit = resource.getrlimit(resource.RLIMIT_AS)
-        resource.setrlimit(resource.RLIMIT_AS, (self.max_memory, self.max_memory))
-        
-        # ファイルサイズ制限
-        old_fsize_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
-        resource.setrlimit(resource.RLIMIT_FSIZE, (self.max_file_size, self.max_file_size))
-        
-        try:
-            yield
-        finally:
-            # 制限を元に戻す
-            signal.alarm(0)
-            signal.signal(signal.SIGALRM, old_handler)
-            resource.setrlimit(resource.RLIMIT_AS, old_mem_limit)
-            resource.setrlimit(resource.RLIMIT_FSIZE, old_fsize_limit)
-```
+> 詳細は [tech-spec.md Section 3.2](tech-spec.md#32-リソース制限) を参照
 
 ### 2.8 S3 Import セキュリティ考慮事項
 
@@ -695,58 +655,7 @@ PERMISSION_LEVELS = {
 
 #### 4.4.5 パーミッションチェックフロー
 
-`PermissionService.get_user_permission()` は以下の順序でユーザーの権限を解決する:
-
-```
-1. Owner チェック
-   dashboard.owner_id == user_id の場合 -> OWNER を即座に返却
-
-2. 全共有レコード取得
-   DashboardShareRepository.list_by_dashboard() で対象ダッシュボードの全共有を取得
-
-3. ユーザーの所属グループ取得
-   GroupMemberRepository.list_groups_for_user() でユーザーのグループ ID 一覧を取得
-
-4. 共有レコードを走査し、最高権限を算出
-   各共有レコードについて:
-   - shared_to_type == "user" かつ shared_to_id == user_id の場合: 直接共有として権限を取得
-   - shared_to_type == "group" かつ shared_to_id がユーザーの所属グループに含まれる場合: グループ共有として権限を取得
-   -> 全一致レコードの中から最も高い permission level を返却
-
-5. 一致なし -> None を返却 (アクセス権なし)
-```
-
-フロー図:
-
-```
-Request -> get_user_permission(dashboard, user_id)
-  |
-  +-- user_id == dashboard.owner_id ?
-  |     YES -> return OWNER
-  |     NO  -> continue
-  |
-  +-- Fetch all shares for this dashboard
-  +-- Fetch user's group memberships
-  |
-  +-- For each share:
-  |     +-- (type=user, id matches)  -> record permission level
-  |     +-- (type=group, id in user groups) -> record permission level
-  |
-  +-- Any matches found?
-        YES -> return highest permission level
-        NO  -> return None (403 Forbidden on assert)
-```
-
-各エンドポイントが要求する権限レベル:
-
-| エンドポイント | 要求権限 |
-|----------------|----------|
-| `GET /dashboards/{id}` | VIEWER |
-| `GET /dashboards/{id}/referenced-datasets` | VIEWER |
-| `POST /dashboards/{id}/clone` | VIEWER |
-| `PUT /dashboards/{id}` | EDITOR |
-| `DELETE /dashboards/{id}` | OWNER |
-| `GET/POST/PUT/DELETE /dashboards/{id}/shares/**` | OWNER (owner_id 直接比較) |
+> 詳細は [data-flow.md Section 2](data-flow.md#2-権限チェックフロー) を参照
 
 ---
 

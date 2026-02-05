@@ -2,6 +2,11 @@
 
 最終更新: 2026-02-05
 
+## このドキュメントについて
+
+- 役割: 運用・監視・トラブルシューティングの手順書
+- 関連: デプロイ手順は [deployment.md](deployment.md)、設計は [design.md](design.md)、技術仕様は [tech-spec.md](tech-spec.md) を参照
+
 ---
 
 ## 1. 環境一覧
@@ -179,20 +184,7 @@ aws dynamodb list-tables --endpoint-url http://localhost:8001 --region ap-northe
 docker compose run --rm dynamodb-init
 ```
 
-現在のテーブル一覧:
-
-init_tables.py で自動作成されるテーブル (11テーブル):
-- `bi_users` - ユーザー (GSI: UsersByEmail)
-- `bi_datasets` - データセット (GSI: DatasetsByOwner)
-- `bi_cards` - カード (GSI: CardsByOwner)
-- `bi_dashboards` - ダッシュボード (GSI: DashboardsByOwner)
-- `bi_filter_views` - フィルタビュー (GSI: FilterViewsByDashboard)
-- `bi_groups` - グループ (GSI: GroupsByName)
-- `bi_group_members` - グループメンバー (GSI: MembersByUser)
-- `bi_dashboard_shares` - ダッシュボード共有 (GSI: SharesByDashboard, SharesByTarget)
-- `bi_transforms` - Transform (GSI: TransformsByOwner)
-- `bi_transform_executions` - Transform実行履歴 (PK: transformId, SK: startedAt)
-- `bi_audit_logs` - 監査ログ (GSI: LogsByUser, LogsByTarget)
+> テーブル定義の詳細は [design.md Section 2.1](design.md#21-dynamodbテーブル設計) を参照
 
 ### FilterView可視性
 
@@ -328,10 +320,7 @@ aws application-autoscaling register-scalable-target \
 
 ### Executor リソース制限
 
-| 実行タイプ | CPU | メモリ | タイムアウト | ディスク |
-|-----------|-----|--------|------------|---------|
-| Card実行 | 1 vCPU | 2048 MB | 10秒 | 1 GB |
-| Transform実行 | 2 vCPU | 4096 MB | 300秒 | 10 GB |
+> 詳細は [tech-spec.md Section 3.2](tech-spec.md#32-リソース制限) を参照
 
 ---
 
@@ -379,13 +368,7 @@ docker scan bi-api:latest
 
 ### Executor サンドボックス
 
-| 制限 | 値 |
-|------|-----|
-| 実行ユーザー | 非root (appuser) |
-| タイムアウト | カード 10秒, Transform 300秒 |
-| メモリ | カード 2048MB, Transform 4096MB |
-| ネットワーク | S3 VPCエンドポイントのみ |
-| ブロックモジュール | `os`, `sys`, `subprocess`, `socket`, `http`, `requests`, `pickle` 等 |
+> 詳細は [security.md Section 2](security.md#2-python実行基盤セキュリティ) を参照
 
 ---
 

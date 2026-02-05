@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード 設計書 v0.3
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: アーキテクチャ・データモデル・API設計の正式仕様
+- 関連: 技術仕様は [tech-spec.md](tech-spec.md)、データフローは [data-flow.md](data-flow.md) を参照
 
 ## 1. アーキテクチャ概要
 
@@ -283,10 +288,10 @@ GSI: FilterViewsByDashboard
 | targetId | String | 対象オブジェクトID |
 | details | Map | 詳細情報 |
 
-GSI: LogsByTimestamp
-- PK: timestamp (日付パーティション)
-- SK: logId
-- 用途: 時系列ログ検索
+GSI: LogsByUser
+- PK: userId
+- SK: timestamp
+- 用途: ユーザー別ログ検索
 
 GSI: LogsByTarget
 - PK: targetId
@@ -468,17 +473,7 @@ Parquet形式の利点:
 
 ### 4.2 リソース制限
 
-Card実行:
-- CPU: 1 vCPU
-- メモリ: 2 GB
-- タイムアウト: 10秒
-- ディスク: 1 GB
-
-Transform実行:
-- CPU: 2 vCPU
-- メモリ: 4 GB
-- タイムアウト: 5分
-- ディスク: 10 GB
+> 詳細は [tech-spec.md Section 3.2](tech-spec.md#32-リソース制限) を参照
 
 ### 4.3 ホワイトリストライブラリ管理
 
@@ -608,24 +603,13 @@ src/
 iframe実装:
 ```tsx
 <iframe
-  sandbox="allow-scripts allow-same-origin"
+  sandbox="allow-scripts"
   srcDoc={cardHtml}
   style={{ width: '100%', height: '100%', border: 'none' }}
 />
 ```
 
-CSP設定:
-```
-Content-Security-Policy:
-  default-src 'self';
-  script-src 'self' https://cdn.internal.company.com/plotly/;
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data:;
-```
-
-許可JSライブラリ:
-- Plotly: 社内CDNから配信
-- バージョン固定（例: plotly-2.26.0.js）
+> CSP設定の詳細は [security.md Section 3](security.md#3-htmlカード表示セキュリティ) を参照
 
 ---
 
@@ -665,70 +649,7 @@ CloudFront:
 
 ### 6.2 docker-compose構成（ローカル）
 
-```yaml
-version: '3.8'
-
-services:
-  api:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      - ENV=local
-      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin
-    depends_on:
-      - dynamodb-local
-      - minio
-
-  executor:
-    build: ./executor
-    environment:
-      - ENV=local
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin
-    depends_on:
-      - minio
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    depends_on:
-      - api
-
-  dynamodb-local:
-    image: amazon/dynamodb-local
-    ports:
-      - "8000:8000"
-    command: "-jar DynamoDBLocal.jar -sharedDb"
-
-  minio:
-    image: minio/minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
-    command: server /data --console-address ":9001"
-```
-
-### 6.3 環境変数による切り替え
-
-環境変数:
-- `ENV`: local / staging / production
-- `DYNAMODB_ENDPOINT`: DynamoDBエンドポイント（local時はDynamoDB Local）
-- `S3_ENDPOINT`: S3エンドポイント（local時はMinIO）
-- `S3_ACCESS_KEY`: S3アクセスキー
-- `S3_SECRET_KEY`: S3シークレットキー
-- `VERTEX_AI_PROJECT_ID`: Vertex AIプロジェクトID
-- `VERTEX_AI_LOCATION`: Vertex AIリージョン
+> 詳細は [deployment.md Section 2.3](deployment.md#23-docker-composeyml) を参照
 
 ---
 

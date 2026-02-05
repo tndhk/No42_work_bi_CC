@@ -2,6 +2,11 @@
 
 最終更新: 2026-02-05
 
+## このドキュメントについて
+
+- 役割: 開発者向けクイックスタートガイド、開発コマンド、プロジェクト構造の説明
+- 関連: 技術仕様は [tech-spec.md](tech-spec.md)、設計は [design.md](design.md)、運用は [RUNBOOK.md](RUNBOOK.md) を参照
+
 ---
 
 ## 1. 前提条件
@@ -32,81 +37,15 @@ docker compose up --build
 | MinIO Console | http://localhost:9001 | S3互換ストレージ (admin: minioadmin/minioadmin) |
 | DynamoDB Local | http://localhost:8001 | DynamoDB互換DB |
 
+> docker-compose設定の詳細は [deployment.md Section 2.3](deployment.md#23-docker-composeyml) を参照
+
 ---
 
 ## 3. 環境変数
 
 `.env.example` を `.env` にコピーして設定。
 
-### API設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `ENV` | local | 環境識別子 (local/staging/production) |
-| `API_HOST` | 0.0.0.0 | APIバインドアドレス |
-| `API_PORT` | 8000 | APIポート |
-| `API_WORKERS` | 4 | Uvicorn ワーカー数 |
-| `API_DEBUG` | false | デバッグモード |
-
-### 認証設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `JWT_SECRET_KEY` | (必須) | JWT署名キー (本番: 32文字以上のランダム文字列) |
-| `JWT_ALGORITHM` | HS256 | JWTアルゴリズム |
-| `JWT_EXPIRE_MINUTES` | 1440 | トークン有効期限 (分、デフォルト24時間) |
-| `PASSWORD_MIN_LENGTH` | 8 | パスワード最小文字数 |
-
-### DynamoDB設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `DYNAMODB_ENDPOINT` | http://dynamodb-local:8000 | DynamoDBエンドポイント |
-| `DYNAMODB_REGION` | ap-northeast-1 | AWSリージョン |
-| `DYNAMODB_TABLE_PREFIX` | bi_ | テーブル名プレフィックス |
-
-### S3/MinIO設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `S3_ENDPOINT` | http://minio:9000 | S3エンドポイント |
-| `S3_REGION` | ap-northeast-1 | AWSリージョン |
-| `S3_BUCKET_DATASETS` | bi-datasets | Parquetデータ格納バケット |
-| `S3_BUCKET_STATIC` | bi-static | 静的ファイルバケット |
-| `S3_ACCESS_KEY` | minioadmin | アクセスキー (ローカル用) |
-| `S3_SECRET_KEY` | minioadmin | シークレットキー (ローカル用) |
-
-### Vertex AI設定 (Chatbot用、オプション)
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `VERTEX_AI_PROJECT_ID` | - | GCPプロジェクトID |
-| `VERTEX_AI_LOCATION` | asia-northeast1 | Vertex AIロケーション |
-| `VERTEX_AI_MODEL` | gemini-1.5-pro | 使用モデル |
-
-### Executor設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `EXECUTOR_ENDPOINT` | http://executor:8080 | Executorエンドポイント |
-| `EXECUTOR_TIMEOUT_CARD` | 10 | カード実行タイムアウト (秒) |
-| `EXECUTOR_TIMEOUT_TRANSFORM` | 300 | Transform実行タイムアウト (秒) |
-| `EXECUTOR_MAX_CONCURRENT_CARDS` | 10 | カード同時実行数上限 |
-| `EXECUTOR_MAX_CONCURRENT_TRANSFORMS` | 5 | Transform同時実行数上限 |
-
-### スケジューラー設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `SCHEDULER_ENABLED` | false | Transformスケジューラー有効化フラグ |
-| `SCHEDULER_INTERVAL_SECONDS` | 60 | スケジューラーのチェック間隔 (秒) |
-
-### ログ設定
-
-| 変数 | デフォルト | 説明 |
-|------|-----------|------|
-| `LOG_LEVEL` | INFO | ログレベル (DEBUG/INFO/WARNING/ERROR) |
-| `LOG_FORMAT` | json | ログフォーマット (json/text) |
+> 詳細は [tech-spec.md Section 3.1](tech-spec.md#31-環境変数) を参照
 
 ---
 
@@ -205,19 +144,7 @@ E2Eテストスイート:
 
 初期化スクリプト (`scripts/init_tables.py`) で作成されるテーブル:
 
-| テーブル名 | パーティションキー | ソートキー | GSI |
-|-----------|-------------------|-----------|-----|
-| `bi_users` | userId | - | UsersByEmail |
-| `bi_datasets` | datasetId | - | DatasetsByOwner |
-| `bi_cards` | cardId | - | CardsByOwner |
-| `bi_dashboards` | dashboardId | - | DashboardsByOwner |
-| `bi_filter_views` | filterViewId | - | FilterViewsByDashboard |
-| `bi_groups` | groupId | - | GroupsByName |
-| `bi_group_members` | groupId | userId | MembersByUser |
-| `bi_dashboard_shares` | shareId | - | SharesByDashboard, SharesByTarget |
-| `bi_transforms` | transformId | - | TransformsByOwner |
-| `bi_transform_executions` | transformId | startedAt | - |
-| `bi_audit_logs` | logId | - | LogsByUser, LogsByTarget |
+> 詳細は [design.md Section 2.1](design.md#21-dynamodbテーブル設計) を参照
 
 ---
 

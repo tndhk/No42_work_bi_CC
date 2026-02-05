@@ -1,6 +1,11 @@
 # 社内BI・Pythonカード データフロー詳細仕様書 v0.3
 
-Last Updated: 2026-02-03
+Last Updated: 2026-02-05
+
+## このドキュメントについて
+
+- 役割: データ処理フロー・権限チェックフローの詳細仕様
+- 関連: 設計は [design.md](design.md)、セキュリティは [security.md](security.md) を参照
 
 ## 1. データフロー概要
 

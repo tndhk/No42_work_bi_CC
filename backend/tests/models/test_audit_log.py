@@ -8,20 +8,25 @@ class TestEventType:
     """Tests for EventType enum."""
 
     def test_all_event_types_exist(self):
-        """All 12 event types should be defined."""
+        """All 13 event types should be defined."""
         expected = [
             "USER_LOGIN", "USER_LOGOUT", "USER_LOGIN_FAILED",
             "DASHBOARD_SHARE_ADDED", "DASHBOARD_SHARE_REMOVED", "DASHBOARD_SHARE_UPDATED",
             "DATASET_CREATED", "DATASET_IMPORTED", "DATASET_DELETED",
             "TRANSFORM_EXECUTED", "TRANSFORM_FAILED",
             "CARD_EXECUTION_FAILED",
+            "CHATBOT_QUERY",
         ]
         for name in expected:
             assert hasattr(EventType, name), f"EventType.{name} should exist"
 
     def test_event_type_count(self):
-        """Exactly 12 event types."""
-        assert len(EventType) == 12
+        """Exactly 13 event types."""
+        assert len(EventType) == 13
+
+    def test_chatbot_query_event_type_value(self):
+        """CHATBOT_QUERY value should match its name."""
+        assert EventType.CHATBOT_QUERY.value == "CHATBOT_QUERY"
 
     def test_event_type_values(self):
         """Values should match names (lowercase convention)."""

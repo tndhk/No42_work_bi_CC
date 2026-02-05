@@ -7,6 +7,9 @@ import logging
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from botocore.exceptions import ClientError
+
+from app.exceptions import DatasetFileNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +326,12 @@ class ParquetReader:
 
             result: pd.DataFrame = table.to_pandas()
             return result
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code in ('NoSuchKey', '404', 'NotFound'):
+                raise DatasetFileNotFoundError(s3_path=s3_path) from e
+            logger.error(f"Failed to read file from {s3_path}: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to read file from {s3_path}: {e}")
             raise

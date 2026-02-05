@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ShareDialog } from '@/components/dashboard/ShareDialog';
+import { ChatbotPanel } from '@/components/chat/ChatbotPanel';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import {
   useDashboard,
@@ -8,6 +9,7 @@ import {
   useFilterViews,
 } from '@/hooks';
 import { useAuthStore } from '@/stores/auth-store';
+import { useChatStore } from '@/stores/chat-store';
 import { DashboardViewer } from '@/components/dashboard/DashboardViewer';
 import { FilterBar } from '@/components/dashboard/FilterBar';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
@@ -26,6 +28,9 @@ export function DashboardViewPage() {
 
   const { data: filterViews = [] } = useFilterViews(id!);
   const currentUser = useAuthStore((state) => state.user);
+
+  // Chat store
+  const { isOpen, setOpen, reset } = useChatStore();
 
   const {
     filterValues,
@@ -61,6 +66,11 @@ export function DashboardViewPage() {
     onApply: handleApplyDefaultView,
   });
 
+  // Reset chat store when dashboard changes
+  useEffect(() => {
+    reset();
+  }, [id, reset]);
+
   if (isLoading) {
     return <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>;
   }
@@ -91,6 +101,7 @@ export function DashboardViewPage() {
         onDeleteView={handleDeleteView}
         onEdit={() => navigate(`/dashboards/${id}/edit`)}
         onShare={() => setShareDialogOpen(true)}
+        onChatToggle={() => setOpen(true)}
       />
 
       {hasFilters && filterBarVisible && (
@@ -117,6 +128,12 @@ export function DashboardViewPage() {
           dashboardId={id!}
         />
       )}
+
+      <ChatbotPanel
+        dashboardId={id!}
+        isOpen={isOpen}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }

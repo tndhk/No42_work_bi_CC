@@ -1,10 +1,12 @@
 """Tests for card_execution_service module - TDD RED phase."""
+import logging
 import time
 from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
+from app.exceptions import DatasetFileNotFoundError
 from app.services.card_execution_service import CardCacheService, CardExecutionService, CardExecutionResult
 
 
@@ -709,3 +711,123 @@ class TestCardExecutionService:
         # Then: AttributeError or Exception should be raised
         with pytest.raises((AttributeError, Exception)):
             result.html = "<div>Modified</div>"  # type: ignore
+
+
+# ============================================================================
+# _get_dataset_rows Error Propagation and Warning Log Tests
+# ============================================================================
+
+
+class TestGetDatasetRows:
+    """Test suite for _get_dataset_rows error handling."""
+
+    @pytest.fixture
+    def real_execution_service(self, mock_dynamodb: Any) -> CardExecutionService:
+        """Create CardExecutionService without mocking _get_dataset_rows."""
+        return CardExecutionService(dynamodb=mock_dynamodb, s3_client=MagicMock())
+
+    @pytest.mark.asyncio
+    async def test_get_dataset_rows_propagates_dataset_file_not_found_error(
+        self,
+        real_execution_service: CardExecutionService,
+    ) -> None:
+        """FileNotFoundError が DatasetFileNotFoundError に変換され dataset_id が補完されること。"""
+        # Given: A dataset that exists and has a valid s3_path
+        dataset_id = "dataset_abc"
+        s3_path = "datasets/dataset_abc.parquet"
+
+        mock_dataset = MagicMock()
+        mock_dataset.s3_path = s3_path
+
+        mock_dataset_repo = AsyncMock()
+        mock_dataset_repo.get_by_id = AsyncMock(return_value=mock_dataset)
+
+        # ParquetReader raises a generic FileNotFoundError (raw S3 error)
+        mock_parquet_reader = MagicMock()
+        mock_parquet_reader.read_full = MagicMock(
+            side_effect=FileNotFoundError(f"No such key: {s3_path}")
+        )
+
+        with patch(
+            "app.services.card_execution_service.DatasetRepository",
+            return_value=mock_dataset_repo,
+        ), patch(
+            "app.services.card_execution_service.ParquetReader",
+            return_value=mock_parquet_reader,
+        ):
+            # When / Then: Must be converted to DatasetFileNotFoundError
+            with pytest.raises(DatasetFileNotFoundError) as exc_info:
+                await real_execution_service._get_dataset_rows(dataset_id)
+
+            # Verify the converted error carries structured metadata
+            assert exc_info.value.s3_path == s3_path
+            assert exc_info.value.dataset_id == dataset_id
+            assert s3_path in str(exc_info.value)
+            assert dataset_id in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_dataset_rows_warns_when_dataset_not_found(
+        self,
+        real_execution_service: CardExecutionService,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """存在しない dataset_id で WARNING ログが出力されること。"""
+        # Given: A dataset_id that does not exist in DynamoDB
+        dataset_id = "nonexistent_dataset"
+
+        mock_dataset_repo = AsyncMock()
+        mock_dataset_repo.get_by_id = AsyncMock(return_value=None)
+
+        with patch(
+            "app.services.card_execution_service.DatasetRepository",
+            return_value=mock_dataset_repo,
+        ), caplog.at_level(logging.WARNING):
+            # When: Calling _get_dataset_rows with nonexistent dataset
+            result = await real_execution_service._get_dataset_rows(dataset_id)
+
+            # Then: Should return empty list AND emit a warning log
+            assert result == []
+            assert any(
+                "dataset" in record.message.lower()
+                and dataset_id in record.message
+                for record in caplog.records
+                if record.levelno >= logging.WARNING
+            ), (
+                f"Expected a WARNING log mentioning dataset_id '{dataset_id}', "
+                f"but got: {[r.message for r in caplog.records]}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_get_dataset_rows_warns_when_s3_path_not_set(
+        self,
+        real_execution_service: CardExecutionService,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """s3_path 未設定の dataset で WARNING ログが出力されること。"""
+        # Given: A dataset that exists but s3_path is None
+        dataset_id = "dataset_no_s3"
+
+        mock_dataset = MagicMock()
+        mock_dataset.s3_path = None
+
+        mock_dataset_repo = AsyncMock()
+        mock_dataset_repo.get_by_id = AsyncMock(return_value=mock_dataset)
+
+        with patch(
+            "app.services.card_execution_service.DatasetRepository",
+            return_value=mock_dataset_repo,
+        ), caplog.at_level(logging.WARNING):
+            # When: Calling _get_dataset_rows for dataset without s3_path
+            result = await real_execution_service._get_dataset_rows(dataset_id)
+
+            # Then: Should return empty list AND emit a warning log
+            assert result == []
+            assert any(
+                "s3_path" in record.message.lower()
+                or "s3" in record.message.lower()
+                for record in caplog.records
+                if record.levelno >= logging.WARNING
+            ), (
+                f"Expected a WARNING log mentioning s3_path, "
+                f"but got: {[r.message for r in caplog.records]}"
+            )

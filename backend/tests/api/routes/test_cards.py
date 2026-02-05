@@ -505,6 +505,64 @@ class TestPreviewCard:
 
         assert response.status_code == 500
 
+    def test_preview_card_dataset_file_not_found_returns_404(
+        self,
+        authenticated_client: TestClient,
+        mock_user: User,
+        sample_card: Card,
+        mock_dynamodb,
+    ) -> None:
+        """DatasetFileNotFoundError 発生時に HTTP 404 が返り監査ログが記録されること。"""
+        from app.repositories import card_repository, dataset_repository
+        from app.exceptions import DatasetFileNotFoundError
+
+        s3_path = "s3://bucket/datasets/dataset_123/data.parquet"
+        dataset_id = "dataset_123"
+
+        async def mock_get_by_id_card(self, pk, dynamodb):
+            return sample_card
+
+        async def mock_get_by_id_dataset(self, pk, dynamodb):
+            mock_dataset = MagicMock()
+            mock_dataset.updated_at = datetime.now(timezone.utc)
+            return mock_dataset
+
+        async def mock_execute(self, *args, **kwargs):
+            raise DatasetFileNotFoundError(s3_path=s3_path, dataset_id=dataset_id)
+
+        with patch.object(
+            card_repository.CardRepository, "get_by_id", mock_get_by_id_card
+        ), patch.object(
+            dataset_repository.DatasetRepository, "get_by_id", mock_get_by_id_dataset
+        ), patch(
+            "app.services.card_execution_service.CardExecutionService.execute",
+            mock_execute,
+        ), patch("app.api.routes.cards.AuditService") as MockAuditService:
+            mock_audit_instance = MockAuditService.return_value
+            mock_audit_instance.log_card_execution_failed = AsyncMock(return_value=None)
+
+            response = authenticated_client.post(
+                f"/api/cards/{sample_card.id}/preview",
+                json={"filters": {}},
+            )
+
+        # Requirement 1: HTTP 404 status code
+        assert response.status_code == 404
+
+        # Requirement 2: Error message contains dataset file not found info
+        response_body = response.json()
+        assert "detail" in response_body
+        assert "not found" in response_body["detail"].lower()
+        assert s3_path in response_body["detail"] or dataset_id in response_body["detail"]
+
+        # Requirement 3: Audit log is recorded with correct parameters
+        mock_audit_instance.log_card_execution_failed.assert_called_once_with(
+            user_id=mock_user.id,
+            card_id=sample_card.id,
+            error=str(DatasetFileNotFoundError(s3_path=s3_path, dataset_id=dataset_id)),
+            dynamodb=mock_dynamodb,
+        )
+
     def test_preview_card_failure_calls_audit_log(
         self,
         authenticated_client: TestClient,

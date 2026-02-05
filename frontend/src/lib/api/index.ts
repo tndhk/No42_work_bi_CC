@@ -7,3 +7,4 @@ export { filterViewsApi } from './filter-views';
 export { groupsApi } from './groups';
 export { transformsApi } from './transforms';
 export { auditLogsApi } from './audit-logs';
+export { sendChatMessage } from './chat';

@@ -310,3 +310,35 @@ class AuditService:
             details={"error": error},
             request_id=request_id,
         )
+
+    async def log_chatbot_query(
+        self,
+        user_id: str,
+        dashboard_id: str,
+        message: str,
+        dynamodb: Any,
+        metadata: Optional[dict] = None,
+        request_id: Optional[str] = None,
+    ) -> Optional[AuditLog]:
+        """Log a chatbot query event.
+
+        Args:
+            user_id: ID of the user who sent the query
+            dashboard_id: ID of the dashboard context
+            message: The chatbot query message
+            dynamodb: DynamoDB resource
+            metadata: Optional metadata (e.g., model, tokens, response_time_ms)
+            request_id: Optional request ID for tracing
+        """
+        details: dict = {"message": message}
+        if metadata is not None:
+            details["metadata"] = metadata
+        return await self.log_event(
+            event_type=EventType.CHATBOT_QUERY,
+            user_id=user_id,
+            target_type="dashboard",
+            target_id=dashboard_id,
+            dynamodb=dynamodb,
+            details=details,
+            request_id=request_id,
+        )

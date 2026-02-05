@@ -1,4 +1,5 @@
 """Configuration management using pydantic-settings."""
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +49,16 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     rate_limit_enabled: bool = True
+
+    # Vertex AI / Chatbot
+    vertex_ai_project_id: str = ""
+    vertex_ai_location: str = "us-central1"
+    vertex_ai_model: str = "gemini-1.5-pro"
+    chatbot_rate_limit_user: int = 5
+    chatbot_rate_limit_dashboard: int = 10
+    chatbot_max_history_messages: int = 5
+    chatbot_max_output_tokens: int = 1024
+    chatbot_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
 
 
 settings = Settings()

@@ -1,13 +1,40 @@
 """Pytest configuration and shared fixtures."""
 import os
+import sys
+import types
 import pytest
 from fastapi.testclient import TestClient
 import boto3
 from moto import mock_aws
 from typing import Generator, Any
+from unittest.mock import MagicMock
 
 from app.core.config import settings
 from app.api import deps
+
+
+def pytest_configure(config):
+    """Setup vertexai stub before test collection begins.
+
+    This hook runs before any test modules are imported, preventing import-time
+    errors when chatbot_service tries to import vertexai.generative_models.
+    The stub is installed once at the start of the test session.
+    """
+    if "vertexai" not in sys.modules:
+        vertexai = types.ModuleType("vertexai")
+        gm = types.ModuleType("vertexai.generative_models")
+
+        # Create Part stub with from_text class method
+        part_class = MagicMock()
+        part_class.from_text = MagicMock(return_value=MagicMock())
+
+        # Create Content and GenerativeModel stubs
+        gm.Content = MagicMock  # type: ignore[attr-defined]
+        gm.GenerativeModel = MagicMock  # type: ignore[attr-defined]
+        gm.Part = part_class  # type: ignore[attr-defined]
+        vertexai.generative_models = gm  # type: ignore[attr-defined]
+        sys.modules["vertexai"] = vertexai
+        sys.modules["vertexai.generative_models"] = gm
 
 
 @pytest.fixture

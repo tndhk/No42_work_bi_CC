@@ -88,3 +88,21 @@ export type {
 export { isTransform } from './transform';
 
 export type { EventType, AuditLog, AuditLogListParams } from './audit-log';
+
+export type {
+  ChatMessage,
+  ChatRequest,
+  ChatSource,
+  ChatTokenEvent,
+  ChatDoneEvent,
+  ChatErrorEvent,
+  ChatSSEEvent,
+} from './chat';
+export {
+  isChatMessage,
+  isChatSource,
+  isChatTokenEvent,
+  isChatDoneEvent,
+  isChatErrorEvent,
+  isChatSSEEvent,
+} from './chat';

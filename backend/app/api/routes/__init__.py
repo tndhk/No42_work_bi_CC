@@ -1,7 +1,7 @@
 """API routes initialization."""
 from fastapi import APIRouter
 
-from app.api.routes import auth, datasets, dashboards, cards, filter_views, filter_view_detail, users, groups, dashboard_shares, transforms, audit_logs
+from app.api.routes import auth, datasets, dashboards, cards, filter_views, filter_view_detail, users, groups, dashboard_shares, transforms, audit_logs, chat
 
 # Create main API router
 api_router = APIRouter()
@@ -50,3 +50,10 @@ api_router.include_router(transforms.router, prefix="/transforms", tags=["transf
 
 # Include audit logs routes
 api_router.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit-logs"])
+
+# Include chat routes (dashboard-scoped)
+api_router.include_router(
+    chat.router,
+    prefix="/dashboards",
+    tags=["chat"],
+)

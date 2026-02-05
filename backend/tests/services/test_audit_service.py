@@ -235,3 +235,91 @@ class TestAuditService:
         assert log.target_type == "card"
         assert log.target_id == "card-fail"
         assert log.details == {"error": "Runtime error"}
+
+    async def test_log_chatbot_query_basic(self, dynamodb_tables: tuple[dict[str, Any], Any]):
+        """Test log_chatbot_query with required parameters only."""
+        tables, dynamodb = dynamodb_tables
+        service = AuditService()
+
+        log = await service.log_chatbot_query(
+            user_id="user-chat",
+            dashboard_id="dash-001",
+            message="Show me revenue trends",
+            dynamodb=dynamodb,
+        )
+
+        assert log is not None
+        assert log.event_type == EventType.CHATBOT_QUERY
+        assert log.user_id == "user-chat"
+        assert log.target_type == "dashboard"
+        assert log.target_id == "dash-001"
+        assert log.details["message"] == "Show me revenue trends"
+
+    async def test_log_chatbot_query_with_metadata(self, dynamodb_tables: tuple[dict[str, Any], Any]):
+        """Test log_chatbot_query with optional metadata."""
+        tables, dynamodb = dynamodb_tables
+        service = AuditService()
+
+        metadata = {"model": "gpt-4", "tokens": 150, "response_time_ms": 320}
+        log = await service.log_chatbot_query(
+            user_id="user-chat-2",
+            dashboard_id="dash-002",
+            message="What is the top product?",
+            dynamodb=dynamodb,
+            metadata=metadata,
+        )
+
+        assert log is not None
+        assert log.event_type == EventType.CHATBOT_QUERY
+        assert log.details["message"] == "What is the top product?"
+        assert log.details["metadata"] == metadata
+
+    async def test_log_chatbot_query_without_metadata(self, dynamodb_tables: tuple[dict[str, Any], Any]):
+        """Test log_chatbot_query without metadata - details should not contain metadata key."""
+        tables, dynamodb = dynamodb_tables
+        service = AuditService()
+
+        log = await service.log_chatbot_query(
+            user_id="user-chat-3",
+            dashboard_id="dash-003",
+            message="Hello",
+            dynamodb=dynamodb,
+        )
+
+        assert log is not None
+        assert "metadata" not in log.details
+
+    async def test_log_chatbot_query_with_request_id(self, dynamodb_tables: tuple[dict[str, Any], Any]):
+        """Test log_chatbot_query with request_id."""
+        tables, dynamodb = dynamodb_tables
+        service = AuditService()
+
+        log = await service.log_chatbot_query(
+            user_id="user-chat-4",
+            dashboard_id="dash-004",
+            message="Filter by Q1",
+            dynamodb=dynamodb,
+            request_id="req-chatbot-001",
+        )
+
+        assert log is not None
+        assert log.request_id == "req-chatbot-001"
+
+    async def test_log_chatbot_query_error_non_propagating(self, dynamodb_tables: tuple[dict[str, Any], Any]):
+        """Test that DB errors do not propagate from log_chatbot_query."""
+        tables, dynamodb = dynamodb_tables
+        service = AuditService()
+
+        with patch('app.services.audit_service.AuditLogRepository') as mock_repo_class:
+            mock_repo = AsyncMock()
+            mock_repo.create.side_effect = Exception("DynamoDB error")
+            mock_repo_class.return_value = mock_repo
+
+            log = await service.log_chatbot_query(
+                user_id="user-chat-err",
+                dashboard_id="dash-err",
+                message="This should fail gracefully",
+                dynamodb=dynamodb,
+            )
+
+            assert log is None

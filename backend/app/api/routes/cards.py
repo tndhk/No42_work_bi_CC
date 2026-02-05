@@ -17,6 +17,7 @@ from app.services.card_execution_service import (
 )
 from app.core.config import settings
 from app.services.audit_service import AuditService
+from app.exceptions import DatasetFileNotFoundError
 
 router = APIRouter()
 
@@ -185,17 +186,24 @@ async def _execute_card_with_error_handling(
             "execution_time_ms": result.execution_time_ms,
         })
 
-    except RuntimeError as e:
+    except (DatasetFileNotFoundError, RuntimeError) as e:
         await AuditService().log_card_execution_failed(
             user_id=current_user.id,
             card_id=card_id,
             error=str(e),
             dynamodb=dynamodb,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+        if isinstance(e, DatasetFileNotFoundError):
+            status_code = status.HTTP_404_NOT_FOUND
+            detail = (
+                f"Dataset file not found (dataset_id: {e.dataset_id})"
+                if e.dataset_id is not None
+                else "Dataset file not found"
+            )
+        else:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            detail = str(e)
+        raise HTTPException(status_code=status_code, detail=detail)
 
 
 # ============================================================================

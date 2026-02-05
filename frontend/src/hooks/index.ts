@@ -59,3 +59,4 @@ export {
   useTransformExecutions,
 } from './use-transforms';
 export { useAuditLogs } from './use-audit-logs';
+export { useChatbot } from './use-chatbot';

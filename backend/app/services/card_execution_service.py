@@ -12,6 +12,7 @@ import httpx
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+from app.exceptions import DatasetFileNotFoundError
 from app.repositories.dataset_repository import DatasetRepository
 from app.services.parquet_storage import ParquetReader
 
@@ -217,7 +218,12 @@ class CardExecutionService:
         dataset_repo = DatasetRepository()
         dataset = await dataset_repo.get_by_id(dataset_id, self.dynamodb)
 
-        if not dataset or not dataset.s3_path:
+        if not dataset:
+            logger.warning(f"Dataset not found: {dataset_id}")
+            return []
+
+        if not dataset.s3_path:
+            logger.warning(f"S3 path not set for dataset: {dataset_id}")
             return []
 
         # Read from S3 using ParquetReader
@@ -225,7 +231,21 @@ class CardExecutionService:
             return []
 
         reader = ParquetReader(self.s3_client, settings.s3_bucket_datasets)
-        df = await _maybe_await(reader.read_full(dataset.s3_path))
+
+        try:
+            df = await _maybe_await(reader.read_full(dataset.s3_path))
+        except DatasetFileNotFoundError as e:
+            # Enrich with dataset_id if not already set
+            if e.dataset_id is None:
+                raise DatasetFileNotFoundError(
+                    s3_path=e.s3_path, dataset_id=dataset_id
+                ) from e
+            raise
+        except (FileNotFoundError, OSError) as e:
+            # Convert generic file errors to DatasetFileNotFoundError
+            raise DatasetFileNotFoundError(
+                s3_path=dataset.s3_path, dataset_id=dataset_id
+            ) from e
 
         # Convert DataFrame to list of dicts
         return df.to_dict(orient='records')

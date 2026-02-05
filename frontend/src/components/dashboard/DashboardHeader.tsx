@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Filter, Share2 } from 'lucide-react';
+import { Pencil, Filter, Share2, MessageCircle } from 'lucide-react';
 import { FilterViewSelector } from './FilterViewSelector';
 import type { FilterView } from '@/types';
 
@@ -20,6 +20,7 @@ interface DashboardHeaderProps {
   onDeleteView: (viewId: string) => void | Promise<void>;
   onEdit: () => void;
   onShare: () => void;
+  onChatToggle: () => void;
 }
 
 export function DashboardHeader({
@@ -38,6 +39,7 @@ export function DashboardHeader({
   onDeleteView,
   onEdit,
   onShare,
+  onChatToggle,
 }: DashboardHeaderProps) {
   return (
     <div className="flex items-center justify-between">
@@ -82,6 +84,10 @@ export function DashboardHeader({
             共有
           </Button>
         )}
+        <Button variant="outline" onClick={onChatToggle}>
+          <MessageCircle className="h-4 w-4 mr-2" />
+          チャット
+        </Button>
       </div>
     </div>
   );

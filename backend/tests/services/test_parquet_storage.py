@@ -13,6 +13,7 @@ from app.services.parquet_storage import (
     ParquetReader,
     StorageResult,
 )
+from app.exceptions import DatasetFileNotFoundError
 
 
 @pytest.fixture
@@ -377,3 +378,24 @@ class TestParquetReader:
             df_preview,
             sample_dataframe.head(2)
         )
+
+
+@pytest.mark.asyncio
+class TestParquetReaderFileNotFound:
+    """Test ParquetReader raises DatasetFileNotFoundError for missing S3 keys."""
+
+    async def test_no_such_key_error_is_converted_to_dataset_file_not_found_error(
+        self, s3_client
+    ):
+        """S3 NoSuchKey ClientError is converted to DatasetFileNotFoundError."""
+        reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
+        missing_key = "datasets/missing-id-123/data/part-0000.parquet"
+
+        with pytest.raises(DatasetFileNotFoundError) as exc_info:
+            await reader._read_single_file(missing_key)
+
+        error = exc_info.value
+        assert isinstance(error, RuntimeError)
+        assert error.s3_path == missing_key
+        assert error.dataset_id is None
+        assert missing_key in str(error)

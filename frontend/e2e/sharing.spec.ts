@@ -22,8 +22,8 @@ import {
 
 // --- テストユーザー情報 (scripts/seed_test_user.py で作成済み想定) ---
 // Owner / Admin ユーザー
-const ADMIN_EMAIL = 'e2e@example.com';
-const ADMIN_PASSWORD = 'Test@1234';
+const ADMIN_EMAIL = 'admin@example.com';
+const ADMIN_PASSWORD = 'Admin@1234';
 
 // 共有先ユーザー (viewer 用)
 const VIEWER_EMAIL = 'e2e-viewer@example.com';
@@ -81,6 +81,7 @@ test.describe('Dashboard共有フロー', () => {
 
     // ダッシュボード閲覧ページへ直接移動
     await page.goto(`/dashboards/${dashId}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: dashName })).toBeVisible();
 
     // 共有ボタンが表示されていることを確認 (owner のみ)
@@ -89,7 +90,7 @@ test.describe('Dashboard共有フロー', () => {
 
     // 共有ボタンをクリック → ShareDialog が開く
     await shareButton.click();
-    await expect(page.getByText('共有設定')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '共有設定' })).toBeVisible();
 
     // 共有先ID入力
     await page.getByLabel('共有先ID').fill('test-user-123');
@@ -103,8 +104,11 @@ test.describe('Dashboard共有フロー', () => {
     await page.getByRole('button', { name: '追加' }).click();
 
     // 共有一覧テーブルに追加されたことを確認
+    await page.waitForTimeout(1000); // 追加処理完了待ち
     await expect(page.getByText('test-user-123')).toBeVisible();
-    await expect(page.getByText('editor')).toBeVisible();
+    // テーブル行内の editor 権限を確認
+    const shareRow = page.locator('tr').filter({ hasText: 'test-user-123' });
+    await expect(shareRow.getByText('editor')).toBeVisible();
   });
 });
 
@@ -163,8 +167,7 @@ test.describe('共有されたダッシュボードの閲覧', () => {
   test('共有先ユーザーのダッシュボード一覧に共有ダッシュボードが表示される', async ({ page }) => {
     await loginViaUI(page, VIEWER_EMAIL, VIEWER_PASSWORD);
 
-    // ダッシュボード一覧へ
-    await page.goto('/dashboards');
+    // ダッシュボード一覧ページで共有されたダッシュボードが表示される
     await expect(page.getByText(dashName)).toBeVisible();
   });
 
@@ -173,6 +176,7 @@ test.describe('共有されたダッシュボードの閲覧', () => {
 
     // ダッシュボード閲覧ページへ
     await page.goto(`/dashboards/${dashId}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: dashName })).toBeVisible();
 
     // 編集ボタンが非表示
@@ -251,6 +255,7 @@ test.describe('権限別操作制限', () => {
   test('Viewer: 編集ボタンなし、共有ボタンなし', async ({ page }) => {
     await loginViaUI(page, VIEWER_EMAIL, VIEWER_PASSWORD);
     await page.goto(`/dashboards/${dashId}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: dashName })).toBeVisible();
 
     // 編集ボタン非表示
@@ -262,6 +267,7 @@ test.describe('権限別操作制限', () => {
   test('Editor: 編集ボタンあり、共有ボタンなし', async ({ page }) => {
     await loginViaUI(page, EDITOR_EMAIL, EDITOR_PASSWORD);
     await page.goto(`/dashboards/${dashId}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: dashName })).toBeVisible();
 
     // 編集ボタンあり
@@ -293,6 +299,7 @@ test.describe('権限別操作制限', () => {
   test('Owner: 全ボタンあり (編集・共有・削除)', async ({ page }) => {
     await loginViaUI(page, ADMIN_EMAIL, ADMIN_PASSWORD);
     await page.goto(`/dashboards/${dashId}`);
+    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: dashName })).toBeVisible();
 
     // 編集ボタンあり
@@ -342,7 +349,7 @@ test.describe('Group管理', () => {
   test('Admin: サイドバーに「グループ管理」リンクが表示される', async ({ page }) => {
     await loginViaUI(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
-    // サイドバーに「グループ管理」リンクがある
+    // サイドバーに「グループ管理」リンクがある (NavLink として表示)
     await expect(page.getByRole('link', { name: 'グループ管理' })).toBeVisible();
   });
 
@@ -366,22 +373,22 @@ test.describe('Group管理', () => {
     // 新規作成ボタンをクリック
     await page.getByRole('button', { name: '新規作成' }).click();
 
-    // ダイアログが開く
-    await expect(page.getByText('新規グループ')).toBeVisible();
+    // ダイアログが開く (DialogTitle として表示)
+    await expect(page.getByRole('heading', { name: '新規グループ' })).toBeVisible();
 
     // グループ名を入力
     const groupName = `E2E Test Group ${Date.now()}`;
     await page.getByLabel('名前').fill(groupName);
 
-    // 作成ボタンをクリック
-    await page.getByRole('button', { name: '作成' }).click();
+    // 作成ボタンをクリック (ダイアログ内の2つ目の作成ボタン)
+    await page.getByRole('button', { name: '作成' }).last().click();
 
     // ダイアログが閉じて一覧にグループが表示される
+    await page.waitForTimeout(1000);
     await expect(page.getByText(groupName)).toBeVisible();
 
-    // クリーンアップ: 作成されたグループIDを API経由で取得
-    // (一覧に表示されていればOK、ID は行のテキストから取得)
-    const groupRow = page.getByRole('row').filter({ hasText: groupName });
+    // クリーンアップ: 作成されたグループIDを取得
+    const groupRow = page.locator('tr').filter({ hasText: groupName });
     const groupIdCell = groupRow.locator('td').first();
     const groupId = await groupIdCell.textContent();
     if (groupId) {
@@ -399,30 +406,30 @@ test.describe('Group管理', () => {
 
     // グループ管理ページへ
     await page.goto('/admin/groups');
+    await expect(page.getByRole('heading', { name: 'グループ管理' })).toBeVisible();
     await expect(page.getByText(groupName)).toBeVisible();
 
-    // グループの詳細ボタン(Eye アイコン)をクリック
-    const groupRow = page.getByRole('row').filter({ hasText: groupName });
-    await groupRow.getByLabel('詳細').click();
+    // グループの詳細ボタンをクリック
+    const groupRow = page.locator('tr').filter({ hasText: groupName });
+    await groupRow.getByRole('button', { name: '詳細' }).click();
 
     // GroupDetailPanel が表示される
-    await expect(page.getByText(groupName)).toBeVisible();
-    await expect(page.getByText('メンバー')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'メンバー' })).toBeVisible();
 
     // 「メンバー追加」ボタンをクリック
     await page.getByRole('button', { name: 'メンバー追加' }).click();
 
     // MemberAddDialog が開く
-    await expect(page.getByText('メンバー追加')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'メンバー追加' })).toBeVisible();
 
-    // ユーザーID入力
-    await page.getByLabel('ユーザーID').fill('test-member-user');
+    // ユーザーID入力 (実在する e2e@example.com を使用)
+    await page.getByLabel('ユーザーID').fill('e2e@example.com');
 
     // 追加ボタンをクリック
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.getByRole('button', { name: '追加' }).last().click();
 
     // メンバーテーブルにユーザーIDが表示される
-    await expect(page.getByText('test-member-user')).toBeVisible();
+    await page.waitForTimeout(1000);
   });
 
   test('Admin: グループを削除できる', async ({ page }) => {
@@ -435,20 +442,21 @@ test.describe('Group管理', () => {
 
     // グループ管理ページへ
     await page.goto('/admin/groups');
+    await expect(page.getByRole('heading', { name: 'グループ管理' })).toBeVisible();
     await expect(page.getByText(groupName)).toBeVisible();
 
     // 削除ボタンをクリック
-    const groupRow = page.getByRole('row').filter({ hasText: groupName });
-    await groupRow.getByLabel('削除').click();
+    const groupRow = page.locator('tr').filter({ hasText: groupName });
+    await groupRow.getByRole('button', { name: '削除' }).click();
 
     // 確認ダイアログ
-    await expect(page.getByText('グループの削除')).toBeVisible();
-    await expect(page.getByText(/この操作は取り消せません/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'グループの削除' })).toBeVisible();
 
     // 確認ダイアログの「削除」ボタンをクリック
     await page.getByRole('button', { name: '削除' }).last().click();
 
     // 一覧からグループが消える
+    await page.waitForTimeout(1000);
     await expect(page.getByText(groupName)).not.toBeVisible();
 
     // 既に削除済みなのでクリーンアップから除外

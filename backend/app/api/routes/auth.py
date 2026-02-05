@@ -121,6 +121,8 @@ async def login(
         "user": {
             "user_id": user.id,
             "email": user.email,
+            "role": user.role or "member",
+            "created_at": user.created_at.isoformat() if user.created_at else "",
         }
     })
 
@@ -162,4 +164,6 @@ async def get_me(
     return api_response({
         "user_id": current_user.id,
         "email": current_user.email,
+        "role": current_user.role or "member",
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else "",
     })

@@ -128,6 +128,19 @@ export async function createDashboard(
   name: string,
   cardIds: string[] = []
 ): Promise<string> {
+  // カードIDからレイアウトアイテムを生成
+  const layout = {
+    cards: cardIds.map((cardId, index) => ({
+      card_id: cardId,
+      x: 0,
+      y: index * 4,
+      w: 6,
+      h: 4,
+    })),
+    columns: 12,
+    row_height: 100,
+  };
+
   const response = await fetch(`${API_BASE_URL}/dashboards`, {
     method: 'POST',
     headers: {
@@ -137,7 +150,7 @@ export async function createDashboard(
     body: JSON.stringify({
       name,
       description: `Test dashboard: ${name}`,
-      card_ids: cardIds,
+      layout,
     }),
   });
 
@@ -146,7 +159,7 @@ export async function createDashboard(
   }
 
   const data = await response.json();
-  return data.data.id;
+  return data.data.dashboard_id || data.data.id;
 }
 
 /**
@@ -312,8 +325,7 @@ export async function createTransform(
     },
     body: JSON.stringify({
       name,
-      description: `Test transform: ${name}`,
-      dataset_ids: datasetIds,
+      input_dataset_ids: datasetIds,
       code,
     }),
   });

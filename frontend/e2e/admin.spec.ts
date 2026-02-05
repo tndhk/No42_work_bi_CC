@@ -172,8 +172,8 @@ test.describe('Admin Features', () => {
       const groupRow = page.locator('tr').filter({ hasText: groupName });
       await groupRow.getByRole('button', { name: '詳細' }).click();
 
-      // Then: グループ詳細パネルが表示される
-      await expect(page.getByText('メンバー')).toBeVisible();
+      // Then: グループ詳細パネルが表示される (heading で判定)
+      await expect(page.getByRole('heading', { name: 'メンバー' })).toBeVisible();
 
       // When: メンバー追加ボタンをクリック
       await page.getByRole('button', { name: 'メンバー追加' }).click();
@@ -216,8 +216,8 @@ test.describe('Admin Features', () => {
       const groupRow = page.locator('tr').filter({ hasText: groupName });
       await groupRow.getByRole('button', { name: '詳細' }).click();
 
-      // Then: グループ詳細パネルが表示される
-      await expect(page.getByText('メンバー')).toBeVisible();
+      // Then: グループ詳細パネルが表示される (heading で判定)
+      await expect(page.getByRole('heading', { name: 'メンバー' })).toBeVisible();
 
       // メンバーが存在する場合のみ削除テスト
       const memberExists = await page.getByText('e2e@example.com').isVisible().catch(() => false);

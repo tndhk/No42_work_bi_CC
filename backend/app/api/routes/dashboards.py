@@ -149,8 +149,8 @@ async def create_dashboard(
         'id': f"dash_{uuid.uuid4().hex[:12]}",
         'name': dashboard_data.name.strip(),
         'description': dashboard_data.description,
-        'layout': dashboard_data.layout,
-        'filters': dashboard_data.filters,
+        'layout': dashboard_data.layout.model_dump() if dashboard_data.layout else None,
+        'filters': [f.model_dump() for f in dashboard_data.filters] if dashboard_data.filters else None,
         'owner_id': current_user.id,
     }
 
@@ -194,7 +194,14 @@ async def get_dashboard(
         dashboard, current_user.id, Permission.VIEWER, dynamodb
     )
 
-    return api_response(_to_dashboard_response(dashboard.model_dump()))
+    # Get user's permission for this dashboard
+    my_permission = await permission_service.get_user_permission(
+        dashboard, current_user.id, dynamodb
+    )
+
+    response = _to_dashboard_response(dashboard.model_dump())
+    response['my_permission'] = my_permission.value if my_permission else "viewer"
+    return api_response(response)
 
 
 @router.put("/{dashboard_id}")

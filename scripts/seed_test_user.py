@@ -19,6 +19,19 @@ ADMIN_USER_ID = 'admin-test-user-001'
 ADMIN_USER_EMAIL = 'admin@example.com'
 ADMIN_USER_PASSWORD = 'Admin@1234'
 
+# 共有テスト用ユーザ情報
+VIEWER_USER_ID = 'e2e-viewer-user-001'
+VIEWER_USER_EMAIL = 'e2e-viewer@example.com'
+VIEWER_USER_PASSWORD = 'Test@1234'
+
+EDITOR_USER_ID = 'e2e-editor-user-001'
+EDITOR_USER_EMAIL = 'e2e-editor@example.com'
+EDITOR_USER_PASSWORD = 'Test@1234'
+
+MEMBER_USER_ID = 'e2e-member-user-001'
+MEMBER_USER_EMAIL = 'e2e-member@example.com'
+MEMBER_USER_PASSWORD = 'Test@1234'
+
 # Bcrypt rounds (backend/app/core/security.py と同じ)
 BCRYPT_ROUNDS = 12
 
@@ -111,11 +124,86 @@ def seed_test_user():
         print(f"❌ エラー: 管理者ユーザの作成に失敗しました: {e}")
         raise
 
+    # 3. Viewerユーザを作成
+    try:
+        response = table.get_item(Key={'userId': VIEWER_USER_ID})
+        if 'Item' in response:
+            print(f"Viewerユーザ ({VIEWER_USER_EMAIL}) は既に存在します。スキップします。")
+        else:
+            viewer_hashed_password = hash_password(VIEWER_USER_PASSWORD)
+            viewer_user_item = {
+                'userId': VIEWER_USER_ID,
+                'email': VIEWER_USER_EMAIL,
+                'hashedPassword': viewer_hashed_password,
+                'role': 'member',
+                'createdAt': current_timestamp,
+                'updatedAt': current_timestamp,
+            }
+            table.put_item(Item=viewer_user_item)
+            print(f"✅ Viewerユーザを作成しました:")
+            print(f"   User ID: {VIEWER_USER_ID}")
+            print(f"   Email: {VIEWER_USER_EMAIL}")
+            print(f"   Password: {VIEWER_USER_PASSWORD}")
+    except Exception as e:
+        print(f"警告: Viewerユーザ作成中にエラー: {e}")
+
+    # 4. Editorユーザを作成
+    try:
+        response = table.get_item(Key={'userId': EDITOR_USER_ID})
+        if 'Item' in response:
+            print(f"Editorユーザ ({EDITOR_USER_EMAIL}) は既に存在します。スキップします。")
+        else:
+            editor_hashed_password = hash_password(EDITOR_USER_PASSWORD)
+            editor_user_item = {
+                'userId': EDITOR_USER_ID,
+                'email': EDITOR_USER_EMAIL,
+                'hashedPassword': editor_hashed_password,
+                'role': 'member',
+                'createdAt': current_timestamp,
+                'updatedAt': current_timestamp,
+            }
+            table.put_item(Item=editor_user_item)
+            print(f"✅ Editorユーザを作成しました:")
+            print(f"   User ID: {EDITOR_USER_ID}")
+            print(f"   Email: {EDITOR_USER_EMAIL}")
+            print(f"   Password: {EDITOR_USER_PASSWORD}")
+    except Exception as e:
+        print(f"警告: Editorユーザ作成中にエラー: {e}")
+
+    # 5. Memberユーザを作成
+    try:
+        response = table.get_item(Key={'userId': MEMBER_USER_ID})
+        if 'Item' in response:
+            print(f"Memberユーザ ({MEMBER_USER_EMAIL}) は既に存在します。スキップします。")
+        else:
+            member_hashed_password = hash_password(MEMBER_USER_PASSWORD)
+            member_user_item = {
+                'userId': MEMBER_USER_ID,
+                'email': MEMBER_USER_EMAIL,
+                'hashedPassword': member_hashed_password,
+                'role': 'member',
+                'createdAt': current_timestamp,
+                'updatedAt': current_timestamp,
+            }
+            table.put_item(Item=member_user_item)
+            print(f"✅ Memberユーザを作成しました:")
+            print(f"   User ID: {MEMBER_USER_ID}")
+            print(f"   Email: {MEMBER_USER_EMAIL}")
+            print(f"   Password: {MEMBER_USER_PASSWORD}")
+    except Exception as e:
+        print(f"警告: Memberユーザ作成中にエラー: {e}")
+
 
 if __name__ == '__main__':
     try:
         seed_test_user()
-        print("\nテストユーザと管理者ユーザのSeedが完了しました。")
+        print("\nテストユーザのSeedが完了しました。")
+        print("作成されたユーザ:")
+        print(f"  - E2Eテストユーザ: {TEST_USER_EMAIL}")
+        print(f"  - 管理者ユーザ: {ADMIN_USER_EMAIL}")
+        print(f"  - Viewerユーザ: {VIEWER_USER_EMAIL}")
+        print(f"  - Editorユーザ: {EDITOR_USER_EMAIL}")
+        print(f"  - Memberユーザ: {MEMBER_USER_EMAIL}")
     except Exception as e:
         print(f"\nエラー: {e}")
         exit(1)

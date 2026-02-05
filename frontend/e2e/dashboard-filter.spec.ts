@@ -45,6 +45,9 @@ test.describe('Dashboard Filter & Filter View', () => {
     // Given: トークン取得とログイン
     token = await getAccessToken(TEST_USER_EMAIL, TEST_USER_PASSWORD);
     await loginViaUI(page, TEST_USER_EMAIL, TEST_USER_PASSWORD);
+
+    // ログインが完了してダッシュボードページが表示されていることを確認
+    await page.waitForLoadState('networkidle');
   });
 
   test.afterEach(async () => {
@@ -63,13 +66,38 @@ test.describe('Dashboard Filter & Filter View', () => {
     const cardId = await createCard(token, cardName, datasetId, 'import pandas as pd\ndf');
     cleanup.cardIds.push(cardId);
 
-    const dashboardName = `E2E Dashboard Filter ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
 
-    // When: ダッシュボード編集ページに移動
-    await page.goto(`/dashboards/${dashboardId}/edit`);
-    await expect(page.getByText(dashboardName)).toBeVisible();
+    const dashboardName = `E2E Dashboard Filter ${timestamp}`;
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+
+    // ダッシュボード編集ページに遷移
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
+
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    if (editMatch) {
+      const dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // ダッシュボードを一旦保存して編集ページに戻る (referenced datasetsを更新するため)
+    await page.getByRole('button', { name: '保存' }).click();
+    await page.waitForTimeout(500);
+    // 保存後は閲覧ページにリダイレクトされるので、再度編集ページに戻る
+    await page.getByRole('button', { name: '編集' }).click();
+    await page.waitForLoadState('networkidle');
 
     // When: フィルタ設定パネルを開く
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
@@ -77,8 +105,8 @@ test.describe('Dashboard Filter & Filter View', () => {
     // Then: フィルタ設定パネルが表示される
     await expect(page.locator('[data-testid="filter-config-panel"]')).toBeVisible();
 
-    // When: フィルター追加ボタンをクリック
-    await page.getByRole('button', { name: '追加' }).click();
+    // When: フィルター追加ボタンをクリック (フィルタ設定パネル内の追加ボタン)
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
 
     // Then: フィルター追加ダイアログが表示される
     await expect(page.getByText('フィルタを追加')).toBeVisible();
@@ -87,19 +115,22 @@ test.describe('Dashboard Filter & Filter View', () => {
     await page.locator('#filter-label').fill('カテゴリ');
     await page.locator('#filter-column').fill('category');
 
-    // When: データセットを選択
+    // When: データセットを選択 (データセットIDで選択)
     await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
+    await page.getByRole('option', { name: datasetId }).click();
 
     // When: 選択肢を取得
     await page.getByRole('button', { name: '選択肢を取得' }).click();
     await page.waitForTimeout(1000); // API応答を待機
 
-    // When: 追加ボタンをクリック
-    await page.getByRole('button', { name: '追加' }).last().click();
+    // When: 追加ボタンをクリック (ダイアログ内の追加ボタン)
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
 
-    // Then: フィルターが追加される
-    await expect(page.getByText('カテゴリ')).toBeVisible();
+    // Then: ダイアログが閉じられる
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // Then: フィルターが追加される (フィルタ設定パネルで確認)
+    await expect(page.locator('[data-testid="filter-config-panel"]').getByText('カテゴリ')).toBeVisible();
 
     // When: 保存
     await page.getByRole('button', { name: '保存' }).click();
@@ -123,28 +154,56 @@ df`;
     const cardId = await createCard(token, cardName, datasetId, pythonCode);
     cleanup.cardIds.push(cardId);
 
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
     const dashboardName = `E2E Dashboard Apply ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
 
-    // When: ダッシュボード編集ページでフィルターを設定
-    await page.goto(`/dashboards/${dashboardId}/edit`);
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    let dashboardId: string | undefined;
+    if (editMatch) {
+      dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // ダッシュボードを一旦保存して編集ページに戻る (referenced datasetsを更新するため)
+    await page.getByRole('button', { name: '保存' }).click();
+    await page.waitForTimeout(500);
+    // 保存後は閲覧ページにリダイレクトされるので、再度編集ページに戻る
+    await page.getByRole('button', { name: '編集' }).click();
+    await page.waitForLoadState('networkidle');
+
+    // When: フィルタ設定パネルを開く
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
 
     await page.locator('#filter-label').fill('カテゴリ');
     await page.locator('#filter-column').fill('category');
     await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
+    await page.getByRole('option', { name: datasetId }).click();
     await page.getByRole('button', { name: '選択肢を取得' }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: '追加' }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
     await page.getByRole('button', { name: '保存' }).click();
     await page.waitForTimeout(1000);
 
-    // When: ダッシュボード閲覧ページに移動
-    await page.goto(`/dashboards/${dashboardId}`);
-    await expect(page.getByText(dashboardName)).toBeVisible();
+    // When: ダッシュボード閲覧ページに移動 (戻るボタンをクリック)
+    await page.locator('button').filter({ hasText: /arrow/i }).first().click();
+    if (dashboardId) {
+      await expect(page).toHaveURL(`/dashboards/${dashboardId}`);
+    }
 
     // When: フィルターバーを表示
     await page.getByRole('button', { name: /フィルタ/ }).click();
@@ -175,27 +234,47 @@ df`;
     const cardId = await createCard(token, cardName, datasetId, 'import pandas as pd\ndf');
     cleanup.cardIds.push(cardId);
 
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
     const dashboardName = `E2E Dashboard View ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
 
-    // フィルターを設定
-    await page.goto(`/dashboards/${dashboardId}/edit`);
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    let dashboardId: string | undefined;
+    if (editMatch) {
+      dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
     await page.locator('#filter-label').fill('カテゴリ');
     await page.locator('#filter-column').fill('category');
     await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
+    await page.getByRole('option', { name: datasetId }).click();
     await page.getByRole('button', { name: '選択肢を取得' }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: '追加' }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
     await page.getByRole('button', { name: '保存' }).click();
     await page.waitForTimeout(1000);
 
-    // When: ダッシュボード閲覧ページに移動
-    await page.goto(`/dashboards/${dashboardId}`);
-    await expect(page.getByText(dashboardName)).toBeVisible();
+    // When: ダッシュボード閲覧ページに移動 (戻るボタンをクリック)
+    await page.locator('button').filter({ hasText: /arrow/i }).first().click();
+    if (dashboardId) {
+      await expect(page).toHaveURL(`/dashboards/${dashboardId}`);
+    }
 
     // When: フィルターを適用
     await page.getByRole('button', { name: /フィルタ/ }).click();
@@ -234,27 +313,47 @@ df`;
     const cardId = await createCard(token, cardName, datasetId, 'import pandas as pd\ndf');
     cleanup.cardIds.push(cardId);
 
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
     const dashboardName = `E2E Dashboard Switch ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
 
-    // フィルターを設定
-    await page.goto(`/dashboards/${dashboardId}/edit`);
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    let dashboardId: string | undefined;
+    if (editMatch) {
+      dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
     await page.locator('#filter-label').fill('カテゴリ');
     await page.locator('#filter-column').fill('category');
     await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
+    await page.getByRole('option', { name: datasetId }).click();
     await page.getByRole('button', { name: '選択肢を取得' }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: '追加' }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
     await page.getByRole('button', { name: '保存' }).click();
     await page.waitForTimeout(1000);
 
-    // When: ダッシュボード閲覧ページに移動
-    await page.goto(`/dashboards/${dashboardId}`);
-    await expect(page.getByText(dashboardName)).toBeVisible();
+    // When: ダッシュボード閲覧ページに移動 (戻るボタンをクリック)
+    await page.locator('button').filter({ hasText: /arrow/i }).first().click();
+    if (dashboardId) {
+      await expect(page).toHaveURL(`/dashboards/${dashboardId}`);
+    }
 
     // When: フィルター1を設定してビュー1を保存
     await page.getByRole('button', { name: /フィルタ/ }).click();
@@ -306,27 +405,47 @@ df`;
     const cardId = await createCard(token, cardName, datasetId, 'import pandas as pd\ndf');
     cleanup.cardIds.push(cardId);
 
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
     const dashboardName = `E2E Dashboard Clear ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
 
-    // フィルターを設定
-    await page.goto(`/dashboards/${dashboardId}/edit`);
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    let dashboardId: string | undefined;
+    if (editMatch) {
+      dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
     await page.locator('#filter-label').fill('カテゴリ');
     await page.locator('#filter-column').fill('category');
     await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
+    await page.getByRole('option', { name: datasetId }).click();
     await page.getByRole('button', { name: '選択肢を取得' }).click();
     await page.waitForTimeout(1000);
-    await page.getByRole('button', { name: '追加' }).last().click();
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
     await page.getByRole('button', { name: '保存' }).click();
     await page.waitForTimeout(1000);
 
-    // When: ダッシュボード閲覧ページに移動
-    await page.goto(`/dashboards/${dashboardId}`);
-    await expect(page.getByText(dashboardName)).toBeVisible();
+    // When: ダッシュボード閲覧ページに移動 (戻るボタンをクリック)
+    await page.locator('button').filter({ hasText: /arrow/i }).first().click();
+    if (dashboardId) {
+      await expect(page).toHaveURL(`/dashboards/${dashboardId}`);
+    }
 
     // When: フィルターを適用
     await page.getByRole('button', { name: /フィルタ/ }).click();
@@ -360,25 +479,49 @@ df`;
     const cardId = await createCard(token, cardName, datasetId, 'import pandas as pd\ndf');
     cleanup.cardIds.push(cardId);
 
+    // When: ダッシュボードをUI経由で作成
+    // ログイン後、既にダッシュボードページにいるはず
+    await expect(page).toHaveURL('/dashboards');
+    await page.getByRole('button', { name: '新規作成' }).click();
     const dashboardName = `E2E Dashboard Date ${timestamp}`;
-    const dashboardId = await createDashboard(token, dashboardName, [cardId]);
-    cleanup.dashboardIds.push(dashboardId);
+    await page.getByLabel('名前').fill(dashboardName);
+    await page.getByRole('button', { name: '作成' }).last().click();
+    await expect(page).toHaveURL(/\/dashboards\/dash_[a-zA-Z0-9]+\/edit/, { timeout: 10000 });
 
-    // When: ダッシュボード編集ページでフィルターを設定
-    await page.goto(`/dashboards/${dashboardId}/edit`);
+    // ダッシュボードIDを取得してクリーンアップ用に保存
+    const editUrl = page.url();
+    const editMatch = editUrl.match(/\/dashboards\/(dash_[a-zA-Z0-9]+)\/edit/);
+    let dashboardId: string | undefined;
+    if (editMatch) {
+      dashboardId = editMatch[1];
+      cleanup.dashboardIds.push(dashboardId);
+    }
+
+    // カード追加
+    await page.getByRole('button', { name: 'カード追加' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.getByText(cardName).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+
+    // ダッシュボードを一旦保存して編集ページに戻る (referenced datasetsを更新するため)
+    await page.getByRole('button', { name: '保存' }).click();
+    await page.waitForTimeout(500);
+    // 保存後は閲覧ページにリダイレクトされるので、再度編集ページに戻る
+    await page.getByRole('button', { name: '編集' }).click();
+    await page.waitForLoadState('networkidle');
+
+    // When: フィルタ設定パネルを開く
     await page.getByRole('button', { name: 'フィルタ設定' }).click();
-    await page.getByRole('button', { name: '追加' }).click();
+    await page.locator('[data-testid="filter-config-panel"]').getByRole('button', { name: '追加' }).click();
 
     // When: 日付範囲フィルターを設定
     await page.locator('#filter-label').fill('期間');
     await page.locator('#filter-type').click();
     await page.getByRole('option', { name: '日付範囲' }).click();
     await page.locator('#filter-column').fill('date');
-    await page.locator('#filter-dataset').click();
-    await page.getByRole('option', { name: datasetName }).click();
 
-    // When: 追加ボタンをクリック
-    await page.getByRole('button', { name: '追加' }).last().click();
+    // When: 追加ボタンをクリック (日付範囲フィルターはデータセット選択不要)
+    await page.getByRole('dialog').getByRole('button', { name: '追加' }).click();
 
     // Then: 日付範囲フィルターが追加される
     await expect(page.getByText('期間')).toBeVisible();

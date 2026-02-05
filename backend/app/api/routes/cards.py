@@ -1,4 +1,5 @@
 """Card API routes."""
+import uuid
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -144,6 +145,7 @@ async def create_card(
     # Create card
     repo = CardRepository()
     card_dict = card_data.model_dump()
+    card_dict["id"] = f"card_{uuid.uuid4().hex[:12]}"
     card_dict["owner_id"] = current_user.id
 
     card = await repo.create(card_dict, dynamodb)
@@ -338,6 +340,7 @@ async def preview_card(
             dataset_id=card.dataset_id,
             use_cache=False,
             cache_service=cache_service,
+            code=card.code,
         )
 
         return api_response({
@@ -428,6 +431,7 @@ async def execute_card(
             dataset_id=card.dataset_id,
             use_cache=execute_req.use_cache,
             cache_service=cache_service,
+            code=card.code,
         )
 
         return api_response({

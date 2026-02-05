@@ -37,11 +37,15 @@ class ResourceLimiter:
             # メモリ制限 (Linux only - macOSでは RLIMIT_AS が動作しない)
             if self._is_linux:
                 import resource
-                old_mem_limit = resource.getrlimit(resource.RLIMIT_AS)
-                resource.setrlimit(
-                    resource.RLIMIT_AS,
-                    (self.max_memory, self.max_memory),
-                )
+                try:
+                    old_mem_limit = resource.getrlimit(resource.RLIMIT_AS)
+                    resource.setrlimit(
+                        resource.RLIMIT_AS,
+                        (self.max_memory, self.max_memory),
+                    )
+                except (ValueError, OSError, Exception):
+                    # コンテナ環境等でリソース制限を設定できない場合は無視
+                    old_mem_limit = None
 
             yield
 
@@ -55,4 +59,7 @@ class ResourceLimiter:
             # メモリ制限を元に戻す
             if self._is_linux and old_mem_limit is not None:
                 import resource
-                resource.setrlimit(resource.RLIMIT_AS, old_mem_limit)
+                try:
+                    resource.setrlimit(resource.RLIMIT_AS, old_mem_limit)
+                except (ValueError, OSError):
+                    pass  # 復元できなくても無視

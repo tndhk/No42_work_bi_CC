@@ -38,7 +38,7 @@ services:
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET_DATASETS=bi-datasets
-      - EXECUTOR_ENDPOINT=http://executor:8080
+      - EXECUTOR_URL=http://executor:8080
       - VERTEX_AI_PROJECT_ID=${VERTEX_AI_PROJECT_ID:-}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     depends_on:

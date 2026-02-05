@@ -9,12 +9,14 @@ export interface OwnerRef {
 }
 
 export interface Card {
-  card_id: string;
+  card_id?: string;
+  id?: string;
   name: string;
   dataset?: CardRef;
   used_columns?: string[];
   filter_applicable?: string[];
-  owner: OwnerRef;
+  owner?: OwnerRef;
+  owner_id?: string;
   created_at: string;
 }
 
@@ -62,7 +64,7 @@ export function isCard(value: unknown): value is Card {
   if (typeof value !== 'object' || value === null) return false;
   const obj = value as Record<string, unknown>;
   return (
-    typeof obj.card_id === 'string' &&
+    (typeof obj.card_id === 'string' || typeof obj.id === 'string') &&
     typeof obj.name === 'string' &&
     typeof obj.created_at === 'string'
   );

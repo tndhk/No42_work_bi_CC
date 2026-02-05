@@ -42,7 +42,7 @@ export function CardEditPage() {
   const handleSave = () => {
     if (isNew) {
       createMutation.mutate({ name, code, dataset_id: datasetId }, {
-        onSuccess: (newCard) => navigate(`/cards/${newCard.card_id}`),
+        onSuccess: (newCard) => navigate(`/cards/${newCard.card_id || newCard.id}`),
       });
     } else {
       updateMutation.mutate({ cardId: id!, data: { name, code } }, {

@@ -43,24 +43,27 @@ export function CardListPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data?.data.map((card) => (
-            <TableRow key={card.card_id}>
-              <TableCell className="font-medium">{card.name}</TableCell>
-              <TableCell>{card.dataset?.name || '-'}</TableCell>
-              <TableCell>{card.owner.name}</TableCell>
-              <TableCell>{new Date(card.created_at).toLocaleString('ja-JP')}</TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/cards/${card.card_id}`)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(card.card_id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+          {data?.data.map((card) => {
+            const cardId = card.card_id || card.id || '';
+            return (
+              <TableRow key={cardId}>
+                <TableCell className="font-medium">{card.name}</TableCell>
+                <TableCell>{card.dataset?.name || '-'}</TableCell>
+                <TableCell>{card.owner?.name || '-'}</TableCell>
+                <TableCell>{new Date(card.created_at).toLocaleString('ja-JP')}</TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/cards/${cardId}`)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(cardId)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
           {data?.data.length === 0 && (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground py-8">

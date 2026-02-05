@@ -16,7 +16,7 @@ export function AddCardDialog({ open, onOpenChange, onSelect, existingCardIds }:
   const { data, isLoading } = useCards({ limit: 100 });
 
   const availableCards = data?.data.filter(
-    (card) => !existingCardIds.includes(card.card_id)
+    (card) => !existingCardIds.includes(card.card_id || card.id || '')
   ) || [];
 
   return (
@@ -33,21 +33,24 @@ export function AddCardDialog({ open, onOpenChange, onSelect, existingCardIds }:
           </p>
         ) : (
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {availableCards.map((card) => (
-              <Button
-                key={card.card_id}
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => onSelect(card.card_id)}
-              >
-                <div className="text-left">
-                  <div className="font-medium">{card.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {card.dataset?.name || 'データセット未設定'}
+            {availableCards.map((card) => {
+              const cardId = card.card_id || card.id || '';
+              return (
+                <Button
+                  key={cardId}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => onSelect(cardId)}
+                >
+                  <div className="text-left">
+                    <div className="font-medium">{card.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {card.dataset?.name || 'データセット未設定'}
+                    </div>
                   </div>
-                </div>
-              </Button>
-            ))}
+                </Button>
+              );
+            })}
           </div>
         )}
       </DialogContent>

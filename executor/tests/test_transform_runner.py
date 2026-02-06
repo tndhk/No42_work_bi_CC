@@ -108,7 +108,7 @@ def transform(inputs, params):
 def some_other_func():
     pass
 """
-        with pytest.raises(ValueError, match="transform関数が定義されていません"):
+        with pytest.raises(ValueError, match="transform関数またはresult変数が定義されていません"):
             runner.execute(code, {'dataset1': self._make_input_df()}, {})
 
     def test_execute_invalid_return_type_raises(self):
@@ -199,3 +199,85 @@ def transform(inputs, params):
         result = runner.execute(code, {}, {})
 
         assert list(result.df['result']) == [1, 2, 3]
+
+
+class TestTransformRunnerInlineStyle:
+    """inline スタイル（transform関数なし）のテスト"""
+
+    def _make_runner(self, **kwargs):
+        from app.transform_runner import TransformRunner
+        return TransformRunner(**kwargs)
+
+    def _make_input_df(self):
+        return pd.DataFrame({
+            'date': ['2024-01-01', '2024-01-02', '2024-01-03'],
+            'category': ['A', 'B', 'A'],
+            'amount': [100, 200, 300],
+        })
+
+    def test_inline_style_params_accessible(self):
+        """inlineスタイルでparamsにアクセスできる"""
+        runner = self._make_runner(timeout_seconds=5)
+        code = """
+def transform(inputs, params):
+    df = inputs['dataset1'].copy()
+    multiplier = params.get('multiplier', 1)
+    df['result'] = df['amount'] * multiplier
+    result = df
+    return result
+"""
+        # This works because params is passed as argument.
+        # Now test that params is also available in global scope for inline code.
+        inline_code = """
+df_0 = inputs['dataset1'].copy()
+multiplier = params.get('multiplier', 1)
+df_0['result'] = df_0['amount'] * multiplier
+result = df_0
+"""
+        inputs = {'dataset1': self._make_input_df()}
+        result = runner.execute(inline_code, inputs, {'multiplier': 3})
+
+        assert list(result.df['result']) == [300, 600, 900]
+
+    def test_inline_style_inputs_accessible(self):
+        """inlineスタイルでinputs辞書にアクセスできる"""
+        runner = self._make_runner(timeout_seconds=5)
+        inline_code = """
+df = inputs['sales']
+result = df[df['quantity'] > 15]
+"""
+        sales_df = pd.DataFrame({
+            'product_id': [1, 2, 3],
+            'quantity': [10, 20, 30],
+        })
+        inputs = {'sales': sales_df}
+        result = runner.execute(inline_code, inputs, {})
+
+        assert len(result.df) == 2
+        assert list(result.df['quantity']) == [20, 30]
+
+    def test_inline_style_df_0_accessible(self):
+        """inlineスタイルでdf_0, df_1 にアクセスできる"""
+        runner = self._make_runner(timeout_seconds=5)
+        inline_code = """
+result = pd.concat([df_0, df_1], ignore_index=True)
+"""
+        df_a = pd.DataFrame({'x': [1, 2]})
+        df_b = pd.DataFrame({'x': [3, 4]})
+        inputs = {'a': df_a, 'b': df_b}
+        result = runner.execute(inline_code, inputs, {})
+
+        assert len(result.df) == 4
+        assert list(result.df['x']) == [1, 2, 3, 4]
+
+    def test_inline_style_params_empty_dict(self):
+        """inlineスタイルでparamsが空辞書でもアクセス可能"""
+        runner = self._make_runner(timeout_seconds=5)
+        inline_code = """
+val = params.get('missing_key', 'default_value')
+result = pd.DataFrame({'value': [val]})
+"""
+        inputs = {'dataset1': self._make_input_df()}
+        result = runner.execute(inline_code, inputs, {})
+
+        assert list(result.df['value']) == ['default_value']

@@ -329,6 +329,53 @@ class TestUpdateCard:
 
         assert response.status_code == 403
 
+    def test_update_card_returns_dataset_info(
+        self, authenticated_client: TestClient, mock_user: User, sample_card: Card
+    ) -> None:
+        """Test that update_card response includes dataset info for consistency with get_card."""
+        from app.repositories import card_repository, dataset_repository
+
+        updated_card = Card(
+            **{
+                **sample_card.model_dump(),
+                "name": "Updated Name",
+            }
+        )
+
+        async def mock_get_by_id_card(self, pk, dynamodb):
+            return sample_card
+
+        async def mock_update_card(self, pk, updates, dynamodb):
+            return updated_card
+
+        mock_dataset = MagicMock()
+        mock_dataset.id = "dataset_123"
+        mock_dataset.name = "Test Dataset"
+
+        async def mock_get_by_id_dataset(self, pk, dynamodb):
+            return mock_dataset
+
+        with patch.object(
+            card_repository.CardRepository, "get_by_id", mock_get_by_id_card
+        ), patch.object(
+            card_repository.CardRepository, "update", mock_update_card
+        ), patch.object(
+            dataset_repository.DatasetRepository, "get_by_id", mock_get_by_id_dataset
+        ):
+            response = authenticated_client.put(
+                f"/api/cards/{sample_card.id}",
+                json={"name": "Updated Name"},
+            )
+
+        assert response.status_code == 200
+        response_data = response.json()
+        data = response_data["data"]
+        assert data["name"] == "Updated Name"
+        # Dataset enrichment should be present (consistent with get_card)
+        assert "dataset" in data
+        assert data["dataset"]["id"] == "dataset_123"
+        assert data["dataset"]["name"] == "Test Dataset"
+
     def test_update_card_not_found(self, authenticated_client: TestClient) -> None:
         """Test updating non-existent card."""
         from app.repositories import card_repository

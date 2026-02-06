@@ -72,6 +72,29 @@ def _check_owner_permission(card: Card, user_id: str) -> None:
         )
 
 
+async def _enrich_card_with_dataset(
+    card_dict: dict[str, Any],
+    dataset_id: str | None,
+    dynamodb: Any,
+) -> dict[str, Any]:
+    """Enrich card dict with dataset info if dataset_id is present.
+
+    Args:
+        card_dict: Card data as dictionary
+        dataset_id: Dataset ID (may be None)
+        dynamodb: DynamoDB resource
+
+    Returns:
+        Enriched card dict with dataset info added if available
+    """
+    if dataset_id:
+        dataset_repo = DatasetRepository()
+        dataset = await dataset_repo.get_by_id(dataset_id, dynamodb)
+        if dataset:
+            card_dict["dataset"] = {"id": dataset.id, "name": dataset.name}
+    return card_dict
+
+
 async def _get_card_and_dataset(
     card_id: str,
     dynamodb: Any,
@@ -230,7 +253,6 @@ async def list_cards(
         Paginated list of cards
     """
     repo = CardRepository()
-    dataset_repo = DatasetRepository()
     all_cards = await repo.list_by_owner(current_user.id, dynamodb)
 
     # Apply pagination
@@ -242,10 +264,9 @@ async def list_cards(
     for card in cards:
         card_dict = card.model_dump()
         # Add dataset info
-        if card.dataset_id:
-            dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
-            if dataset:
-                card_dict["dataset"] = {"id": dataset.id, "name": dataset.name}
+        card_dict = await _enrich_card_with_dataset(
+            card_dict, card.dataset_id, dynamodb
+        )
         # Add owner info (current user owns all listed cards)
         card_dict["owner"] = {"user_id": current_user.id, "name": current_user.email}
         enriched_cards.append(card_dict)
@@ -299,7 +320,14 @@ async def create_card(
     card_dict["owner_id"] = current_user.id
 
     card = await repo.create(card_dict, dynamodb)
-    return api_response(card.model_dump())
+
+    # Enrich with dataset info for frontend compatibility
+    result_dict = card.model_dump()
+    result_dict = await _enrich_card_with_dataset(
+        result_dict, card.dataset_id, dynamodb
+    )
+
+    return api_response(result_dict)
 
 
 # ============================================================================
@@ -337,11 +365,9 @@ async def get_card(
 
     # Enrich with dataset info for frontend compatibility
     card_dict = card.model_dump()
-    if card.dataset_id:
-        dataset_repo = DatasetRepository()
-        dataset = await dataset_repo.get_by_id(card.dataset_id, dynamodb)
-        if dataset:
-            card_dict["dataset"] = {"id": dataset.id, "name": dataset.name}
+    card_dict = await _enrich_card_with_dataset(
+        card_dict, card.dataset_id, dynamodb
+    )
 
     return api_response(card_dict)
 
@@ -393,7 +419,13 @@ async def update_card(
             detail="Card not found after update",
         )
 
-    return api_response(updated_card.model_dump())
+    # Enrich with dataset info for frontend compatibility
+    card_dict = updated_card.model_dump()
+    card_dict = await _enrich_card_with_dataset(
+        card_dict, updated_card.dataset_id, dynamodb
+    )
+
+    return api_response(card_dict)
 
 
 # ============================================================================

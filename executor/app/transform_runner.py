@@ -39,8 +39,12 @@ class TransformRunner:
     ) -> TransformResult:
         """Transformコードを実行してDataFrameを生成
 
+        2つのスタイルをサポート:
+        - function-based: def transform(inputs, params) を定義し DataFrame を返す
+        - inline: df_0, inputs, params をグローバルで参照し result に代入する
+
         Args:
-            code: transform関数を含むPythonコード
+            code: transform関数またはinlineコードを含むPythonコード
             inputs: {dataset_id: DataFrame, ...} の辞書
             params: ユーザー定義パラメータ
 
@@ -48,23 +52,36 @@ class TransformRunner:
             TransformResult
 
         Raises:
-            ValueError: transform関数が未定義、または不正な戻り値
+            ValueError: transform関数/result変数が未定義、または不正な戻り値
             TimeoutError: 実行タイムアウト
         """
         start_time = time.perf_counter()
 
+        # inline スタイル用の extra_globals を構築
+        input_dfs = list(inputs.values())
+        extra_globals: dict[str, Any] = {
+            f"df_{i}": df for i, df in enumerate(input_dfs)
+        }
+        extra_globals["inputs"] = inputs
+        extra_globals["params"] = params
+
         with self._limiter.limit():
             # コードをSecureExecutor内で実行
-            local_ns = self._executor.execute(code, {}, {})
+            local_ns = self._executor.execute(
+                code, inputs, params, extra_globals=extra_globals,
+            )
 
-            # transform関数を取得
-            if 'transform' not in local_ns:
-                raise ValueError("コードにtransform関数が定義されていません")
-
-            transform_func = local_ns['transform']
-
-            # transform関数を実行
-            result = transform_func(inputs, params)
+            if 'transform' in local_ns:
+                # function-based スタイル: transform関数を実行
+                transform_func = local_ns['transform']
+                result = transform_func(inputs, params)
+            elif 'result' in local_ns:
+                # inline スタイル: result 変数を取得
+                result = local_ns['result']
+            else:
+                raise ValueError(
+                    "コードにtransform関数またはresult変数が定義されていません"
+                )
 
         # 結果をDataFrameとして検証
         if not isinstance(result, pd.DataFrame):

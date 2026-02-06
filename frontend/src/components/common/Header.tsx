@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -6,17 +7,45 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LogOut, User } from 'lucide-react';
+import {
+  Sheet,
+  SheetContent,
+} from '@/components/ui/sheet';
+import { LogOut, User, Menu } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useSidebarStore } from '@/stores/sidebar-store';
 import { useLogout } from '@/hooks';
+import { MobileSidebar } from './MobileSidebar';
 
 export function Header() {
   const user = useAuthStore((s) => s.user);
   const { mutate: logout } = useLogout();
+  const { toggle } = useSidebarStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-14 items-center px-4">
+        <div className="flex items-center gap-2 md:hidden">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="hidden md:flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggle}
+            className="hidden md:flex"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </div>
         <div className="ml-auto flex items-center gap-2">
           {user && (
             <DropdownMenu>
@@ -40,6 +69,11 @@ export function Header() {
           )}
         </div>
       </div>
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent side="left" className="w-64 p-0">
+          <MobileSidebar onNavigate={() => setMobileMenuOpen(false)} />
+        </SheetContent>
+      </Sheet>
     </header>
   );
 }

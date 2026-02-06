@@ -68,10 +68,10 @@ export function DashboardViewer({ dashboard, filters, onExecuteCard }: Dashboard
       {dashboard.layout.cards.map((item) => (
         <div
           key={item.card_id}
-          className="border rounded-lg bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200"
+          className="border border-border rounded-lg bg-card overflow-hidden shadow-sm hover:shadow-lg transition-all duration-200"
         >
           {loading[item.card_id] ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-full min-h-[200px]">
               <LoadingSpinner />
             </div>
           ) : (

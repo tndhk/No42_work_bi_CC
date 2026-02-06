@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CategoryFilter } from './filters/CategoryFilter';
 import { DateRangeFilter } from './filters/DateRangeFilter';
+import { cn } from '@/lib/utils';
 import type { FilterDefinition } from '@/types';
 
 interface FilterBarProps {
@@ -17,7 +18,13 @@ export function FilterBar({ filters, values, onFilterChange, onClearAll }: Filte
   if (filters.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/80 backdrop-blur-sm shadow-sm p-3" data-testid="filter-bar">
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-2 shadow-sm',
+        'animate-in fade-in-0 slide-in-from-top-1 duration-200'
+      )}
+      data-testid="filter-bar"
+    >
       {filters.map((filter) => {
         if (filter.type === 'category') {
           return (
@@ -48,11 +55,11 @@ export function FilterBar({ filters, values, onFilterChange, onClearAll }: Filte
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 text-xs text-muted-foreground"
+          className="h-8 text-xs text-muted-foreground hover:text-foreground"
           onClick={onClearAll}
         >
           <X className="mr-1 h-3 w-3" />
-          クリア
+          すべてクリア
         </Button>
       )}
     </div>

@@ -36,10 +36,14 @@ def mock_other_user():
 @pytest.fixture
 def sample_layout():
     """Create sample layout items."""
-    return [
-        LayoutItem(card_id="card_1", x=0, y=0, w=4, h=3),
-        LayoutItem(card_id="card_2", x=4, y=0, w=4, h=3),
-    ]
+    from app.models.dashboard import DashboardLayout
+
+    return DashboardLayout(
+        cards=[
+            LayoutItem(card_id="card_1", x=0, y=0, w=4, h=3),
+            LayoutItem(card_id="card_2", x=4, y=0, w=4, h=3),
+        ]
+    )
 
 
 @pytest.fixture
@@ -298,10 +302,12 @@ class TestCreateDashboard:
                 json={
                     "name": "New Dashboard",
                     "description": "With layout",
-                    "layout": [
-                        {"card_id": "card_1", "x": 0, "y": 0, "w": 4, "h": 3},
-                        {"card_id": "card_2", "x": 4, "y": 0, "w": 4, "h": 3},
-                    ],
+                    "layout": {
+                        "cards": [
+                            {"card_id": "card_1", "x": 0, "y": 0, "w": 4, "h": 3},
+                            {"card_id": "card_2", "x": 4, "y": 0, "w": 4, "h": 3},
+                        ]
+                    },
                     "filters": [
                         {
                             "id": "filter_1",
@@ -319,7 +325,7 @@ class TestCreateDashboard:
             assert "data" in response_data
             data = response_data["data"]
             assert data["name"] == "New Dashboard"
-            assert len(data["layout"]) == 2
+            assert len(data["layout"]["cards"]) == 2
             assert len(data["filters"]) == 1
 
     def test_create_dashboard_empty_name(

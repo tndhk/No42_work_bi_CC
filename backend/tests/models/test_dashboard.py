@@ -61,18 +61,22 @@ class TestDashboardCreate:
 
     def test_dashboard_create_with_layout(self):
         """Test DashboardCreate with layout."""
-        layout = [
-            LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3),
-            LayoutItem(card_id="card-2", x=4, y=0, w=4, h=3)
-        ]
+        from app.models.dashboard import DashboardLayout
+
+        layout = DashboardLayout(
+            cards=[
+                LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3),
+                LayoutItem(card_id="card-2", x=4, y=0, w=4, h=3)
+            ]
+        )
         dashboard = DashboardCreate(
             name="Sales Dashboard",
             description="Overview",
             layout=layout
         )
 
-        assert len(dashboard.layout) == 2
-        assert dashboard.layout[0].card_id == "card-1"
+        assert len(dashboard.layout.cards) == 2
+        assert dashboard.layout.cards[0].card_id == "card-1"
 
     def test_dashboard_create_missing_name(self):
         """Test DashboardCreate validation fails without name."""
@@ -112,8 +116,10 @@ class TestDashboard:
 
     def test_dashboard_with_layout(self):
         """Test Dashboard with layout."""
+        from app.models.dashboard import DashboardLayout
+
         now = datetime.utcnow()
-        layout = [LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3)]
+        layout = DashboardLayout(cards=[LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3)])
         dashboard = Dashboard(
             id="dashboard-123",
             name="Sales Dashboard",
@@ -122,8 +128,8 @@ class TestDashboard:
             updated_at=now
         )
 
-        assert len(dashboard.layout) == 1
-        assert dashboard.layout[0].card_id == "card-1"
+        assert len(dashboard.layout.cards) == 1
+        assert dashboard.layout.cards[0].card_id == "card-1"
 
     def test_dashboard_missing_id(self):
         """Test Dashboard validation fails without id."""
@@ -175,13 +181,15 @@ class TestDashboardUpdate:
 
     def test_dashboard_update_with_layout(self):
         """Test DashboardUpdate with layout."""
-        layout = [LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3)]
+        from app.models.dashboard import DashboardLayout
+
+        layout = DashboardLayout(cards=[LayoutItem(card_id="card-1", x=0, y=0, w=4, h=3)])
         update = DashboardUpdate(
             name="Updated Dashboard",
             layout=layout
         )
 
-        assert len(update.layout) == 1
+        assert len(update.layout.cards) == 1
 
     def test_dashboard_update_optional_fields(self):
         """Test DashboardUpdate with optional fields."""

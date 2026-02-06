@@ -194,8 +194,8 @@ class TestTransformExecutionService:
                 # Mock Executor API call
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -398,8 +398,8 @@ class TestTransformExecutionService:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -450,8 +450,8 @@ class TestTransformExecutionService:
                                 call_args = mock_client.post.call_args
                                 assert call_args is not None
                                 json_body = call_args[1]["json"]
-                                assert "datasets" in json_body
-                                assert len(json_body["datasets"]) == 2
+                                assert "input_datasets" in json_body
+                                assert len(json_body["input_datasets"]) == 2
 
     @pytest.mark.asyncio
     async def test_execute_executor_retry_on_5xx(
@@ -493,8 +493,8 @@ class TestTransformExecutionService:
                     )
 
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_success_response = MagicMock()
@@ -715,8 +715,8 @@ class TestTransformExecutionService:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -809,8 +809,8 @@ class TestTransformExecutionService:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -902,8 +902,8 @@ class TestTransformExecutionHistoryIntegration:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -988,8 +988,8 @@ class TestTransformExecutionHistoryIntegration:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()
@@ -1141,8 +1141,8 @@ class TestTransformExecutionHistoryIntegration:
 
                 with patch("httpx.AsyncClient") as mock_client_cls:
                     executor_response = {
-                        "data": sample_dataframe.to_dict(orient="records"),
-                        "columns": ["col1", "col2"],
+                        "output_rows": sample_dataframe.to_dict(orient="records"),
+                        "column_names": ["col1", "col2"],
                         "row_count": 3,
                     }
                     mock_response = MagicMock()

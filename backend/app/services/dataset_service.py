@@ -103,8 +103,11 @@ class DatasetService:
         Raises:
             ValueError: If inputs are invalid, S3 key not found, or CSV is empty
         """
-        # Validate inputs
-        self._validate_import_inputs(b"", name, owner_id)
+        # Validate name and owner_id
+        if not name or not name.strip():
+            raise ValueError("name cannot be empty")
+        if not owner_id or not owner_id.strip():
+            raise ValueError("owner_id cannot be empty")
 
         # Fetch CSV from S3
         file_bytes = await self._fetch_s3_csv(source_s3_client, s3_bucket, s3_key)

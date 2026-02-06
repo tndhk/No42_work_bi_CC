@@ -80,7 +80,7 @@ class TransformRunner:
                 result = local_ns['result']
             else:
                 raise ValueError(
-                    "コードにtransform関数またはresult変数が定義されていません"
+                    "コードには 'transform' 関数または 'result' 変数が必要です"
                 )
 
         # 結果をDataFrameとして検証

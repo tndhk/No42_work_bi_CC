@@ -946,7 +946,7 @@ class TestReimportExecute:
         # Create updated dataset
         updated_dataset = Dataset(
             **{
-                **existing_dataset.model_dump(),
+                **existing_dataset.model_dump(by_alias=True),
                 'row_count': 3,
                 'last_import_at': datetime.now(timezone.utc),
                 'last_import_by': 'user_123',
@@ -1059,8 +1059,8 @@ class TestReimportExecute:
         ]
         updated_dataset = Dataset(
             **{
-                **existing_dataset.model_dump(),
-                'columns': new_columns,
+                **existing_dataset.model_dump(by_alias=True),
+                'schema': new_columns,
                 'row_count': 2,
                 'column_count': 3,
                 'last_import_at': datetime.now(timezone.utc),

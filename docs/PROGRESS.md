@@ -1,6 +1,6 @@
 # 社内BI・Pythonカード 実装進捗
 
-Last Updated: 2026-02-05
+Last Updated: 2026-02-06
 
 要件定義書 (docs/requirements.md) および設計書 (docs/design.md) に基づく全機能の実装ステータス。
 
@@ -51,8 +51,8 @@ Last Updated: 2026-02-05
 
 ### FR-8: Chatbot (データ質問)
 
-- [ ] FR-8.1 Chatbot機能 (Vertex AI Gemini連携、ChatbotPanel UI)
-- [ ] FR-8.2 Datasetサマリ生成 (スキーマ・サンプル行・統計情報)
+- [x] FR-8.1 Chatbot機能 (Vertex AI Gemini連携、ChatbotPanel UI、SSEストリーミング)
+- [x] FR-8.2 Datasetサマリ生成 (スキーマ・サンプル行・統計情報、DatasetSummarizer)
 
 ---
 
@@ -93,9 +93,9 @@ Last Updated: 2026-02-05
 
 ## 品質・テスト (完了済み)
 
-- [x] フロントエンドテスト 83%+ カバレッジ (64テストファイル)
-- [x] バックエンドテスト充実 (52モジュール、15,363行)
-- [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard, sharing)
+- [x] フロントエンドテスト 83%+ カバレッジ (79テストファイル)
+- [x] バックエンドテスト充実 (66テストファイル)
+- [x] Playwright E2Eテスト基盤 (auth, dataset, card-dashboard, card-execution, dashboard-filter, sharing, transform, admin)
 - [x] Docker Compose ヘルスチェック
 - [x] ドキュメント整備 (codemaps, CONTRIB.md, RUNBOOK.md)
 
@@ -116,6 +116,8 @@ Last Updated: 2026-02-05
 | FR-2.1 | Transform基盤 CRUD + 手動実行 (Backend API/Repository + Frontend UI) | fb09d08 | 2026-02-04 |
 | FR-2.2/2.3 | Transform実行履歴 + スケジュール実行 + 実行制約 (TransformRunner, 300秒タイムアウト) | 5ead250 | 2026-02-04 |
 | NFR-3/4 | 監査ログ (AuditLog モデル/リポジトリ/サービス + 全API統合 + 管理画面) | -- | 2026-02-05 |
+| FR-8 | Chatbot機能 (Vertex AI Gemini + ChatbotPanel + SSE + DatasetSummarizer) | 99f9689 | 2026-02-06 |
+| Docs | 包括的文書更新 (CONTRIB/RUNBOOK/PROGRESS 最新化) | -- | 2026-02-06 |
 
 ## 次期フェーズ候補
 
@@ -123,5 +125,5 @@ Last Updated: 2026-02-05
 |--------|--------|----------|--------|
 | - | Transform (ETL) | 完了 (FR-2.1/2.2/2.3) | - |
 | - | 監査ログ | 完了 (NFR-3/4) | - |
-| 中 | Chatbot (Vertex AI) | Vertex AI設定が必要 | 大 |
+| - | Chatbot (Vertex AI) | 完了 (FR-8.1/8.2) | - |
 | 低 | パーティションプルーニング | NFR-1 | 中 |

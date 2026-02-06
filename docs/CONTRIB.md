@@ -1,6 +1,6 @@
 # 開発者ガイド (CONTRIB)
 
-最終更新: 2026-02-05
+最終更新: 2026-02-06
 
 ## このドキュメントについて
 
@@ -45,13 +45,46 @@ docker compose up --build
 
 `.env.example` を `.env` にコピーして設定。
 
-Chatbot 機能を使用する場合は、以下の Vertex AI 関連の環境変数が必要:
-- `VERTEX_AI_PROJECT_ID`
-- `VERTEX_AI_LOCATION`
-- `VERTEX_AI_MODEL`
-- `GOOGLE_APPLICATION_CREDENTIALS`
+### 環境変数一覧
 
-> 詳細は [tech-spec.md Section 3.1](tech-spec.md#31-環境変数) を参照
+| カテゴリ | 変数名 | デフォルト値 | 説明 |
+|---------|--------|-------------|------|
+| 基本 | `ENV` | `local` | 実行環境 (local / staging / production) |
+| API | `API_HOST` | `0.0.0.0` | APIバインドアドレス |
+| API | `API_PORT` | `8000` | APIポート番号 |
+| API | `API_WORKERS` | `4` | Uvicorn ワーカー数 |
+| API | `API_DEBUG` | `false` | デバッグモード |
+| 認証 | `JWT_SECRET_KEY` | (要設定) | JWT署名キー (32文字以上) |
+| 認証 | `JWT_ALGORITHM` | `HS256` | JWTアルゴリズム |
+| 認証 | `JWT_EXPIRE_MINUTES` | `1440` | JWTトークン有効期限 (分) |
+| 認証 | `PASSWORD_MIN_LENGTH` | `8` | パスワード最小文字数 |
+| DynamoDB | `DYNAMODB_ENDPOINT` | `http://dynamodb-local:8000` | DynamoDBエンドポイント |
+| DynamoDB | `DYNAMODB_REGION` | `ap-northeast-1` | AWSリージョン |
+| DynamoDB | `DYNAMODB_TABLE_PREFIX` | `bi_` | テーブル名プレフィックス |
+| S3 | `S3_ENDPOINT` | `http://minio:9000` | S3エンドポイント |
+| S3 | `S3_REGION` | `ap-northeast-1` | S3リージョン |
+| S3 | `S3_BUCKET_DATASETS` | `bi-datasets` | Datasetバケット名 |
+| S3 | `S3_BUCKET_STATIC` | `bi-static` | 静的ファイルバケット名 |
+| S3 | `S3_ACCESS_KEY` | `minioadmin` | S3アクセスキー (ローカルのみ) |
+| S3 | `S3_SECRET_KEY` | `minioadmin` | S3シークレットキー (ローカルのみ) |
+| Vertex AI | `VERTEX_AI_PROJECT_ID` | (要設定) | GCPプロジェクトID (Chatbot機能) |
+| Vertex AI | `VERTEX_AI_LOCATION` | `asia-northeast1` | GCPリージョン |
+| Vertex AI | `VERTEX_AI_MODEL` | `gemini-1.5-pro` | Vertex AIモデル名 |
+| Vertex AI | `GOOGLE_APPLICATION_CREDENTIALS` | (要設定) | GCPサービスアカウントキーのパス |
+| Executor | `EXECUTOR_ENDPOINT` | `http://executor:8080` | Executorエンドポイント |
+| Executor | `EXECUTOR_TIMEOUT_CARD` | `10` | Card実行タイムアウト (秒) |
+| Executor | `EXECUTOR_TIMEOUT_TRANSFORM` | `300` | Transform実行タイムアウト (秒) |
+| Executor | `EXECUTOR_MAX_CONCURRENT_CARDS` | `10` | Card同時実行数上限 |
+| Executor | `EXECUTOR_MAX_CONCURRENT_TRANSFORMS` | `5` | Transform同時実行数上限 |
+| Scheduler | `SCHEDULER_ENABLED` | `false` | Transformスケジューラー有効化 |
+| Scheduler | `SCHEDULER_INTERVAL_SECONDS` | `60` | スケジューラーチェック間隔 (秒) |
+| Logging | `LOG_LEVEL` | `INFO` | ログレベル (DEBUG/INFO/WARNING/ERROR) |
+| Logging | `LOG_FORMAT` | `json` | ログフォーマット (json/text) |
+| Rate Limit | `RATE_LIMIT_ENABLED` | `true` | レート制限有効化 (E2Eテスト時はfalse) |
+
+Chatbot 機能を使用する場合は Vertex AI 関連の4変数を設定すること。
+
+> バリデーションルール等の詳細は [tech-spec.md Section 3.1](tech-spec.md#31-環境変数) を参照
 
 ---
 
@@ -105,7 +138,7 @@ Chatbot 機能を使用する場合は、以下の Vertex AI 関連の環境変�
 
 | コンポーネント | 基準 |
 |---------------|------|
-| フロントエンド | 83%+ coverage, 64 テストファイル |
+| フロントエンド | 83%+ coverage, 79 テストファイル |
 | バックエンド | pytest pass |
 | E2E | 全テストpass |
 
@@ -115,12 +148,13 @@ Chatbot 機能を使用する場合は、以下の Vertex AI 関連の環境変�
 
 | カテゴリ | テストファイル数 | 対象 |
 |---------|-----------------|------|
-| コンポーネント | 33 | card/ (2), common/ (7), dashboard/ (10), dataset/ (1), datasets/ (1), group/ (4), transform/ (5), その他 (App: 1), lib/utils系 (2) |
-| hooks | 9 | use-auth, use-cards, use-dashboards, use-datasets, use-filter-views, use-groups, use-dashboard-shares, use-transforms, use-audit-logs |
-| lib/api | 8 | api-client, auth, cards, dashboards, datasets, filter-views, transforms, audit-logs |
+| コンポーネント | 35 | card/ (2), chat/ (3), common/ (8), dashboard/ (11), dataset/ (1), datasets/ (1), group/ (4), transform/ (5) |
+| hooks | 15 | use-auth, use-cards, use-card-form, use-chatbot, use-dashboards, use-dashboard-filters, use-dashboard-shares, use-datasets, use-default-filter-view, use-filter-views, use-filter-view-operations, use-groups, use-reimport-flow, use-transforms, use-audit-logs |
+| lib | 11 | api-client, utils, layout-utils, api/ (auth, cards, chat, dashboards, datasets, filter-views, transforms, audit-logs) |
 | pages | 12 | Login, DatasetList/Import/Detail, CardList/Edit, DashboardList/View/Edit, TransformList/Edit, AuditLogList |
-| types | 2 | type-guards, transform-type-guards |
-| stores | 1 | auth-store |
+| types | 3 | type-guards, transform-type-guards, chat |
+| stores | 2 | auth-store, chat-store |
+| その他 | 1 | App.test.tsx |
 
 ### E2Eテスト実行
 
@@ -144,7 +178,11 @@ E2Eテストスイート:
 | `e2e/auth.spec.ts` | ログイン・ログアウト |
 | `e2e/dataset.spec.ts` | Dataset取り込み・一覧表示 |
 | `e2e/card-dashboard.spec.ts` | Card作成・Dashboard操作 |
+| `e2e/card-execution.spec.ts` | Card実行・プレビュー |
+| `e2e/dashboard-filter.spec.ts` | Dashboardフィルタ操作 |
 | `e2e/sharing.spec.ts` | Dashboard共有 |
+| `e2e/transform.spec.ts` | Transform CRUD・実行 |
+| `e2e/admin.spec.ts` | 管理画面 (グループ・監査ログ) |
 
 ### DynamoDBテーブル一覧
 
@@ -257,7 +295,7 @@ work_BI_ClaudeCode/
       types/            # TypeScript型定義 (api, audit-log, card, chat, dashboard, dataset, filter-view, group, reimport, transform, user)
     e2e/                # Playwright E2Eテスト
     __tests__/          # Vitest単体テスト (src/__tests__/)
-  scripts/              # 初期化スクリプト (init_tables.py, seed_test_user.py)
+  scripts/              # 初期化スクリプト (init_tables.py, seed_test_user.py, seed_test_dataset.py)
   docs/                 # ドキュメント
   codemaps/             # アーキテクチャマップ
 ```

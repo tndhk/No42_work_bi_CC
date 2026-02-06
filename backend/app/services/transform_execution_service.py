@@ -131,7 +131,7 @@ class TransformExecutionService:
             )
 
             # Step 4 & 5: Save output and create Dataset record
-            output_df = pd.DataFrame(executor_result["data"])
+            output_df = pd.DataFrame(executor_result["output_rows"])
             output_dataset_id = str(uuid.uuid4())
 
             # Save to S3
@@ -145,7 +145,7 @@ class TransformExecutionService:
 
             # Build column schema from output DataFrame
             columns = []
-            for col_name in executor_result["columns"]:
+            for col_name in executor_result["column_names"]:
                 col_dtype = str(output_df[col_name].dtype)
                 columns.append(
                     ColumnSchema(
@@ -199,7 +199,7 @@ class TransformExecutionService:
                 execution_id=execution_id,
                 output_dataset_id=output_dataset_id,
                 row_count=executor_result["row_count"],
-                column_names=executor_result["columns"],
+                column_names=executor_result["column_names"],
                 execution_time_ms=elapsed_ms,
             )
 
@@ -260,7 +260,7 @@ class TransformExecutionService:
                         json={
                             "transform_id": transform.id,
                             "code": transform.code,
-                            "datasets": datasets_payload,
+                            "input_datasets": datasets_payload,
                         },
                     )
                     response.raise_for_status()

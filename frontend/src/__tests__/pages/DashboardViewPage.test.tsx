@@ -27,9 +27,19 @@ vi.mock('@/hooks', async (importOriginal) => {
     useDashboard: vi.fn(),
     useExecuteCard: vi.fn(() => ({ mutateAsync: mockExecuteCard })),
     useFilterViews: vi.fn(() => ({ data: [], isLoading: false })),
+  };
+});
+
+// Mock filter view hooks at their source to prevent import issues
+vi.mock('@/hooks/use-filter-views', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/use-filter-views')>();
+  return {
+    ...actual,
+    useFilterViews: vi.fn(() => ({ data: [], isLoading: false })),
     useCreateFilterView: vi.fn(() => ({ mutateAsync: mockCreateFilterView })),
     useUpdateFilterView: vi.fn(() => ({ mutateAsync: mockUpdateFilterView })),
     useDeleteFilterView: vi.fn(() => ({ mutateAsync: mockDeleteFilterView })),
+    // Keep the actual getDefaultFilterView implementation
   };
 });
 

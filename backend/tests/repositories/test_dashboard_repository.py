@@ -20,10 +20,12 @@ class TestDashboardRepository:
             'id': 'dashboard-001',
             'name': 'Test Dashboard',
             'description': 'A test dashboard',
-            'layout': [
-                {'card_id': 'card-001', 'x': 0, 'y': 0, 'w': 6, 'h': 4},
-                {'card_id': 'card-002', 'x': 6, 'y': 0, 'w': 6, 'h': 4}
-            ],
+            'layout': {
+                'cards': [
+                    {'card_id': 'card-001', 'x': 0, 'y': 0, 'w': 6, 'h': 4},
+                    {'card_id': 'card-002', 'x': 6, 'y': 0, 'w': 6, 'h': 4}
+                ]
+            },
             'ownerId': 'owner-123'
         }
 
@@ -31,8 +33,8 @@ class TestDashboardRepository:
 
         assert dashboard.id == 'dashboard-001'
         assert dashboard.name == 'Test Dashboard'
-        assert len(dashboard.layout) == 2
-        assert dashboard.layout[0].card_id == 'card-001'
+        assert len(dashboard.layout.cards) == 2
+        assert dashboard.layout.cards[0].card_id == 'card-001'
         assert isinstance(dashboard.created_at, datetime)
         assert isinstance(dashboard.updated_at, datetime)
 
@@ -49,9 +51,11 @@ class TestDashboardRepository:
                 'dashboardId': 'dashboard-003',
                 'name': 'Existing Dashboard',
                 'description': 'Description',
-                'layout': [
-                    {'cardId': 'card-001', 'x': 0, 'y': 0, 'w': 12, 'h': 6}
-                ],
+                'layout': {
+                    'cards': [
+                        {'cardId': 'card-001', 'x': 0, 'y': 0, 'w': 12, 'h': 6}
+                    ]
+                },
                 'ownerId': 'owner-123',
                 'createdAt': int(now.timestamp()),
                 'updatedAt': int(now.timestamp())
@@ -64,7 +68,7 @@ class TestDashboardRepository:
         assert dashboard is not None
         assert dashboard.id == 'dashboard-003'
         assert dashboard.name == 'Existing Dashboard'
-        assert len(dashboard.layout) == 1
+        assert len(dashboard.layout.cards) == 1
 
     async def test_get_by_id_not_found(self, dynamodb_tables: tuple[dict[str, Any], Any]) -> None:
         """Test retrieving dashboard by ID when it does not exist."""
@@ -128,9 +132,11 @@ class TestDashboardRepository:
             Item={
                 'dashboardId': 'dashboard-update',
                 'name': 'Old Name',
-                'layout': [
-                    {'cardId': 'card-old', 'x': 0, 'y': 0, 'w': 6, 'h': 4}
-                ],
+                'layout': {
+                    'cards': [
+                        {'cardId': 'card-old', 'x': 0, 'y': 0, 'w': 6, 'h': 4}
+                    ]
+                },
                 'ownerId': 'owner-123',
                 'createdAt': int(original_time.timestamp()),
                 'updatedAt': int(original_time.timestamp())
@@ -140,17 +146,19 @@ class TestDashboardRepository:
         repo = DashboardRepository()
         update_data = {
             'name': 'New Name',
-            'layout': [
-                {'card_id': 'card-new-1', 'x': 0, 'y': 0, 'w': 6, 'h': 4},
-                {'card_id': 'card-new-2', 'x': 6, 'y': 0, 'w': 6, 'h': 4}
-            ]
+            'layout': {
+                'cards': [
+                    {'card_id': 'card-new-1', 'x': 0, 'y': 0, 'w': 6, 'h': 4},
+                    {'card_id': 'card-new-2', 'x': 6, 'y': 0, 'w': 6, 'h': 4}
+                ]
+            }
         }
         updated = await repo.update('dashboard-update', update_data, dynamodb)
 
         assert updated is not None
         assert updated.name == 'New Name'
-        assert len(updated.layout) == 2
-        assert updated.layout[0].card_id == 'card-new-1'
+        assert len(updated.layout.cards) == 2
+        assert updated.layout.cards[0].card_id == 'card-new-1'
         assert updated.updated_at.timestamp() > original_time.timestamp()
 
     async def test_delete_dashboard(self, dynamodb_tables: tuple[dict[str, Any], Any]) -> None:

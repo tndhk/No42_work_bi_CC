@@ -108,7 +108,7 @@ def transform(inputs, params):
 def some_other_func():
     pass
 """
-        with pytest.raises(ValueError, match="transform関数またはresult変数が定義されていません"):
+        with pytest.raises(ValueError, match="コードには 'transform' 関数または 'result' 変数が必要です"):
             runner.execute(code, {'dataset1': self._make_input_df()}, {})
 
     def test_execute_invalid_return_type_raises(self):

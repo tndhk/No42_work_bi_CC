@@ -17,8 +17,8 @@ export function Pagination({ total, limit, offset, onPageChange }: PaginationPro
   if (totalPages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between px-2 py-4">
-      <p className="text-sm text-muted-foreground">
+    <div className="flex items-center justify-between px-2 border-t border-border/50 pt-4">
+      <p className="text-xs font-mono tabular-nums text-muted-foreground">
         {total}件中 {offset + 1}-{Math.min(offset + limit, total)}件を表示
       </p>
       <div className="flex items-center gap-2">
@@ -31,7 +31,7 @@ export function Pagination({ total, limit, offset, onPageChange }: PaginationPro
           <ChevronLeft className="h-4 w-4" />
           前へ
         </Button>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-xs font-mono tabular-nums text-muted-foreground">
           {currentPage} / {totalPages}
         </span>
         <Button

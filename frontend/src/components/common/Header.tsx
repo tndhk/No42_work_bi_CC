@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -11,7 +11,7 @@ import {
   Sheet,
   SheetContent,
 } from '@/components/ui/sheet';
-import { LogOut, User, Menu } from 'lucide-react';
+import { LogOut, Menu } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSidebarStore } from '@/stores/sidebar-store';
 import { useLogout } from '@/hooks';
@@ -23,17 +23,22 @@ export function Header() {
   const { toggle } = useSidebarStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const userInitial = useMemo(() => {
+    if (!user?.email) return '?';
+    return user.email.charAt(0).toUpperCase();
+  }, [user?.email]);
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-14 items-center px-4">
+    <header className="sticky top-0 z-50 w-full shadow-[0_1px_0_0_hsl(var(--border))] bg-background/95 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-12 items-center px-4">
         <div className="flex items-center gap-2 md:hidden">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden"
+            className="md:hidden h-8 w-8 p-0"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-4 w-4" />
           </Button>
         </div>
         <div className="hidden md:flex items-center gap-2">
@@ -41,23 +46,27 @@ export function Header() {
             variant="ghost"
             size="sm"
             onClick={toggle}
-            className="hidden md:flex"
+            className="hidden md:flex h-8 w-8 p-0"
           >
-            <Menu className="h-5 w-5" />
+            <Menu className="h-4 w-4" />
           </Button>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2">
-                  <User className="h-4 w-4" />
-                  <span className="hidden sm:inline">{user.email}</span>
+                <Button variant="ghost" size="sm" className="gap-2.5 h-8 px-2 hover:bg-transparent hover:opacity-80">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-primary">
+                    <span className="text-xs font-semibold">{userInitial}</span>
+                  </div>
+                  <span className="hidden sm:inline font-mono text-xs text-muted-foreground">
+                    {user.email}
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem disabled>
-                  {user.email}
+                  <span className="font-mono text-xs">{user.email}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => logout()}>

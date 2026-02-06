@@ -15,8 +15,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'Hiragino Sans', 'Noto Sans JP', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Satoshi', 'Hiragino Sans', 'Noto Sans JP', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -85,6 +85,18 @@ export default {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
+        "slide-in-left": {
+          from: { opacity: "0", transform: "translateX(-8px)" },
+          to: { opacity: "1", transform: "translateX(0)" },
+        },
+        "scale-in": {
+          from: { opacity: "0", transform: "scale(0.97)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "pulse-gentle": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.5" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -92,6 +104,9 @@ export default {
         "fade-in": "fade-in 0.3s ease-out",
         "fade-in-up": "fade-in-up 0.4s ease-out",
         "shimmer": "shimmer 2s linear infinite",
+        "slide-in-left": "slide-in-left 0.3s ease-out",
+        "scale-in": "scale-in 0.2s ease-out",
+        "pulse-gentle": "pulse-gentle 2s ease-in-out infinite",
       },
     },
   },

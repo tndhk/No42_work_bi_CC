@@ -28,11 +28,13 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
 
   return (
     <div className="flex flex-col h-full bg-sidebar">
-      <div className="flex h-14 items-center border-b border-border px-4">
-        <BarChart3 className="h-5 w-5 mr-2 text-sidebar-active" />
-        <span className="text-foreground font-semibold tracking-tight">BI Tool</span>
+      <div className="flex h-14 items-center px-4">
+        <BarChart3 className="h-5 w-5 mr-2.5 text-sidebar-active" />
+        <span className="font-mono text-sm font-semibold uppercase tracking-widest text-sidebar-active">
+          BI Tool
+        </span>
       </div>
-      <nav className="flex-1 space-y-1 p-2 overflow-y-auto">
+      <nav className="flex-1 space-y-1.5 p-3 overflow-y-auto">
         {items.map((item) => (
           <NavLink
             key={item.to}
@@ -40,15 +42,17 @@ export function MobileSidebar({ onNavigate }: MobileSidebarProps) {
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                'group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-all duration-200',
                 isActive
-                  ? 'bg-primary text-sidebar-active-foreground'
-                  : 'text-sidebar-foreground hover:bg-muted'
+                  ? 'bg-white/[0.08] text-sidebar-active border-l-2 border-sidebar-active'
+                  : 'text-sidebar-foreground hover:bg-white/5 hover:text-sidebar-active border-l-2 border-transparent'
               )
             }
           >
-            <item.icon className="h-4 w-4" />
-            <span>{item.label}</span>
+            <item.icon className="h-4 w-4 transition-colors duration-200 group-hover:text-sidebar-active" />
+            <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+              {item.label}
+            </span>
           </NavLink>
         ))}
       </nav>

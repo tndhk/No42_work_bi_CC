@@ -5,22 +5,35 @@ interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const sizeClasses = {
-  sm: 'h-4 w-4 border-2',
-  md: 'h-8 w-8 border-2',
-  lg: 'h-12 w-12 border-3',
+const dotSizeClasses = {
+  sm: 'h-1.5 w-1.5',
+  md: 'h-2 w-2',
+  lg: 'h-3 w-3',
+};
+
+const gapClasses = {
+  sm: 'gap-1',
+  md: 'gap-1.5',
+  lg: 'gap-2',
 };
 
 export function LoadingSpinner({ className, size = 'md' }: LoadingSpinnerProps) {
   return (
     <div
-      className={cn(
-        'animate-spin rounded-full border-muted-foreground/25 border-t-primary',
-        sizeClasses[size],
-        className
-      )}
+      className={cn('flex items-center', gapClasses[size], className)}
       role="status"
       aria-label="Loading"
-    />
+    >
+      {[0, 150, 300].map((delay) => (
+        <div
+          key={delay}
+          className={cn(
+            'rounded-full bg-primary animate-pulse-gentle',
+            dotSizeClasses[size]
+          )}
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
   );
 }

@@ -16,6 +16,7 @@ class CardCreate(BaseModel):
     dataset_ids: Optional[list[str]] = None
     dataset_id: Optional[str] = None
     params: Optional[dict[str, Any]] = None
+    card_type: Optional[str] = Field(default="code", pattern="^(code|text)$")
 
     @field_validator("name")
     @classmethod
@@ -45,6 +46,7 @@ class CardUpdate(BaseModel):
     dataset_ids: Optional[list[str]] = None
     dataset_id: Optional[str] = None
     params: Optional[dict[str, Any]] = None
+    card_type: Optional[str] = Field(None, pattern="^(code|text)$")
 
     @field_validator("name")
     @classmethod
@@ -78,5 +80,6 @@ class Card(TimestampMixin, BaseModel):
     used_columns: Optional[list[str]] = None
     filter_applicable: Optional[bool] = None
     owner_id: Optional[str] = None
+    card_type: Optional[str] = "code"
     created_at: datetime
     updated_at: datetime

@@ -17,6 +17,7 @@ export interface Card {
   filter_applicable?: string[];
   owner?: OwnerRef;
   owner_id?: string;
+  card_type?: 'code' | 'text';
   created_at: string;
 }
 
@@ -29,15 +30,17 @@ export interface CardDetail extends Card {
 
 export interface CardCreateRequest {
   name: string;
-  dataset_id: string;
+  dataset_id?: string;
   code: string;
   params?: Record<string, unknown>;
+  card_type?: 'code' | 'text';
 }
 
 export interface CardUpdateRequest {
   name?: string;
   code?: string;
   params?: Record<string, unknown>;
+  card_type?: 'code' | 'text';
 }
 
 export interface CardExecuteRequest {

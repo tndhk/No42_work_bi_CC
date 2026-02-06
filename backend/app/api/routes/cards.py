@@ -98,7 +98,7 @@ async def _enrich_card_with_dataset(
 async def _get_card_and_dataset(
     card_id: str,
     dynamodb: Any,
-) -> tuple[Card, Dataset]:
+) -> tuple[Card, Dataset | None]:
     """Get card and its associated dataset.
 
     Args:
@@ -106,10 +106,10 @@ async def _get_card_and_dataset(
         dynamodb: DynamoDB resource
 
     Returns:
-        Tuple of (Card, Dataset)
+        Tuple of (Card, Dataset | None). Dataset is None for text cards.
 
     Raises:
-        HTTPException: 404 if card not found, 422 if card has no dataset_id,
+        HTTPException: 404 if card not found, 422 if code card has no dataset_id,
                        404 if dataset not found
     """
     card_repo = CardRepository()
@@ -121,6 +121,11 @@ async def _get_card_and_dataset(
             detail="Card not found",
         )
 
+    # Text cards don't require dataset
+    if card.card_type == "text":
+        return card, None
+
+    # Code cards require dataset
     if not card.dataset_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -164,7 +169,7 @@ async def _execute_card_with_error_handling(
     execution_service: CardExecutionService,
     cache_service: CardCacheService,
     card: Card,
-    dataset: Dataset,
+    dataset: Dataset | None,
     filters: dict[str, Any],
     use_cache: bool,
     current_user: User,
@@ -177,7 +182,7 @@ async def _execute_card_with_error_handling(
         execution_service: Card execution service
         cache_service: Cache service
         card: Card instance
-        dataset: Dataset instance
+        dataset: Dataset instance (None for text cards)
         filters: Filter parameters
         use_cache: Whether to use cache
         current_user: Current user
@@ -191,6 +196,26 @@ async def _execute_card_with_error_handling(
         HTTPException: 500 if execution fails
     """
     try:
+        # Text cards don't need executor - return code as HTML directly
+        if card.card_type == "text":
+            import time
+            start_time = time.perf_counter()
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            return api_response({
+                "html": card.code,
+                "used_columns": [],
+                "filter_applicable": False,
+                "cached": False,
+                "execution_time_ms": elapsed_ms,
+            })
+
+        # Code cards require dataset
+        if not dataset:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Card has no dataset_id",
+            )
+
         result = await execution_service.execute(
             card_id=card.id,
             filters=filters,

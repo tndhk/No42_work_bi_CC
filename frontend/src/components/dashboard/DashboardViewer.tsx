@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Responsive, WidthProvider } from 'react-grid-layout';
+import { useQueries } from '@tanstack/react-query';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { CardContainer } from './CardContainer';
 import { toRGLLayout } from '@/lib/layout-utils';
+import { useCard } from '@/hooks/use-cards';
+import { cardsApi } from '@/lib/api';
 import type { DashboardDetail, CardExecuteResponse } from '@/types';
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -19,6 +22,34 @@ export function DashboardViewer({ dashboard, filters, onExecuteCard }: Dashboard
   const [cardResults, setCardResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const filtersJson = JSON.stringify(filters || {});
+
+  // Fetch card details for all cards in the dashboard
+  const cardIds = useMemo(
+    () => dashboard.layout?.cards?.map((item) => item.card_id) || [],
+    [dashboard.layout?.cards]
+  );
+
+  const cardQueries = useQueries({
+    queries: cardIds.map((cardId) => ({
+      queryKey: ['cards', cardId],
+      queryFn: () => cardsApi.get(cardId),
+      enabled: !!cardId,
+    })),
+  });
+
+  const cardDetailsMap = useMemo(() => {
+    const map: Record<string, { card_type?: 'code' | 'text'; params?: Record<string, unknown>; name?: string }> = {};
+    cardQueries.forEach((query, index) => {
+      if (query.data?.data && cardIds[index]) {
+        map[cardIds[index]] = {
+          card_type: query.data.data.card_type || 'code',
+          params: query.data.data.params,
+          name: query.data.data.name,
+        };
+      }
+    });
+    return map;
+  }, [cardQueries, cardIds]);
 
   useEffect(() => {
     if (!dashboard.layout?.cards) return;
@@ -79,6 +110,9 @@ export function DashboardViewer({ dashboard, filters, onExecuteCard }: Dashboard
               cardId={item.card_id}
               html={cardResults[item.card_id] || ''}
               filterApplied={hasActiveFilters}
+              cardType={cardDetailsMap[item.card_id]?.card_type}
+              params={cardDetailsMap[item.card_id]?.params}
+              cardName={cardDetailsMap[item.card_id]?.name}
             />
           )}
         </div>

@@ -10,24 +10,30 @@
     --card-foreground: 210 18% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 210 18% 12%;
-    --primary: 170 45% 38%;
+    --primary: 210 60% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 12% 94%;
+    --secondary: 210 14% 94%;
     --secondary-foreground: 210 12% 30%;
-    --muted: 40 12% 94%;
+    --muted: 210 12% 94%;
     --muted-foreground: 210 8% 55%;
-    --accent: 170 30% 94%;
-    --accent-foreground: 170 45% 25%;
+    --accent: 210 50% 94%;
+    --accent-foreground: 210 60% 30%;
     --destructive: 4 72% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 40 8% 90%;
     --input: 40 8% 88%;
-    --ring: 170 45% 38%;
+    --ring: 210 60% 50%;
     --radius: 0.625rem;
     --sidebar-bg: 210 14% 11%;
     --sidebar-foreground: 210 8% 60%;
-    --sidebar-active: 170 45% 45%;
+    --sidebar-active: 210 60% 50%;
     --sidebar-active-foreground: 0 0% 100%;
+    --header: 210 18% 8%;
+    --header-foreground: 0 0% 100%;
+    --header-border: 210 12% 15%;
+    --header-hover: 210 14% 12%;
+    --header-active: 210 60% 50%;
+    --header-active-foreground: 0 0% 100%;
   }
 
   .dark {
@@ -37,23 +43,29 @@
     --card-foreground: 40 8% 88%;
     --popover: 210 14% 11%;
     --popover-foreground: 40 8% 88%;
-    --primary: 170 50% 45%;
-    --primary-foreground: 210 16% 7%;
+    --primary: 210 60% 55%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 14% 16%;
     --secondary-foreground: 40 8% 80%;
     --muted: 210 14% 14%;
     --muted-foreground: 210 8% 55%;
     --accent: 210 14% 16%;
-    --accent-foreground: 40 8% 88%;
+    --accent-foreground: 210 60% 70%;
     --destructive: 4 72% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 210 12% 18%;
     --input: 210 12% 18%;
-    --ring: 170 50% 45%;
+    --ring: 210 60% 55%;
     --sidebar-bg: 210 16% 5%;
     --sidebar-foreground: 210 8% 55%;
-    --sidebar-active: 170 50% 45%;
+    --sidebar-active: 210 60% 55%;
     --sidebar-active-foreground: 0 0% 100%;
+    --header: 210 18% 6%;
+    --header-foreground: 0 0% 95%;
+    --header-border: 210 12% 12%;
+    --header-hover: 210 14% 10%;
+    --header-active: 210 60% 50%;
+    --header-active-foreground: 0 0% 100%;
   }
 }
 

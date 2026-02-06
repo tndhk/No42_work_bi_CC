@@ -108,8 +108,13 @@ export function DashboardViewPage() {
         <FilterBar
           filters={dashboard.filters}
           values={filterValues}
+          filterViews={filterViews}
+          selectedViewId={selectedViewId}
           onFilterChange={handleFilterChange}
           onClearAll={handleClearAll}
+          onSelectView={handleSelectView}
+          onSaveView={handleSaveView}
+          permission={myPermission}
         />
       )}
 

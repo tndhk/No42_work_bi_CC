@@ -25,6 +25,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
   const [name, setName] = useState('');
   const [code, setCode] = useState(DEFAULT_CODE);
   const [datasetId, setDatasetId] = useState('');
+  const [cardType, setCardType] = useState<'code' | 'text'>('code');
   const [previewHtml, setPreviewHtml] = useState('');
 
   // カードデータをフォームに反映
@@ -33,13 +34,19 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
       setName(card.name);
       setCode(card.code);
       setDatasetId(card.dataset?.id || '');
+      setCardType(card.card_type || 'code');
     }
   }, [card]);
 
   const handleSave = useCallback(() => {
     if (isNew) {
       createMutation.mutate(
-        { name, code, dataset_id: datasetId },
+        { 
+          name, 
+          code, 
+          dataset_id: cardType === 'code' ? datasetId : undefined,
+          card_type: cardType,
+        },
         {
           onSuccess: (newCard) => {
             const savedCardId = newCard.card_id || newCard.id;
@@ -49,7 +56,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
       );
     } else if (cardId) {
       updateMutation.mutate(
-        { cardId, data: { name, code } },
+        { cardId, data: { name, code, card_type: cardType } },
         {
           onSuccess: () => {
             onSaveSuccess?.(cardId);
@@ -57,7 +64,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
         }
       );
     }
-  }, [isNew, cardId, name, code, datasetId, createMutation, updateMutation, onSaveSuccess]);
+  }, [isNew, cardId, name, code, datasetId, cardType, createMutation, updateMutation, onSaveSuccess]);
 
   const handlePreview = useCallback(() => {
     if (!cardId || isNew) return;
@@ -74,6 +81,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
     name,
     code,
     datasetId,
+    cardType,
     previewHtml,
     isLoading,
     isSaving: createMutation.isPending || updateMutation.isPending,
@@ -82,6 +90,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
     setName,
     setCode,
     setDatasetId,
+    setCardType,
     // ハンドラ
     handleSave,
     handlePreview,

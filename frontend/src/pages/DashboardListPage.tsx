@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Eye, Pencil, Trash2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Plus, Eye, Pencil, Trash2, MoreVertical, LayoutDashboard } from 'lucide-react';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Pagination } from '@/components/common/Pagination';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
@@ -53,59 +57,90 @@ export function DashboardListPage() {
         </Button>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>名前</TableHead>
-            <TableHead>カード数</TableHead>
-            <TableHead>オーナー</TableHead>
-            <TableHead>権限</TableHead>
-            <TableHead>更新日時</TableHead>
-            <TableHead className="w-[120px]">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+      {data?.data.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          ダッシュボードがありません
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {data?.data.map((dashboard) => (
-            <TableRow key={dashboard.dashboard_id}>
-              <TableCell className="font-medium">{dashboard.name}</TableCell>
-              <TableCell>{dashboard.card_count}</TableCell>
-              <TableCell>{dashboard.owner.name}</TableCell>
-              <TableCell>
-                {dashboard.my_permission && (
-                  <Badge variant={dashboard.my_permission === 'owner' ? 'default' : 'secondary'}>
-                    {dashboard.my_permission}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell>{new Date(dashboard.updated_at).toLocaleString('ja-JP')}</TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}`)}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  {dashboard.my_permission !== 'viewer' && (
-                    <Button variant="ghost" size="sm" onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}/edit`)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {(!dashboard.my_permission || dashboard.my_permission === 'owner') && (
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(dashboard.dashboard_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+            <Card
+              key={dashboard.dashboard_id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => navigate(`/dashboards/${dashboard.dashboard_id}`)}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <LayoutDashboard className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <CardTitle className="text-lg truncate">{dashboard.name}</CardTitle>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/dashboards/${dashboard.dashboard_id}`);
+                      }}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        表示
+                      </DropdownMenuItem>
+                      {dashboard.my_permission !== 'viewer' && (
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/dashboards/${dashboard.dashboard_id}/edit`);
+                        }}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          編集
+                        </DropdownMenuItem>
+                      )}
+                      {(!dashboard.my_permission || dashboard.my_permission === 'owner') && (
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(dashboard.dashboard_id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          削除
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              </TableCell>
-            </TableRow>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">カード数</span>
+                    <span className="font-medium">{dashboard.card_count}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">オーナー</span>
+                    <span className="font-medium truncate ml-2">{dashboard.owner.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-sm">権限</span>
+                    {dashboard.my_permission && (
+                      <Badge variant={dashboard.my_permission === 'owner' ? 'default' : 'secondary'}>
+                        {dashboard.my_permission}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground pt-2 border-t">
+                    更新: {new Date(dashboard.updated_at).toLocaleDateString('ja-JP')}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
-          {data?.data.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                ダッシュボードがありません
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+        </div>
+      )}
 
       {data?.pagination && (
         <Pagination

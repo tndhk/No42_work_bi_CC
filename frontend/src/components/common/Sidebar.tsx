@@ -1,28 +1,36 @@
-import { NavLink } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { BarChart3, Database, LayoutDashboard, CreditCard, Users, Repeat, ScrollText, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
+import { BarChart3, ChevronLeft, ChevronRight, Search, LayoutDashboard } from 'lucide-react';
 import { useSidebarStore } from '@/stores/sidebar-store';
-
-const navItems = [
-  { to: '/dashboards', label: 'ダッシュボード', icon: LayoutDashboard },
-  { to: '/datasets', label: 'データセット', icon: Database },
-  { to: '/transforms', label: 'Transform', icon: Repeat },
-  { to: '/cards', label: 'カード', icon: CreditCard },
-];
+import { useDashboards } from '@/hooks/use-dashboards';
+import { Input } from '@/components/ui/input';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
 export function Sidebar() {
-  const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'admin';
   const { collapsed, toggle } = useSidebarStore();
-
-  const items = [
-    ...navItems,
-    ...(isAdmin ? [
-      { to: '/admin/groups', label: 'グループ管理', icon: Users },
-      { to: '/admin/audit-logs', label: '監査ログ', icon: ScrollText },
-    ] : []),
-  ];
+  const location = useLocation();
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Get all dashboards (backend max is 100)
+  const { data: dashboardsData, isLoading } = useDashboards({ limit: 100 });
+  
+  // Extract current dashboard ID from route
+  const currentDashboardId = useMemo(() => {
+    const match = location.pathname.match(/^\/dashboards\/([^/]+)$/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+  
+  // Filter dashboards by search query
+  const filteredDashboards = useMemo(() => {
+    if (!dashboardsData?.data) return [];
+    if (!searchQuery.trim()) return dashboardsData.data;
+    
+    const query = searchQuery.toLowerCase();
+    return dashboardsData.data.filter((dashboard) =>
+      dashboard.name.toLowerCase().includes(query)
+    );
+  }, [dashboardsData?.data, searchQuery]);
 
   return (
     <aside
@@ -45,42 +53,77 @@ export function Sidebar() {
           </span>
         )}
       </div>
-      <nav className="flex-1 space-y-1.5 p-3 overflow-y-auto">
-        {items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            title={collapsed ? item.label : undefined}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center rounded-md text-sm transition-all duration-200 relative',
-                collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2',
-                isActive
-                  ? 'bg-white/[0.08] text-sidebar-active border-l-2 border-sidebar-active'
-                  : 'text-sidebar-foreground hover:bg-white/5 hover:text-sidebar-active border-l-2 border-transparent'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <item.icon className={cn(
-                  'h-4 w-4 flex-shrink-0 transition-colors duration-200',
-                  collapsed && 'mx-auto',
-                  isActive ? 'text-sidebar-active' : 'group-hover:text-sidebar-active'
-                )} />
-                {!collapsed && (
-                  <span className="transition-transform duration-200 group-hover:translate-x-0.5">
-                    {item.label}
-                  </span>
-                )}
-                {collapsed && isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-sidebar-active rounded-r-full" />
-                )}
-              </>
-            )}
-          </NavLink>
-        ))}
+      
+      {!collapsed && (
+        <div className="px-3 pt-3 pb-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70 mb-2 px-1">
+            Dashboards
+          </h2>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-sidebar-foreground/50" />
+            <Input
+              type="text"
+              placeholder="Filter by name"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 pr-2 text-sm bg-sidebar border-sidebar-foreground/20 focus-visible:border-sidebar-active"
+            />
+          </div>
+        </div>
+      )}
+      
+      <nav className="flex-1 overflow-y-auto px-3 pb-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <LoadingSpinner size="sm" />
+          </div>
+        ) : filteredDashboards.length === 0 ? (
+          <div className="text-center py-8 text-sidebar-foreground/50 text-sm">
+            {searchQuery ? 'No dashboards found' : 'No dashboards'}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {filteredDashboards.map((dashboard) => {
+              const isActive = dashboard.dashboard_id === currentDashboardId;
+              return (
+                <Link
+                  key={dashboard.dashboard_id}
+                  to={`/dashboards/${dashboard.dashboard_id}`}
+                  title={collapsed ? dashboard.name : undefined}
+                  className={cn(
+                    'group flex items-center rounded-md text-sm transition-all duration-200 relative',
+                    collapsed ? 'justify-center px-2 py-2' : 'gap-2 px-2 py-1.5',
+                    isActive
+                      ? 'bg-white/[0.08] text-sidebar-active border-l-2 border-sidebar-active'
+                      : 'text-sidebar-foreground hover:bg-white/5 hover:text-sidebar-active border-l-2 border-transparent'
+                  )}
+                >
+                  {collapsed ? (
+                    <LayoutDashboard className={cn(
+                      'h-4 w-4 flex-shrink-0 transition-colors duration-200',
+                      isActive ? 'text-sidebar-active' : 'text-sidebar-foreground/70 group-hover:text-sidebar-active'
+                    )} />
+                  ) : (
+                    <>
+                      <LayoutDashboard className={cn(
+                        'h-4 w-4 flex-shrink-0 transition-colors duration-200',
+                        isActive ? 'text-sidebar-active' : 'text-sidebar-foreground/70 group-hover:text-sidebar-active'
+                      )} />
+                      <span className="flex-1 truncate text-sm">
+                        {dashboard.name}
+                      </span>
+                    </>
+                  )}
+                  {collapsed && isActive && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-sidebar-active rounded-r-full" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
+      
       <div className="p-3">
         <button
           onClick={toggle}

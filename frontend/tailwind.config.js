@@ -58,6 +58,14 @@ export default {
           active: "hsl(var(--sidebar-active))",
           "active-foreground": "hsl(var(--sidebar-active-foreground))",
         },
+        header: {
+          DEFAULT: "hsl(var(--header))",
+          foreground: "hsl(var(--header-foreground))",
+          border: "hsl(var(--header-border))",
+          hover: "hsl(var(--header-hover))",
+          active: "hsl(var(--header-active))",
+          "active-foreground": "hsl(var(--header-active-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -18,6 +18,7 @@ export function CardEditPage() {
     name,
     code,
     datasetId,
+    cardType,
     previewHtml,
     isLoading,
     isSaving,
@@ -25,6 +26,7 @@ export function CardEditPage() {
     setName,
     setCode,
     setDatasetId,
+    setCardType,
     handleSave,
     handlePreview,
   } = useCardForm({
@@ -69,10 +71,12 @@ export function CardEditPage() {
           name={name}
           code={code}
           datasetId={datasetId}
+          cardType={cardType}
           datasets={datasetsData?.data}
           onNameChange={setName}
           onCodeChange={setCode}
           onDatasetIdChange={setDatasetId}
+          onCardTypeChange={setCardType}
         />
 
         <div>

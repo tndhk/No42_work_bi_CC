@@ -25,8 +25,8 @@ export function LoginPage() {
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: 'e2e@example.com',
-      password: 'Test@1234',
+      email: 'admin@example.com',
+      password: 'Admin@1234',
     },
   });
 

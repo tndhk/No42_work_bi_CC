@@ -259,6 +259,7 @@ class CardExecutionService:
         use_cache: bool,
         cache_service: CardCacheService,
         code: str = "",
+        params: dict[str, Any] | None = None,
     ) -> CardExecutionResult:
         """Execute card with optional caching.
 
@@ -305,6 +306,7 @@ class CardExecutionService:
             filters=filters,
             dataset_id=dataset_id,
             dataset_rows=dataset_rows,
+            params=params or {},
         )
 
         # Save to cache if enabled
@@ -327,6 +329,7 @@ class CardExecutionService:
         filters: dict[str, Any],
         dataset_id: str,
         dataset_rows: list[dict[str, Any]] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Execute card via Executor API with exponential backoff retry.
 
@@ -361,6 +364,7 @@ class CardExecutionService:
                             "filters": filters,
                             "dataset_id": dataset_id,
                             "dataset_rows": dataset_rows,
+                            "params": params or {},
                         },
                     )
                     response.raise_for_status()

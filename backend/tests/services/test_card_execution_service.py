@@ -525,6 +525,59 @@ class TestCardExecutionService:
             mock_client.post.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_execute_passes_params_to_executor(
+        self,
+        execution_service: CardExecutionService,
+        mock_cache_service: MagicMock,
+    ) -> None:
+        """Test execute passes params to Executor API."""
+        # Given: Card execution parameters with params, cache miss, and mocked Executor API
+        card_id = "card_123"
+        filters = {"category": "A"}
+        dataset_updated_at = "2026-01-31T10:00:00Z"
+        dataset_id = "dataset_123"
+        params = {"chart_type": "bar", "color": "blue"}
+
+        mock_cache_service.get.return_value = None
+
+        executor_response = {
+            "html": "<div>Executed HTML</div>",
+            "used_columns": ["col1"],
+            "filter_applicable": False,
+        }
+
+        # Mock httpx AsyncClient
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_response = MagicMock()
+            mock_response.json.return_value = executor_response
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_cls.return_value = mock_client
+
+            # When: Executing card with params
+            result = await execution_service.execute(
+                card_id=card_id,
+                filters=filters,
+                dataset_updated_at=dataset_updated_at,
+                dataset_id=dataset_id,
+                use_cache=True,
+                cache_service=mock_cache_service,
+                params=params,
+            )
+
+            # Then: Executor API should be called with params in request body
+            assert result.html == executor_response["html"]
+            mock_client.post.assert_called_once()
+            call_args = mock_client.post.call_args
+            request_json = call_args[1]["json"]
+            assert "params" in request_json
+            assert request_json["params"] == params
+
+    @pytest.mark.asyncio
     async def test_execute_use_cache_false_bypasses_cache(
         self,
         execution_service: CardExecutionService,

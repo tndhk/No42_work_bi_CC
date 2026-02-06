@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useCard, useCreateCard, useUpdateCard, usePreviewCard } from './use-cards';
+import { cardsApi } from '@/lib/api';
+import { getChartTemplate } from '@/lib/chart-templates';
+import type { ChartType } from '@/types/card';
 
 const DEFAULT_CODE = `def render(dataset, filters, params):
     import plotly.express as px
@@ -26,7 +29,9 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
   const [code, setCode] = useState(DEFAULT_CODE);
   const [datasetId, setDatasetId] = useState('');
   const [cardType, setCardType] = useState<'code' | 'text'>('code');
+  const [chartType, setChartType] = useState<ChartType | undefined>(undefined);
   const [previewHtml, setPreviewHtml] = useState('');
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   // カードデータをフォームに反映
   useEffect(() => {
@@ -35,10 +40,25 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
       setCode(card.code);
       setDatasetId(card.dataset?.id || '');
       setCardType(card.card_type || 'code');
+      // paramsからchart_typeを取得
+      if (card.params && 'chart_type' in card.params) {
+        setChartType(card.params.chart_type as ChartType);
+      } else if ('chart_type' in card && card.chart_type) {
+        setChartType(card.chart_type);
+      }
     }
   }, [card]);
 
+  // チャートタイプ変更時にテンプレートコードを挿入
+  const handleChartTypeChange = useCallback((newChartType: ChartType) => {
+    setChartType(newChartType);
+    const template = getChartTemplate(newChartType);
+    setCode(template.code);
+  }, []);
+
   const handleSave = useCallback(() => {
+    const params = chartType ? { chart_type: chartType } : undefined;
+    
     if (isNew) {
       createMutation.mutate(
         { 
@@ -46,6 +66,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
           code, 
           dataset_id: cardType === 'code' ? datasetId : undefined,
           card_type: cardType,
+          params,
         },
         {
           onSuccess: (newCard) => {
@@ -56,7 +77,7 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
       );
     } else if (cardId) {
       updateMutation.mutate(
-        { cardId, data: { name, code, card_type: cardType } },
+        { cardId, data: { name, code, card_type: cardType, params } },
         {
           onSuccess: () => {
             onSaveSuccess?.(cardId);
@@ -64,17 +85,47 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
         }
       );
     }
-  }, [isNew, cardId, name, code, datasetId, cardType, createMutation, updateMutation, onSaveSuccess]);
+  }, [isNew, cardId, name, code, datasetId, cardType, chartType, createMutation, updateMutation, onSaveSuccess]);
 
-  const handlePreview = useCallback(() => {
-    if (!cardId || isNew) return;
-    previewMutation.mutate(
-      { cardId },
-      {
-        onSuccess: (result) => setPreviewHtml(result.html),
+  const handlePreview = useCallback(async () => {
+    // コードカードの場合はdataset_idが必要
+    if (cardType === 'code' && !datasetId) {
+      return;
+    }
+
+    setIsPreviewing(true);
+    try {
+      let result;
+      if (isNew || !cardId) {
+        // 新規カード: previewDraft APIを使用
+        if (cardType === 'code') {
+          result = await cardsApi.previewDraft({
+            code,
+            datasetId,
+            filters: {},
+          });
+        } else {
+          // テキストカードは直接HTMLを表示
+          setPreviewHtml(code);
+          setIsPreviewing(false);
+          return;
+        }
+      } else {
+        // 既存カード: 現在のコードを送信してプレビュー
+        result = await cardsApi.preview(cardId, {
+          code,
+          datasetId,
+          filters: {},
+        });
       }
-    );
-  }, [cardId, isNew, previewMutation]);
+      setPreviewHtml(result.html);
+    } catch (error) {
+      console.error('Preview failed:', error);
+      setPreviewHtml('<div style="color:red">プレビューエラーが発生しました</div>');
+    } finally {
+      setIsPreviewing(false);
+    }
+  }, [cardId, isNew, cardType, code, datasetId]);
 
   return {
     // フォーム状態
@@ -82,10 +133,11 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
     code,
     datasetId,
     cardType,
+    chartType,
     previewHtml,
     isLoading,
     isSaving: createMutation.isPending || updateMutation.isPending,
-    isPreviewing: previewMutation.isPending,
+    isPreviewing,
     // セッター
     setName,
     setCode,
@@ -94,5 +146,6 @@ export function useCardForm({ cardId, isNew, onSaveSuccess }: UseCardFormOptions
     // ハンドラ
     handleSave,
     handlePreview,
+    handleChartTypeChange,
   };
 }

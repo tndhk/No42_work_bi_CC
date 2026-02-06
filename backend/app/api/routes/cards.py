@@ -1,6 +1,6 @@
 """Card API routes."""
 import uuid
-from typing import Any
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -31,6 +31,8 @@ class PreviewRequest(BaseModel):
     """Preview request model."""
 
     filters: dict[str, Any] = {}
+    code: Optional[str] = None  # Optional: フロントからのコード（未保存のコードをプレビューするため）
+    dataset_id: Optional[str] = None  # Optional: 新規カード用
 
 
 class ExecuteRequest(BaseModel):
@@ -175,6 +177,8 @@ async def _execute_card_with_error_handling(
     current_user: User,
     card_id: str,
     dynamodb: Any,
+    override_code: str | None = None,
+    override_dataset_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute card with error handling and audit logging.
 
@@ -196,13 +200,18 @@ async def _execute_card_with_error_handling(
         HTTPException: 500 if execution fails
     """
     try:
+        # Use override code if provided, otherwise use card.code
+        code_to_execute = override_code if override_code is not None else card.code
+        dataset_id_to_use = override_dataset_id if override_dataset_id is not None else card.dataset_id
+
         # Text cards don't need executor - return code as HTML directly
-        if card.card_type == "text":
+        card_type = card.card_type if card else "code"
+        if card_type == "text":
             import time
             start_time = time.perf_counter()
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
             return api_response({
-                "html": card.code,
+                "html": code_to_execute,
                 "used_columns": [],
                 "filter_applicable": False,
                 "cached": False,
@@ -210,20 +219,42 @@ async def _execute_card_with_error_handling(
             })
 
         # Code cards require dataset
-        if not dataset:
+        if not dataset and not override_dataset_id:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Card has no dataset_id",
             )
 
+        # Use override dataset_id if provided, otherwise use dataset from card
+        final_dataset_id = override_dataset_id if override_dataset_id else (dataset.id if dataset else None)
+        if not final_dataset_id:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Dataset ID is required",
+            )
+
+        # Get dataset for updated_at if we have a dataset object, otherwise fetch it
+        if dataset:
+            dataset_updated_at = dataset.updated_at.isoformat()
+        else:
+            dataset_repo = DatasetRepository()
+            dataset_obj = await dataset_repo.get_by_id(final_dataset_id, dynamodb)
+            if not dataset_obj:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Dataset not found",
+                )
+            dataset_updated_at = dataset_obj.updated_at.isoformat()
+
         result = await execution_service.execute(
-            card_id=card.id,
+            card_id=card_id,
             filters=filters,
-            dataset_updated_at=dataset.updated_at.isoformat(),
-            dataset_id=card.dataset_id,
+            dataset_updated_at=dataset_updated_at,
+            dataset_id=final_dataset_id,
             use_cache=use_cache,
             cache_service=cache_service,
-            code=card.code,
+            code=code_to_execute,
+            params=card.params if card else None,
         )
 
         return api_response({
@@ -493,6 +524,69 @@ async def delete_card(
 # ============================================================================
 
 
+@router.post("/preview")
+async def preview_draft_card(
+    preview_req: PreviewRequest,
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Preview card execution with code and dataset_id (no cache, for draft cards).
+
+    Args:
+        preview_req: Preview request with code, dataset_id, and filters
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client for dataset access
+
+    Returns:
+        Execution result
+
+    Raises:
+        HTTPException: 422 if code or dataset_id missing, 404 if dataset not found, 500 if execution fails
+    """
+    if not preview_req.code:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="code is required",
+        )
+
+    if not preview_req.dataset_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="dataset_id is required",
+        )
+
+    # Create a minimal Card-like object for execution
+    from app.models.card import Card
+    from datetime import datetime
+    draft_card = Card(
+        id="draft",
+        name="Draft",
+        code=preview_req.code,
+        card_type="code",
+        dataset_id=preview_req.dataset_id,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+    execution_service, cache_service = _create_execution_services(dynamodb, s3_client)
+
+    return await _execute_card_with_error_handling(
+        execution_service=execution_service,
+        cache_service=cache_service,
+        card=draft_card,
+        dataset=None,
+        filters=preview_req.filters,
+        use_cache=False,
+        current_user=current_user,
+        card_id="draft",
+        dynamodb=dynamodb,
+        override_code=preview_req.code,
+        override_dataset_id=preview_req.dataset_id,
+    )
+
+
 @router.post("/{card_id}/preview")
 async def preview_card(
     card_id: str,
@@ -505,7 +599,7 @@ async def preview_card(
 
     Args:
         card_id: Card ID
-        preview_req: Preview request with filters
+        preview_req: Preview request with filters (optionally code and dataset_id)
         current_user: Authenticated user
         dynamodb: DynamoDB resource
         s3_client: S3 client for dataset access
@@ -529,6 +623,8 @@ async def preview_card(
         current_user=current_user,
         card_id=card_id,
         dynamodb=dynamodb,
+        override_code=preview_req.code,
+        override_dataset_id=preview_req.dataset_id,
     )
 
 
@@ -574,3 +670,74 @@ async def execute_card(
         card_id=card_id,
         dynamodb=dynamodb,
     )
+
+
+# ============================================================================
+# Get Card Data
+# ============================================================================
+
+
+@router.get("/{card_id}/data")
+async def get_card_data(
+    card_id: str,
+    limit: int = Query(1000, ge=1, le=1000),
+    current_user: User = Depends(get_current_user),
+    dynamodb: Any = Depends(get_dynamodb_resource),
+    s3_client: Any = Depends(get_s3_client),
+) -> dict[str, Any]:
+    """Get card's underlying dataset data.
+
+    Args:
+        card_id: Card ID
+        limit: Maximum number of rows to return (1-1000, default: 1000)
+        current_user: Authenticated user
+        dynamodb: DynamoDB resource
+        s3_client: S3 client for dataset access
+
+    Returns:
+        Dataset data with columns and rows
+
+    Raises:
+        HTTPException: 404 if card not found or dataset not found
+    """
+    card, dataset = await _get_card_and_dataset(card_id, dynamodb)
+
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found",
+        )
+
+    # Read dataset rows from S3
+    from app.services.parquet_storage import ParquetReader
+    from app.core.config import settings
+
+    reader = ParquetReader(s3_client, settings.s3_bucket_datasets)
+
+    try:
+        df = await reader.read_preview(dataset.s3_path, limit)
+    except DatasetFileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset file not found: {e.s3_path}",
+        ) from e
+
+    # Get total row count (approximate for partitioned datasets)
+    try:
+        df_full = await reader.read_full(dataset.s3_path)
+        total_rows = len(df_full)
+    except Exception:
+        # If we can't read full dataset, use preview count
+        total_rows = len(df)
+
+    # Convert DataFrame to list of dicts
+    rows = df.to_dict(orient='records')
+    columns = df.columns.tolist()
+
+    return api_response({
+        "columns": columns,
+        "rows": rows,
+        "total_rows": total_rows,
+        "returned_rows": len(rows),
+        "truncated": total_rows > len(rows),
+    })

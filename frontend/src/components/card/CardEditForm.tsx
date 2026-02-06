@@ -10,18 +10,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CardEditor } from './CardEditor';
+import { ChartTypePicker } from './ChartTypePicker';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import type { Dataset } from '@/types';
+import type { ChartType } from '@/types/card';
+import { useState } from 'react';
 
 interface CardEditFormProps {
   name: string;
   code: string;
   datasetId: string;
   cardType: 'code' | 'text';
+  chartType?: ChartType;
   datasets?: Dataset[];
   onNameChange: (name: string) => void;
   onCodeChange: (code: string) => void;
   onDatasetIdChange: (datasetId: string) => void;
   onCardTypeChange: (cardType: 'code' | 'text') => void;
+  onChartTypeChange: (chartType: ChartType) => void;
 }
 
 export function CardEditForm({
@@ -29,13 +35,40 @@ export function CardEditForm({
   code,
   datasetId,
   cardType,
+  chartType,
   datasets,
   onNameChange,
   onCodeChange,
   onDatasetIdChange,
   onCardTypeChange,
+  onChartTypeChange,
 }: CardEditFormProps) {
   const isTextCard = cardType === 'text';
+  const [pendingChartType, setPendingChartType] = useState<ChartType | null>(null);
+  const [hasUnsavedCode, setHasUnsavedCode] = useState(false);
+
+  const handleChartTypeSelect = (newChartType: ChartType) => {
+    // 既存のコードがある場合は確認ダイアログを表示
+    if (code.trim() && code.trim() !== 'def render(dataset, filters, params):\n    import plotly.express as px\n    fig = px.bar(dataset, x=dataset.columns[0], y=dataset.columns[1])\n    return HTMLResult(html=fig.to_html())') {
+      setPendingChartType(newChartType);
+      setHasUnsavedCode(true);
+    } else {
+      onChartTypeChange(newChartType);
+    }
+  };
+
+  const handleConfirmChartTypeChange = () => {
+    if (pendingChartType) {
+      onChartTypeChange(pendingChartType);
+      setPendingChartType(null);
+      setHasUnsavedCode(false);
+    }
+  };
+
+  const handleCancelChartTypeChange = () => {
+    setPendingChartType(null);
+    setHasUnsavedCode(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -61,24 +94,45 @@ export function CardEditForm({
             </Select>
           </div>
           {!isTextCard && (
-            <div className="space-y-2">
-              <Label>データセット</Label>
-              <Select value={datasetId} onValueChange={onDatasetIdChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="選択してください" />
-                </SelectTrigger>
-                <SelectContent>
-                  {datasets?.map((ds) => (
-                    <SelectItem key={ds.id} value={ds.id}>
-                      {ds.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label>データセット</Label>
+                <Select value={datasetId} onValueChange={onDatasetIdChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="選択してください" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datasets?.map((ds) => (
+                      <SelectItem key={ds.id} value={ds.id}>
+                        {ds.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>チャートタイプ</Label>
+                <ChartTypePicker value={chartType} onSelect={handleChartTypeSelect} />
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={hasUnsavedCode && pendingChartType !== null} onOpenChange={(open) => !open && handleCancelChartTypeChange()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>チャートタイプを変更しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              既存のコードが上書きされます。この操作は取り消せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelChartTypeChange}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmChartTypeChange}>変更する</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader>

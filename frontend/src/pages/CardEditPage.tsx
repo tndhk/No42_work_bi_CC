@@ -19,6 +19,7 @@ export function CardEditPage() {
     code,
     datasetId,
     cardType,
+    chartType,
     previewHtml,
     isLoading,
     isSaving,
@@ -29,6 +30,7 @@ export function CardEditPage() {
     setCardType,
     handleSave,
     handlePreview,
+    handleChartTypeChange,
   } = useCardForm({
     cardId: id,
     isNew,
@@ -53,12 +55,14 @@ export function CardEditPage() {
         </Button>
         <h1 className="text-2xl font-bold">{isNew ? '新規カード' : 'カード編集'}</h1>
         <div className="ml-auto flex gap-2">
-          {!isNew && (
-            <Button variant="outline" onClick={handlePreview} disabled={isPreviewing}>
-              <Play className="h-4 w-4 mr-2" />
-              プレビュー
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={handlePreview}
+            disabled={isPreviewing || (cardType === 'code' && !datasetId)}
+          >
+            <Play className="h-4 w-4 mr-2" />
+            プレビュー
+          </Button>
           <Button onClick={handleSave} disabled={isSaving}>
             <Save className="h-4 w-4 mr-2" />
             保存
@@ -72,11 +76,13 @@ export function CardEditPage() {
           code={code}
           datasetId={datasetId}
           cardType={cardType}
+          chartType={chartType}
           datasets={datasetsData?.data}
           onNameChange={setName}
           onCodeChange={setCode}
           onDatasetIdChange={setDatasetId}
           onCardTypeChange={setCardType}
+          onChartTypeChange={handleChartTypeChange}
         />
 
         <div>

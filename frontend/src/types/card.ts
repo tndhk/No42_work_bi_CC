@@ -1,3 +1,5 @@
+export type ChartType = 'summary-number' | 'bar' | 'line' | 'pie' | 'table' | 'pivot';
+
 export interface CardRef {
   id: string;
   name: string;
@@ -26,6 +28,7 @@ export interface CardDetail extends Card {
   params?: Record<string, unknown>;
   description?: string;
   updated_at: string;
+  chart_type?: ChartType;
 }
 
 export interface CardCreateRequest {

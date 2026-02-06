@@ -1,5 +1,11 @@
 import { Badge } from '@/components/ui/badge';
-import { MoreVertical } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreVertical, Maximize2, Edit, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
 interface CardContainerProps {
@@ -9,6 +15,9 @@ interface CardContainerProps {
   cardName?: string;
   cardType?: 'code' | 'text';
   params?: Record<string, unknown>;
+  onExpand?: () => void;
+  onEdit?: () => void;
+  onRefresh?: () => void;
 }
 
 function getCSP(): string {
@@ -26,7 +35,10 @@ export function CardContainer({
   filterApplied, 
   cardName,
   cardType = 'code',
-  params 
+  params,
+  onExpand,
+  onEdit,
+  onRefresh,
 }: CardContainerProps) {
   const isTextCard = cardType === 'text';
   
@@ -70,13 +82,38 @@ export function CardContainer({
                 filtered
               </Badge>
             )}
-            <button
-              className="p-1 rounded hover:bg-background transition-colors"
-              title="オプション"
-              aria-label="カードオプション"
-            >
-              <MoreVertical className="h-4 w-4 text-muted-foreground" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-1 rounded hover:bg-background transition-colors"
+                  title="オプション"
+                  aria-label="カードオプション"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onExpand && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onExpand(); }}>
+                    <Maximize2 className="h-4 w-4 mr-2" />
+                    拡大表示
+                  </DropdownMenuItem>
+                )}
+                {onEdit && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    カード編集
+                  </DropdownMenuItem>
+                )}
+                {onRefresh && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRefresh(); }}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    リフレッシュ
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       )}

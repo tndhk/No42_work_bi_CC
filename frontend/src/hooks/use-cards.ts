@@ -70,3 +70,11 @@ export function usePreviewCard() {
       cardsApi.preview(cardId, filters),
   });
 }
+
+export function useCardData(cardId: string, limit?: number) {
+  return useQuery({
+    queryKey: ['cards', cardId, 'data', limit],
+    queryFn: () => cardsApi.getData(cardId, limit),
+    enabled: !!cardId,
+  });
+}

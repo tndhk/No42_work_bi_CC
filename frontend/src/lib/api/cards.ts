@@ -45,8 +45,59 @@ export const cardsApi = {
     return response.data;
   },
 
-  preview: async (cardId: string, filters?: Record<string, unknown>): Promise<CardPreviewResponse> => {
-    const response = await apiClient.post(`cards/${cardId}/preview`, { json: { filters: filters || {} } }).json<ApiResponse<CardPreviewResponse>>();
+  preview: async (
+    cardId: string,
+    options?: {
+      filters?: Record<string, unknown>;
+      code?: string;
+      datasetId?: string;
+    },
+  ): Promise<CardPreviewResponse> => {
+    const response = await apiClient
+      .post(`cards/${cardId}/preview`, {
+        json: {
+          filters: options?.filters || {},
+          code: options?.code,
+          dataset_id: options?.datasetId,
+        },
+      })
+      .json<ApiResponse<CardPreviewResponse>>();
+    return response.data;
+  },
+
+  previewDraft: async (options: {
+    code: string;
+    datasetId: string;
+    filters?: Record<string, unknown>;
+  }): Promise<CardPreviewResponse> => {
+    const response = await apiClient
+      .post('cards/preview', {
+        json: {
+          code: options.code,
+          dataset_id: options.datasetId,
+          filters: options.filters || {},
+        },
+      })
+      .json<ApiResponse<CardPreviewResponse>>();
+    return response.data;
+  },
+
+  getData: async (cardId: string, limit?: number): Promise<{
+    columns: string[];
+    rows: Record<string, unknown>[];
+    total_rows: number;
+    returned_rows: number;
+    truncated: boolean;
+  }> => {
+    const searchParams = new URLSearchParams();
+    if (limit != null) searchParams.set('limit', String(limit));
+    const response = await apiClient.get(`cards/${cardId}/data`, { searchParams }).json<ApiResponse<{
+      columns: string[];
+      rows: Record<string, unknown>[];
+      total_rows: number;
+      returned_rows: number;
+      truncated: boolean;
+    }>>();
     return response.data;
   },
 };

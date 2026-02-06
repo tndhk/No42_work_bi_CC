@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Responsive, WidthProvider } from 'react-grid-layout';
 import { useQueries } from '@tanstack/react-query';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { CardContainer } from './CardContainer';
+import { CardDetailModal } from './CardDetailModal';
 import { toRGLLayout } from '@/lib/layout-utils';
 import { useCard } from '@/hooks/use-cards';
 import { cardsApi } from '@/lib/api';
@@ -19,8 +21,10 @@ interface DashboardViewerProps {
 }
 
 export function DashboardViewer({ dashboard, filters, onExecuteCard }: DashboardViewerProps) {
+  const navigate = useNavigate();
   const [cardResults, setCardResults] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const filtersJson = JSON.stringify(filters || {});
 
   // Fetch card details for all cards in the dashboard
@@ -106,17 +110,46 @@ export function DashboardViewer({ dashboard, filters, onExecuteCard }: Dashboard
               <LoadingSpinner />
             </div>
           ) : (
-            <CardContainer
-              cardId={item.card_id}
-              html={cardResults[item.card_id] || ''}
-              filterApplied={hasActiveFilters}
-              cardType={cardDetailsMap[item.card_id]?.card_type}
-              params={cardDetailsMap[item.card_id]?.params}
-              cardName={cardDetailsMap[item.card_id]?.name}
-            />
+            <div onClick={() => setSelectedCardId(item.card_id)} className="cursor-pointer h-full">
+              <CardContainer
+                cardId={item.card_id}
+                html={cardResults[item.card_id] || ''}
+                filterApplied={hasActiveFilters}
+                cardType={cardDetailsMap[item.card_id]?.card_type}
+                params={cardDetailsMap[item.card_id]?.params}
+                cardName={cardDetailsMap[item.card_id]?.name}
+                onExpand={() => setSelectedCardId(item.card_id)}
+                onEdit={() => navigate(`/cards/${item.card_id}`)}
+                onRefresh={() => {
+                  setLoading((prev) => ({ ...prev, [item.card_id]: true }));
+                  const currentFilters = filters && Object.keys(filters).length > 0 ? filters : undefined;
+                  onExecuteCard(item.card_id, currentFilters)
+                    .then((result) => {
+                      setCardResults((prev) => ({ ...prev, [item.card_id]: result.html }));
+                    })
+                    .catch(() => {
+                      setCardResults((prev) => ({ ...prev, [item.card_id]: '<div style="color:red">読み込みエラー</div>' }));
+                    })
+                    .finally(() => {
+                      setLoading((prev) => ({ ...prev, [item.card_id]: false }));
+                    });
+                }}
+              />
+            </div>
           )}
         </div>
       ))}
+      {selectedCardId && cardDetailsMap[selectedCardId] && (
+        <CardDetailModal
+          cardId={selectedCardId}
+          cardName={cardDetailsMap[selectedCardId]?.name || `Card ${selectedCardId.slice(0, 8)}`}
+          html={cardResults[selectedCardId] || ''}
+          cardType={cardDetailsMap[selectedCardId]?.card_type}
+          params={cardDetailsMap[selectedCardId]?.params}
+          open={!!selectedCardId}
+          onOpenChange={(open) => !open && setSelectedCardId(null)}
+        />
+      )}
     </ResponsiveGridLayout>
   );
 }
